@@ -1,4 +1,7 @@
-"""Utilities for distributed training."""
+"""Utilities for PyTorch's distributed training.
+
+Last tweaks were made in Feb. 2021, so might be outdated.
+"""
 import os
 import sys
 

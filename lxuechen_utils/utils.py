@@ -33,7 +33,6 @@ import signal
 import sys
 import time
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
-import warnings
 
 import numpy as np
 import requests
@@ -700,302 +699,9 @@ def evaluate_prettiness(sampler=None,
                 idx += 1
 
     stats = torch_fidelity.calculate_metrics(folder, input_2, isc=isc, fid=fid, kid=kid)
-    if clean_afterwards: shutil.rmtree(folder)
+    if clean_afterwards:
+        shutil.rmtree(folder)
     return stats
-
-
-# Adapted from https://github.com/pytorch/examples/blob/master/word_language_model/model.py
-# `batch_first` is a new argument; this argument has been tested.
-class PositionalEncoding(nn.Module):
-    r"""Inject some information about the relative or absolute position of the tokens
-        in the sequence. The positional encodings have the same dimension as
-        the embeddings, so that the two can be summed. Here, we use sine and cosine
-        functions of different frequencies.
-    .. math::
-        \text{PosEncoder}(pos, 2i) = sin(pos/10000^(2i/d_model))
-        \text{PosEncoder}(pos, 2i+1) = cos(pos/10000^(2i/d_model))
-        \text{where pos is the word position and i is the embed idx)
-    Args:
-        d_model: the embed dim (required).
-        dropout: the dropout value (default=0.1).
-        max_len: the max. length of the incoming sequence (default=5000).
-    Examples:
-        >>> pos_encoder = PositionalEncoding(d_model)
-    """
-
-    def __init__(self, d_model, dropout=0.1, max_len=5000, batch_first=False):
-        super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.get_default_dtype()).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        if not batch_first:
-            pe = pe.transpose(0, 1)
-        self.register_buffer('pe', pe)
-        self.batch_first = batch_first
-
-    def forward(self, x):
-        r"""Inputs of forward function
-        Args:
-            x: the sequence fed to the positional encoder model (required).
-        Shape:
-            x: [sequence length, batch size, embed dim]
-            output: [sequence length, batch size, embed dim]
-        Examples:
-            >>> output = pos_encoder(x)
-        """
-        offset = self.pe[:, :x.size(1)] if self.batch_first else self.pe[:x.size(0), :]
-        x = x + offset
-        return self.dropout(x)
-
-
-class OptimizedModel(abc.ABC, nn.Module):
-
-    def __init__(self):
-        super(OptimizedModel, self).__init__()
-        self._checkpoint = False
-
-    # Slightly faster than the `zero_grad` from library.
-    def zero_grad(self) -> None:
-        for p in self.parameters(): p.grad = None
-
-    # It's annoying that tensors and variables have device, but modules don't.
-    @property
-    def device(self):
-        return next(self.parameters()).device
-
-    # TODO: Make a checkpointable object, instead of using inheritance.
-    def enable_checkpoint(self, enable: Optional[bool] = True) -> bool:
-        if enable:
-            self._checkpoint = True
-            for child in self.children():
-                if isinstance(child, (OptimizedModuleList, OptimizedModel)):
-                    child.enable_checkpoint()
-            return self._checkpoint
-        else:
-            return self.no_checkpoint()
-
-    def no_checkpoint(self) -> bool:
-        self._checkpoint = False
-        for child in self.children():
-            if isinstance(child, (OptimizedModuleList, OptimizedModel)):
-                child.no_checkpoint()
-        return self._checkpoint
-
-
-class OptimizedModuleList(abc.ABC, nn.ModuleList):
-    def __init__(self, *args, **kwargs):
-        super(OptimizedModuleList, self).__init__(*args, **kwargs)
-        self._checkpoint = False
-
-    def enable_checkpoint(self, enable: Optional[bool] = True) -> bool:
-        if enable:
-            self._checkpoint = True
-            for child in self.children():
-                if isinstance(child, (OptimizedModuleList, OptimizedModel)):
-                    child.enable_checkpoint()
-            return self._checkpoint
-        else:
-            return self.no_checkpoint()
-
-    def no_checkpoint(self) -> bool:
-        self._checkpoint = False
-        for child in self.children():
-            if isinstance(child, (OptimizedModuleList, OptimizedModel)):
-                child.no_checkpoint()
-        return self._checkpoint
-
-
-class Residual(nn.Module):
-    def __init__(self, base_module):
-        super(Residual, self).__init__()
-        self.base_module = base_module
-
-    def forward(self, x, *args, **kwargs):
-        return x + self.base_module(x, *args, **kwargs)
-
-
-class VerboseSequential(OptimizedModel):
-
-    def __init__(self, *args, verbose=False, stream: str = 'stdout'):
-        super(VerboseSequential, self).__init__()
-        self.layers = nn.ModuleList(args)
-        self.forward = self._forward_verbose if verbose else self._forward
-        self.stream = stream  # Don't use the stream from `sys`, since we can't serialize them!
-
-    def _forward_verbose(self, net):
-        stream = (
-            {'stdout': sys.stdout, 'stderr': sys.stderr}[self.stream]
-            if self.stream in ('stdout', 'stderr') else self.stream
-        )
-        print(f'Input size: {net.size()}', file=stream)
-        for i, layer in enumerate(self.layers):
-            net = layer(net)
-            print(f'Layer {i}, output size: {net.size()}', file=stream)
-        return net
-
-    def _forward(self, net):
-        for layer in self.layers:
-            net = layer(net)
-        return net
-
-
-class GatedLinear(nn.Module):
-    def __init__(self, in_features: int, out_features: int, bias: Optional[bool] = True):
-        super(GatedLinear, self).__init__()
-        self.linear = nn.Linear(
-            in_features=in_features, out_features=out_features + out_features, bias=bias)
-
-    def forward(self, x):
-        x1, x2 = self.linear(x).chunk(chunks=2, dim=-1)
-        return _gated_linear(x1, x2)
-
-
-@torch.jit.script
-def _gated_linear(x1: torch.Tensor, x2: torch.Tensor):
-    return x1 * x2.sigmoid()
-
-
-class SeparableConv1d(nn.Module):
-    """Replicates the behavior of `tf.keras.layers.SeparableConv1D`, except inputs must be of `NCL` format.
-
-    https://www.tensorflow.org/api_docs/python/tf/keras/layers/SeparableConv1D
-    """
-
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 bias: Optional[bool] = True,
-                 padding: Optional[int] = 0,
-                 padding_mode: str = 'zeros'):
-        super(SeparableConv1d, self).__init__()
-        self.depthwise = torch.nn.Conv1d(
-            in_channels,
-            in_channels,
-            kernel_size,
-            groups=in_channels,
-            bias=bias,
-            padding=padding,
-            padding_mode=padding_mode)
-        self.pointwise = nn.Linear(in_channels, out_channels, bias=bias)
-
-    def forward(self, x):
-        x = self.depthwise(x)  # (N, C, L).
-        x = self.pointwise(x.transpose(1, 2))  # (N, L, C).
-        return x.transpose(1, 2)  # (N, C, L).
-
-
-class MultiheadAttention(nn.MultiheadAttention):
-    """Same as `torch.nn.MultiheadAttention`, but allows batch first input format."""
-
-    def __init__(self,
-                 embed_dim,
-                 num_heads,
-                 dropout=0.,
-                 bias=True,
-                 add_bias_kv=False,
-                 add_zero_attn=False,
-                 kdim=None,
-                 vdim=None):
-        super(MultiheadAttention, self).__init__(
-            embed_dim, num_heads, dropout, bias, add_bias_kv, add_zero_attn, kdim, vdim)
-
-    def forward(self, query, key, value, key_padding_mask=None, need_weights=True, attn_mask=None, batch_first=False):
-        if batch_first:  # (N, L, E) -> (L, N, E).
-            warnings.warn(
-                "Using batch first data format for `MultiheadAttention`; "
-                "pay attention to input shape to avoid bugs!!!"
-            )
-            query = query.transpose(0, 1)
-            key = key.transpose(0, 1)
-            value = value.transpose(0, 1)
-        else:
-            warnings.warn(
-                "Not using batch first data format for `MultiheadAttention`; "
-                "pay attention to input shape to avoid bugs!!!"
-            )
-
-        x, w = super(MultiheadAttention, self).forward(
-            query=query, key=key, value=value,
-            key_padding_mask=key_padding_mask, need_weights=need_weights, attn_mask=attn_mask
-        )
-
-        if self.batch_first:  # (L, N, E) -> (N, L, E).
-            x = x.transpose(0, 1)
-        return x, w
-
-
-class TransformerEncoder(nn.TransformerEncoder):
-    """Same as `torch.nn.TransformerEncoder`, but allows batch first input format."""
-
-    def __init__(self, encoder_layer, num_layers, norm=None):
-        super(TransformerEncoder, self).__init__(encoder_layer, num_layers, norm)
-
-    def forward(self,
-                src: torch.Tensor,
-                src_mask: Optional[torch.Tensor] = None,
-                src_key_padding_mask: Optional[torch.Tensor] = None,
-                batch_first: Optional[bool] = False) -> torch.Tensor:
-        """A block of in the transformer encoder.
-
-        Args:
-            src (Tensor): Source sequence. Size is (N, S, E) if `batch_first` is True; otherwise (S, N, E).
-            src_mask (Tensor): Feeds into `attn_mask` of `nn.MultiheadAttention`. Size is (T, S).
-            src_key_padding_mask (Tensor): Feeds into `key_padding_mask` of `nn.MultiheadAttention`. Size is (N, S).
-            batch_first (bool, Optional): Tells the forward function what the input format is. Super important!
-        """
-        if batch_first:
-            warnings.warn(
-                "Using batch first data format for `TransformerEncoder`; "
-                "pay attention to input shape to avoid bugs!!!"
-            )
-            src = src.transpose(0, 1)  # (N, L, E) -> (L, N, E).
-        else:
-            warnings.warn(
-                "Not using batch first data format for `TransformerEncoder`; "
-                "pay attention to input shape to avoid bugs!!!"
-            )
-        x = super(TransformerEncoder, self).forward(src=src, mask=src_mask, src_key_padding_mask=src_key_padding_mask)
-
-        if batch_first:
-            x = x.transpose(0, 1)  # (L, N, E) -> (N, L, E).
-        return x
-
-
-def inspect_tensor(t: torch.Tensor, name=''):
-    t = t.view(-1)
-    msg = f'{name} min: {t.min()}, max: {t.max()}, has nan: {torch.isnan(t).any()}'
-    logging.warning(msg)
-    return msg
-
-
-def inspect_module(module, name=''):
-    flat_params = [p.flatten() for p in module.parameters()]
-    if len(flat_params) > 0:
-        flat_params = torch.cat(flat_params)
-        logging.warning(
-            f'{name} param, '
-            f'max abs: {flat_params.abs().max():.4f}, min abs: {flat_params.abs().min():.4f}, '
-            f'has nan: {torch.isnan(flat_params).any()}'
-        )
-    else:
-        logging.warning(f'module {name} no param')
-
-    flat_grads = [p.grad.flatten() for p in module.parameters() if p.grad is not None]
-    if len(flat_grads) > 0:
-        flat_grads = torch.cat(flat_grads)
-        logging.warning(
-            f'{name} grad, '
-            f'max abs: {flat_grads.abs().max():.4f}, min abs: {flat_grads.abs().min():.4f}, '
-            f'has nan: {torch.isnan(flat_params).any()}'
-        )
-    else:
-        logging.warning(f'module {name} no grad')
 
 
 def coos2adj(coos: Sequence[torch.Tensor], lengths: torch.Tensor, device=None):
@@ -1075,13 +781,6 @@ def select_optimizer(optimizer):
     return optimizer_factory
 
 
-def check_nan_grads(module: nn.Module):
-    for p in module.parameters():
-        if p is not None and p.grad is not None and torch.any(torch.isnan(p.grad)):
-            return True
-    return False
-
-
 # Helper functions that mimic tensorflow variants.
 # Properly tested against tensorflow==2.3.1
 def scatter_nd(indices, updates, shape=None, out=None, accumulate=True, inplace=True):
@@ -1108,38 +807,6 @@ def scatter_nd(indices, updates, shape=None, out=None, accumulate=True, inplace=
             accumulate=accumulate
         )  # noqa
     return out
-
-
-# TODO: Add `batch_dims`.
-def gather_nd(params, indices):
-    return params[indices.t().long().tolist()]
-
-
-def straight_through(soft):
-    hard = soft.ge(0.).detach().to(torch.get_default_dtype())
-    return hard + hard * (soft - soft.detach())  # Compute grads for entries >= 0.
-
-
-def fast_einsum(expr: str, *args, **kwargs):
-    import opt_einsum
-    return opt_einsum.contract(expr, *args, **kwargs)  # noqa
-
-
-def eq_nonzero(*args):
-    """Return True if all the tensors have non-zeros at the same places.
-
-    The non-zero values don't need necessarily be the same.
-    """
-
-    def nonzero_set(t):
-        return set([tuple(coordinate) for coordinate in t.nonzero(as_tuple=False).tolist()])
-
-    set0 = nonzero_set(args[0])
-    for arg in args[1:]:
-        seti = nonzero_set(arg)
-        if seti != set0:
-            return False
-    return True
 
 
 def cosine_similarity(t1, t2):
@@ -1169,9 +836,11 @@ def topk(input, k, dim=-1, largest=True, sorted=True):
     return v, unravel_index(i, input.size())
 
 
-def retrieval_scores(tp: Union[torch.Tensor, np.ndarray],
-                     fp: Union[torch.Tensor, np.ndarray],
-                     fn: Union[torch.Tensor, np.ndarray]):
+def retrieval_scores(
+    tp: Union[torch.Tensor, np.ndarray],
+    fp: Union[torch.Tensor, np.ndarray],
+    fn: Union[torch.Tensor, np.ndarray]
+):
     """Compute precision, recall, F1."""
 
     def _stable_div(x, y):
@@ -1444,17 +1113,19 @@ def _plot(ax, plots, vlines, errorbars, scatters, hists, bars, fill_betweens, op
     return ax
 
 
-def plot_side_by_side(figs1,
-                      figs2,
-                      nrows=8,
-                      ncols=1,
-                      img_path=None,
-                      dpi=300,
-                      title=None,
-                      left_title=None,
-                      right_title=None,
-                      frameon=True,
-                      max_batch_size=64):
+def plot_side_by_side(
+    figs1,
+    figs2,
+    nrows=8,
+    ncols=1,
+    img_path=None,
+    dpi=300,
+    title=None,
+    left_title=None,
+    right_title=None,
+    frameon=True,
+    max_batch_size=64
+):
     """Plot a dictionary of figures.
 
     Parameters
@@ -2020,28 +1691,6 @@ def latest_ckpt(dir_):
     return latest_path
 
 
-def save_ckpt(model, optimizer, path, ema_model=None, scheduler=None, cloud_storage=False, to_gcs=False):
-    # cloud_storage is the legacy argument.
-    logging.warning('Calling the method `save_ckpt` which is to be deprecated later.')
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    state_dicts = {
-        "model": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "ema_model": None if ema_model is None else ema_model.state_dict(),
-        "scheduler": None if scheduler is None else scheduler.state_dict(),
-    }
-    torch.save(state_dicts, path)
-    if cloud_storage or to_gcs:
-        gs_upload_from_path(path)
-
-
-def save_state_dicts(state_dicts, path, to_gcs=False):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(state_dicts, path)
-    if to_gcs:
-        gs_upload_from_path(path)
-
-
 # Data.
 def get_data_stats(data_name):
     if data_name == "cifar10":
@@ -2349,14 +1998,6 @@ class InfiniteLoader(object):
         except StopIteration:
             self.iterator = iter(self.loader)
             return next(self.iterator)
-
-
-def get_ema_avg_fn(gamma=0.999):
-    def ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
-        """Used for `torch.optim.swa_utils.AveragedModel`."""
-        return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
-
-    return ema_avg_fn
 
 
 class Comparator(object):
@@ -2914,7 +2555,7 @@ def tf_options(options):
         tf.config.optimizer.set_experimental_options(old_opts)
 
 
-# Misc log sanitization.
+# Logging sanitization.
 def early_stopping(global_steps: list, metrics: list, tolerance: int, ascending: bool):
     """Find the index s.t. quant is best.
 
@@ -2958,96 +2599,6 @@ def early_stopping(global_steps: list, metrics: list, tolerance: int, ascending:
         global_step_prev = global_step
 
     return metrics.index(best)
-
-
-# Common algorithms.
-def power_iter(mat: Optional[torch.Tensor] = None,
-               func: Optional[Callable] = None,
-               v0: Optional[torch.Tensor] = None,
-               eigenvectors=False,
-               num_iters=100):
-    """Run power iteration to find the top eigenvector with maximum absolute eigenvalue.
-
-    Args:
-        mat: Tensor of the (batch) of matrices.
-        func: Matrix vector product.
-        v0: Tensor of the (batch) of vectors to initialize the power iteration.
-        eigenvectors: Returns the eigenvectors if True.
-        num_iters: The number of iterations to run.
-
-    Returns:
-       The eigenvalues and the eigenvectors.
-    """
-    if mat is None:
-        if v0 is None:
-            raise ValueError(
-                f'`v0` should not be None when the input matrix is implicitly defined via a matrix-vector product.')
-        if func is None:
-            raise ValueError(
-                f'`func` should not be None when the input matrix is implicitly defined via a matrix-vector product.')
-        eigenvec = v0
-    else:
-        if v0 is None:
-            if mat.dim() == 3:
-                eigenvec = torch.randn(size=(*mat.shape[:2], 1), dtype=mat.dtype, device=mat.device)
-            elif mat.dim() == 2:
-                eigenvec = torch.randn(size=(*mat.shape[:1], 1), dtype=mat.dtype, device=mat.device)
-            else:
-                raise ValueError(
-                    f"`mat` should be of size (batch_size, d, d) or (batch_size, d), but found: {mat.shape}")
-        else:
-            eigenvec = v0
-        func = lambda v: torch.matmul(mat, v)
-
-    for _ in range(num_iters):
-        mvp = func(eigenvec)
-        eigenvec = mvp / mvp.norm(dim=-2, keepdim=True)
-
-    eigenval = ((func(eigenvec) * eigenvec).sum(dim=-2) / ((eigenvec ** 2).sum(dim=-2))).squeeze(dim=-1)
-    if eigenvectors:
-        return eigenval, eigenvec
-    return eigenval, None
-
-
-def _topr_singular(mat, num_iters):
-    matTmat = mat.T.matmul(mat)
-    eigenval, rsv = power_iter(matTmat, eigenvectors=True, num_iters=num_iters)
-    return eigenval.sqrt(), rsv
-
-
-def _topl_singular(mat, num_iters):
-    matmatT = mat.matmul(mat.T)
-    eigenval, lsv = power_iter(matmatT, eigenvectors=True, num_iters=num_iters)
-    return eigenval.sqrt(), lsv
-
-
-def top_singular(mat, left_singularvectors=False, right_singularvectors=False, num_iters=100):
-    """Computes the approximate top singular value and vectors of a given matrix.
-
-    Relies on power iteration.
-    Currently only works with (n x m)-sized matrices without batching.
-
-    Returns:
-        A tuple of top singular value, top left singular vector, and top right singular vector.
-    """
-    if left_singularvectors:
-        singularval, lsv = _topl_singular(mat, num_iters=num_iters)
-    else:
-        lsv = None
-
-    singularval = None
-    if right_singularvectors:
-        singularval, rsv = _topr_singular(mat, num_iters=num_iters)
-    else:
-        rsv = None
-
-    if singularval is None:
-        dim1, dim2 = mat.shape
-        if dim1 < dim2:
-            singularval, _ = _topl_singular(mat, num_iters=num_iters)
-        else:
-            singularval, _ = _topr_singular(mat, num_iters=num_iters)
-    return singularval, lsv, rsv
 
 
 # Convenience aliases.
