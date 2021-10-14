@@ -7,7 +7,7 @@ setuptools.setup(
     version=version,
     author="Xuechen Li",
     author_email="lxuechen@cs.toronto.edu",
-    description="Reusable ML research primitives for fast prototyping",
+    description="Reusable ML research primitives for fast prototyping. ",
     url="https://github.com/lxuechen/swissknife",
     packages=setuptools.find_packages(exclude=[]),
     install_requires=['torch>=1.6.0'],
