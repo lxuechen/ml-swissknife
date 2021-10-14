@@ -1,6 +1,8 @@
 # swissknife
 
-Reusable ML research primitives for fast prototyping. Slowly porting and refactoring lots of stale code from many past projects.
+Reusable ML research primitives for fast prototyping. 
+
+Slowly porting and refactoring lots of stale code from many past projects.
 
 ## Installation
 
