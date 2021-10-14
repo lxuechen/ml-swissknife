@@ -10,9 +10,7 @@
 - custom context managers (Timer, DisableGC),
 - checkpoint storage/loading, and
 - data loaders,
-- runner,
-- misc log sanitization,
-- common algorithms (e.g. top-1 eigenvalue).
+- misc log sanitization.
 """
 import abc
 import argparse
