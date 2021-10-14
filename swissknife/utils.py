@@ -23,7 +23,6 @@ import datetime
 import gc
 import io
 import json
-import linecache
 import logging
 import math
 import os
@@ -40,14 +39,16 @@ from scipy import stats
 import six
 import torch
 from torch import nn, optim
-import torch.autograd.profiler as profiler
 import torch.nn.functional as F
 from torch.utils import data
 import tqdm
 
-
 # Misc.
-# These are useful for naming directories with float or int parameter values.
+home = os.path.expanduser("~")
+join = os.path.join
+makedirs = os.makedirs
+
+
 def float2str(x, precision=8):
     return f"{x:.{precision}f}".replace('.', "_")
 
@@ -63,7 +64,7 @@ def average_over_seed(seq_of_seq):
     return seq_of_seq.mean(0), seq_of_seq.std(0)
 
 
-def jdump(obj: Union[str, dict], f: str, mode="w", indent=4, to_gcs=False, default=None):
+def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False, default=None):
     """Dump a str or dictionary to a file in json format.
 
     Args:
@@ -79,7 +80,7 @@ def jdump(obj: Union[str, dict], f: str, mode="w", indent=4, to_gcs=False, defau
     """
     os.makedirs(os.path.dirname(f), exist_ok=True)
     with open(f, mode=mode) as file:
-        if isinstance(obj, dict):
+        if isinstance(obj, (dict, list)):
             json.dump(obj, file, indent=indent, default=default)
         elif isinstance(obj, str):
             file.write(obj)
@@ -90,12 +91,27 @@ def jdump(obj: Union[str, dict], f: str, mode="w", indent=4, to_gcs=False, defau
         logging.warning(f"Uploading to gcs: {f}")
 
 
+def jdumps(obj, indent=4):
+    return json.dumps(obj, indent=indent)
+
+
 def jload(f: Union[str, io.IOBase], mode="r"):
+    """Load a .json file into a dictionary."""
     if not isinstance(f, io.IOBase):
         f = open(f, mode=mode)
     jdict = json.load(f)
     f.close()
     return jdict
+
+
+def readlines(f: Union[str, io.IOBase], mode="r", strip=True):
+    if not isinstance(f, io.IOBase):
+        f = open(f, mode=mode)
+    lines = f.readlines()
+    if strip:
+        lines = [line.strip() for line in lines]
+    f.close()
+    return lines
 
 
 def listdir(directory, skip_suffixes: Union[Sequence, str] = (), full_path: Optional[bool] = False):
@@ -290,12 +306,6 @@ class _SuppressAssertions(object):
             return True
 
 
-def mytqdm(it, cloud_storage, *argv, desc=None, **kwargs):
-    if cloud_storage:
-        return it
-    return tqdm.tqdm(it, desc=desc)
-
-
 def show_env(args_or_device=None):
     if args_or_device is not None:
         if hasattr(args_or_device, "device"):
@@ -378,6 +388,19 @@ def rm(*paths: str):
 def deduplicate(x: Union[List, Tuple]):
     """Remove duplicates in a list or tuple; preserves original order."""
     return type(x)(dict.fromkeys(x))
+
+
+def mvdir(src: str, tgt: str, tmp: str):
+    """Move source directory to target directory.
+
+    Most helpful when you want to insert subdirectory in path, e.g.,
+    moving /home/path -> /home/path/sub.
+    Note naive `mv` does not work for this case!
+    """
+    os.system(f'mv {src} {tmp}')
+    os.system(f'mkdir -p {tgt}')
+    os.system(f'mv {tmp}/* {tgt}')
+    os.system(f'rm -r {tmp}')
 
 
 # Torch.
@@ -548,7 +571,7 @@ def to_numpy(*possibly_tensors: Union[torch.Tensor, np.ndarray]):
     return arrays[0] if len(arrays) == 1 else arrays
 
 
-def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=False):
+def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True):
     if hasattr(args_or_seed, 'seed'):
         args_or_seed = args_or_seed.seed
     random.seed(args_or_seed)
@@ -560,15 +583,11 @@ def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=False):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         os.environ['PYTHONHASHSEED'] = str(args_or_seed)
-
-
-def set_seed(args_or_seed: Union[int, argparse.Namespace]):
-    import tensorflow as tf  # Don't import this shit unless absolutely necessary.
-    if hasattr(args_or_seed, 'seed'):
-        args_or_seed = args_or_seed.seed
-    random.seed(args_or_seed)
-    np.random.seed(args_or_seed)
-    tf.random.set_seed(args_or_seed)
+    try:
+        import tensorflow as tf
+        tf.random.set_seed(args_or_seed)
+    except ModuleNotFoundError:
+        logging.warning('Tensorflow not installed; ignoring set seed for tf.')
 
 
 def manual_dtype(args_or_dtype: Union[str, argparse.Namespace]):
@@ -836,11 +855,9 @@ def topk(input, k, dim=-1, largest=True, sorted=True):
     return v, unravel_index(i, input.size())
 
 
-def retrieval_scores(
-    tp: Union[torch.Tensor, np.ndarray],
-    fp: Union[torch.Tensor, np.ndarray],
-    fn: Union[torch.Tensor, np.ndarray]
-):
+def retrieval_scores(tp: Union[torch.Tensor, np.ndarray],
+                     fp: Union[torch.Tensor, np.ndarray],
+                     fn: Union[torch.Tensor, np.ndarray]):
     """Compute precision, recall, F1."""
 
     def _stable_div(x, y):
@@ -930,28 +947,47 @@ class AveragedModel(nn.Module):
 
 
 # Plotting.
+def plot_wrapper(*args, suffixes: Optional[Sequence] = None, **kwargs):
+    """Allows specifying paths with multiple suffixes."""
+    if suffixes is None:
+        return plot(*args, **kwargs)
+    else:
+        # Append suffix to img_path.
+        img_path = kwargs.pop("img_path")
+        for suffix in suffixes:
+            this_img_path = img_path + suffix
+            plot(*args, img_path=this_img_path, **kwargs)
+
+
 def plot(
     img_path: Optional[str] = None,
     plots: Sequence = (),
     vlines: Sequence = (),
+    hlines: Sequence = (),
     scatters: Sequence = (),
     hists: Sequence = (),
     errorbars: Sequence = (),
     bars: Sequence = (),
     fill_betweens: Sequence = (),
     options: Optional[Dict] = None,
+    annotates=(),
 
     plots2: Sequence = (),
     vlines2: Sequence = (),
+    hlines2: Sequence = (),
     scatters2: Sequence = (),
     hists2: Sequence = (),
     errorbars2: Sequence = (),
     bars2: Sequence = (),
     fill_betweens2: Sequence = (),
     options2: Optional[Dict] = None,
+    annotates2=(),
 
     legend_options: Optional[Dict] = None,
-    disable_legend: Optional[bool] = False
+    disable_legend: Optional[bool] = False,
+
+    finalized: bool = True,
+    dpi: Optional[int] = None,
 ):
     """A multi-functional plotter to reduce boilerplate.
 
@@ -983,6 +1019,7 @@ def plot(
 
         legend_options (dict, optional): A dictionary for kwargs passed to `ax.legend` or `plt.legend`.
         disable_legend (bool, optional): Remove the legend.
+        finalized (bool, optional): Show or save the figure if True; otherwise the figure is still modifiable.
 
     Returns:
         Nothing.
@@ -994,7 +1031,13 @@ def plot(
     except ModuleNotFoundError:
         logging.warning(f"Unable to find `seaborn`, reverting to solely matplotlib.")
 
-    fig = plt.figure(dpi=300)
+    if dpi is None:
+        if img_path is None:
+            dpi = 100
+        else:
+            dpi = 300
+
+    fig = plt.figure(dpi=dpi)
     ax = fig.add_subplot(111)
     if any(len(i) > 0 for i in (plots2, scatters2, hists2, errorbars2, bars2)):
         ax2 = ax.twinx()
@@ -1005,12 +1048,14 @@ def plot(
         ax=ax,
         plots=plots,
         vlines=vlines,
+        hlines=hlines,
         errorbars=errorbars,
         scatters=scatters,
         hists=hists,
         bars=bars,
         fill_betweens=fill_betweens,
         options=options,
+        annotates=annotates
     )
 
     # Twin-x plot: Share xaxis.
@@ -1019,15 +1064,18 @@ def plot(
             ax=ax2,
             plots=plots2,
             vlines=vlines2,
+            hlines=hlines2,
             scatters=scatters2,
             hists=hists2,
             errorbars=errorbars2,
             bars=bars2,
             fill_betweens=fill_betweens2,
-            options=options2
+            options=options2,
+            annotates=annotates2
         )
 
-    if legend_options is None: legend_options = {}
+    if legend_options is None:
+        legend_options = dict(fontsize=13, framealpha=0.6)
     legend = ax.legend(**legend_options)
     if ax2 is not None:
         # Remove first legend then draw again to prevent second plot covering it.
@@ -1040,12 +1088,14 @@ def plot(
         legend.remove()
 
     plt.tight_layout()
-    if img_path is None:
-        plt.show()
-    else:
-        os.makedirs(os.path.dirname(img_path), exist_ok=True)
-        plt.savefig(img_path)
-    plt.close()
+
+    if finalized:
+        if img_path is None:
+            plt.show()
+        else:
+            os.makedirs(os.path.dirname(img_path), exist_ok=True)
+            plt.savefig(img_path)
+        plt.close()
 
 
 def _feed_args(options, key, func):
@@ -1059,8 +1109,29 @@ def _feed_args(options, key, func):
             func(params)
 
 
-def _plot(ax, plots, vlines, errorbars, scatters, hists, bars, fill_betweens, options):
-    if options is None: options = {}
+def _plot(ax, plots, vlines, hlines, errorbars, scatters, hists, bars, fill_betweens, options, annotates):
+    if options is None:
+        options = dict()
+
+    possible_options = {
+        'xscale', 'yscale',
+        'xlabel', 'ylabel',
+        'xlabel_color', 'ylabel_color',
+        'title',
+        'xlim', 'ylim',
+        'xticks', 'yticks',
+        'xticklabels', 'yticklabels',
+        'tick_params'
+    }
+    for key in options:
+        if key not in possible_options:
+            logging.warning(f"Unknown option fed to `_plot`: {key}")
+
+    # Fix default font sizes for xylabels.
+    if 'xlabel' in options and not isinstance(options['xlabel'], dict):
+        options['xlabel'] = dict(xlabel=options['xlabel'], fontdict=dict(size=18))
+    if 'ylabel' in options and not isinstance(options['ylabel'], dict):
+        options['ylabel'] = dict(ylabel=options['ylabel'], fontdict=dict(size=18))
 
     _feed_args(options, 'xscale', ax.set_xscale)
     _feed_args(options, 'yscale', ax.set_yscale)
@@ -1085,6 +1156,10 @@ def _plot(ax, plots, vlines, errorbars, scatters, hists, bars, fill_betweens, op
         kwargs = {key: entry[key] for key in entry if key not in ('x', 'ymin', 'ymax')}
         kwargs.pop('aux', None)
         ax.vlines(entry['x'], entry['ymin'], entry['ymax'], **kwargs)
+    for entry in hlines:
+        kwargs = {key: entry[key] for key in entry if key not in ('y', 'xmin', 'xmax')}
+        kwargs.pop('aux', None)
+        ax.hlines(entry['y'], entry['xmin'], entry['xmax'], **kwargs)
     for entry in errorbars:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         kwargs.pop('aux', None)
@@ -1100,6 +1175,8 @@ def _plot(ax, plots, vlines, errorbars, scatters, hists, bars, fill_betweens, op
     for entry in fill_betweens:
         kwargs = {key: entry[key] for key in entry if key not in ('x', 'y1', 'y2')}
         kwargs.pop('aux', None)
+        if 'alpha' not in kwargs:
+            kwargs['alpha'] = 0.4
         ax.fill_between(entry['x'], entry['y1'], entry['y2'], **kwargs)
 
     width = options.get("width", 0.2)
@@ -1110,22 +1187,55 @@ def _plot(ax, plots, vlines, errorbars, scatters, hists, bars, fill_betweens, op
         x, height = [np.array(entry[key]) for key in ('x', 'height')]
         ax.bar(x - width * (len(bars) - 1) / 2 + width * i, height, width=width, **kwargs)
 
+    for annotate in annotates:
+        kwargs = copy.deepcopy(annotate)
+        text, xy = kwargs.pop("text"), kwargs.pop("xy")
+        ax.annotate(text, xy, **kwargs)
+
     return ax
 
 
-def plot_side_by_side(
-    figs1,
-    figs2,
-    nrows=8,
-    ncols=1,
-    img_path=None,
-    dpi=300,
-    title=None,
-    left_title=None,
-    right_title=None,
-    frameon=True,
-    max_batch_size=64
-):
+def get_sns_colors(color=None, palette=None):
+    import seaborn as sns
+    palette = sns.color_palette(palette=palette)
+    if color is None:
+        return palette
+    else:
+        if color == 'blue':
+            return palette[0]
+        elif color == "orange":
+            return palette[1]
+        elif color == "green":
+            return palette[2]
+        elif color == "red":
+            return palette[3]
+        elif color == "purple":
+            return palette[4]
+        elif color == "brown":
+            return palette[5]
+        elif color == "pink":
+            return palette[6]
+        elif color == "grey":
+            return palette[7]
+        elif color == "yellow":
+            return palette[8]
+        elif color == "cyan":
+            return palette[9]
+        else:
+            raise ValueError(f"Unknown color: {color}")
+
+
+def plot_side_by_side(figs1,
+                      figs2,
+                      nrows=8,
+                      ncols=1,
+                      img_path=None,
+                      dpi=300,
+                      title=None,
+                      left_title=None,
+                      right_title=None,
+                      frameon=True,
+                      max_batch_size=64):
     """Plot a dictionary of figures.
 
     Parameters
@@ -1209,6 +1319,239 @@ def plot_side_by_side(
     plt.savefig(img_path, bbox_inches='tight')
     plt.clf()
     plt.close()
+
+
+# Shameless copy from plottools https://pythonhosted.org/plottools/generated/plottools.zoom_axes.html
+def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', box_alpha=0.8, connect=True,
+              connect_color='k', connect_alpha=0.3, spacing=4, tick_width=20, tick_height=12):
+    """
+    Creates a new axes which zooms in on a part of a given axes.
+
+    A box is drawn around the area to be zoomed specified in data coordinates. A
+    new empty axes is created at the specified location, supplied in data
+    coordinates. The new axis limits are set so that they match the zoom box.
+
+    The zoom box and axis can be connected with two lines, connecting the outer
+    most corner points while leaving space for the axis ticks.
+
+
+    Parameters
+    ----------
+    fig : matplotlib figure
+        the figure in which to create a zoom axis
+
+    ax : matplotlib axes
+        the axis in which to create a zoom axis
+
+    zoom_x : list
+        [min, max] specifying the zooming horizontal area in data
+        coordinates
+
+    zoom_y : list
+        [min, max] specifying the zooming vertical area in data coordinates
+
+    axes_x : list
+        [min, max] specifying the new axes horizontal location in data
+        coordinates
+
+    axes_y : list
+        [min, max] specifying the new axes vertical location in data
+        coordinates
+
+    box : bool, optional
+        specifies whether a box is drawn
+
+    box_color : color string or tuple,optional
+        specifies the box color
+
+    box_alpha : number
+        between 0 and 1, specifies the box alpha
+
+    connect : bool, optional
+        specifies whether the connecting lines are drawn
+
+    connect_color : color string or tuple,optional
+        specifies the connecting lines color
+
+    connect_alpha : number
+        between 0 and 1, specifies the connecting lines alpha
+
+    spacing : number
+        specifies the spacing between the box, axis and the connecting lines
+        in points
+
+    tick_width : number
+        specifies the width of the tick labels in points to avoid drawing
+        connecting lines through the tick labels
+
+    tick_height : number
+        specifies the height of the tick labels in points to avoid drawing
+        connecting lines through the tick labels
+
+
+    Returns
+    -------
+    ax_zoom : matplotlib axes
+        the new axes
+
+    Notes
+    -----
+    * Axes limits should not be changed after a zoom axes has been added
+    * :code:`zoom_axes` does not give the expected results when used on a
+      subfigure
+
+    Examples
+    --------
+    .. plot::
+
+        >>> import matplotlib.pyplot as plt
+        >>> import numpy as np
+        >>> import plottools
+        >>>
+        >>> fig,ax = plt.subplots()
+        >>> x = np.linspace(0,1,100)
+        >>> y = 1-x + 0.02*(2*np.random.random(len(x))-1)
+        >>> ax.plot(x,y)
+        >>> ax_zoom = plottools.zoom_axes(fig,ax,[0.1,0.2],[0.8,0.9],[0.6,0.9],[0.6,0.9])
+        >>> ax_zoom.plot(x,y)
+        >>> plt.show()
+
+    """
+
+    import matplotlib.pyplot as plt
+    plt.tight_layout()
+    ax1_p0 = (ax.transData + fig.transFigure.inverted()).transform_point((axes_x[0], axes_y[0]))
+    ax1_p1 = (ax.transData + fig.transFigure.inverted()).transform_point((axes_x[1], axes_y[1]))
+
+    ax1 = plt.axes([ax1_p0[0], ax1_p0[1], ax1_p1[0] - ax1_p0[0], ax1_p1[1] - ax1_p0[1]])
+
+    ax1.set_xlim(zoom_x)
+    ax1.set_ylim(zoom_y)
+
+    plt.xticks(fontsize=4)
+    plt.yticks(fontsize=4)
+    ax1.tick_params(axis='x', pad=3)
+    ax1.tick_params(axis='y', pad=2)
+
+    if box:
+        ax.plot([zoom_x[0], zoom_x[1], zoom_x[1], zoom_x[0], zoom_x[0]],
+                [zoom_y[0], zoom_y[0], zoom_y[1], zoom_y[1], zoom_y[0]], color=box_color, alpha=box_alpha,
+                linewidth=0.4)
+
+    if connect:
+
+        # define a box of points of the axes and the zoom
+        zoom_xx = [zoom_x[0], zoom_x[0], zoom_x[1], zoom_x[1]]
+        zoom_yy = [zoom_y[0], zoom_y[1], zoom_y[1], zoom_y[0]]
+        axes_xx = [axes_x[0], axes_x[0], axes_x[1], axes_x[1]]
+        axes_yy = [axes_y[0], axes_y[1], axes_y[1], axes_y[0]]
+
+        # determine which points to connect
+        if axes_x[1] < zoom_x[1]:
+            # left
+            if axes_y[0] > zoom_y[0]:
+                # top
+                p1 = 0
+                p2 = 2
+            elif axes_y[1] < zoom_y[1]:
+                # bottom
+                p1 = 1
+                p2 = 3
+            else:
+                # center
+                p1 = 2
+                p2 = 3
+
+        elif axes_x[0] > zoom_x[0]:
+            # right
+            if axes_y[0] > zoom_y[0]:
+                # top
+                p1 = 1
+                p2 = 3
+            elif axes_y[1] < zoom_y[1]:
+                # bottom
+                p1 = 0
+                p2 = 2
+            else:
+                # center
+                p1 = 0
+                p2 = 1
+
+        else:
+            # center
+            if axes_y[0] > zoom_y[0]:
+                # top
+                p1 = 0
+                p2 = 3
+            elif axes_y[1] < zoom_y[1]:
+                # bottom
+                p1 = 1
+                p2 = 2
+            else:
+                # center, the axes is over the zoom
+                p1 = 0
+                p2 = 0
+
+        line1 = ([zoom_xx[p1], axes_xx[p1]], [zoom_yy[p1], axes_yy[p1]])
+        line2 = ([zoom_xx[p2], axes_xx[p2]], [zoom_yy[p2], axes_yy[p2]])
+
+        # estimate the width and height of the ticks
+        tick_width = (ax.transData.inverted()).transform_point((tick_width, 0))[0] - \
+                     (ax.transData.inverted()).transform_point((0, 0))[0]
+        tick_height = (ax.transData.inverted()).transform_point((0, tick_height))[1] - \
+                      (ax.transData.inverted()).transform_point((0, 0))[1]
+        spacing = (ax.transData.inverted()).transform_point((spacing, 0))[0] - \
+                  (ax.transData.inverted()).transform_point((0, 0))[0]
+
+        # create fictional boxes around the axes where no lines should be
+        box_axes_x = [axes_x[0] - tick_width, axes_x[1] + spacing]
+        box_axes_y = [axes_y[0] - tick_height, axes_y[1] + spacing]
+
+        box_zoom_x = [zoom_x[0] - spacing, zoom_x[1] + spacing]
+        box_zoom_y = [zoom_y[0] - spacing, zoom_y[1] + spacing]
+
+        # cut the lines inside the boxes
+        t = np.linspace(0, 1, 100)
+
+        line1_cut = line1
+        line2_cut = line2
+        for tt in t:
+            x = line1[0][0] * (1 - tt) + line1[0][1] * tt
+            y = line1[1][0] * (1 - tt) + line1[1][1] * tt
+            if x <= box_zoom_x[0] or x >= box_zoom_x[1] or y <= box_zoom_y[0] or y >= box_zoom_y[1]:
+                line1_cut[0][0] = x
+                line1_cut[1][0] = y
+                break
+
+        for tt in t[::-1]:
+            x = line1[0][0] * (1 - tt) + line1[0][1] * tt
+            y = line1[1][0] * (1 - tt) + line1[1][1] * tt
+            if (x <= box_axes_x[0] or x >= box_axes_x[1]) or (y <= box_axes_y[0] or y >= box_axes_y[1]):
+                line1_cut[0][1] = x
+                line1_cut[1][1] = y
+                break
+
+        for tt in t:
+            x = line2[0][0] * (1 - tt) + line2[0][1] * tt
+            y = line2[1][0] * (1 - tt) + line2[1][1] * tt
+            if (x <= box_zoom_x[0] or x >= box_zoom_x[1]) or (y <= box_zoom_y[0] or y >= box_zoom_y[1]):
+                line2_cut[0][0] = x
+                line2_cut[1][0] = y
+                break
+
+        for tt in t[::-1]:
+            x = line2[0][0] * (1 - tt) + line2[0][1] * tt
+            y = line2[1][0] * (1 - tt) + line2[1][1] * tt
+            if (x <= box_axes_x[0] or x >= box_axes_x[1]) or (y <= box_axes_y[0] or y >= box_axes_y[1]):
+                line2_cut[0][1] = x
+                line2_cut[1][1] = y
+                break
+
+        # draw the connecting lines
+        ax.plot(line1_cut[0], line1_cut[1], color=connect_color, alpha=connect_alpha, linewidth=0.4)
+        ax.plot(line2_cut[0], line2_cut[1], color=connect_color, alpha=connect_alpha, linewidth=0.4)
+
+    return ax1
 
 
 def make_mp4(img_paths: Sequence[str], out_path: str, fps: int):
@@ -1345,12 +1688,15 @@ def _make_scalar_valued_func(func, inputs, modules):
 
 # Meters.
 class Meter(abc.ABC):
+
     @abc.abstractmethod
-    def step(self, curr): raise NotImplementedError
+    def step(self, curr):
+        raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def val(self): raise NotImplementedError
+    def val(self):
+        raise NotImplementedError
 
 
 class EMAMeter(Meter):
@@ -1691,6 +2037,28 @@ def latest_ckpt(dir_):
     return latest_path
 
 
+def save_ckpt(model, optimizer, path, ema_model=None, scheduler=None, cloud_storage=False, to_gcs=False):
+    # cloud_storage is the legacy argument.
+    logging.warning('Calling the method `save_ckpt` which is to be deprecated later.')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    state_dicts = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "ema_model": None if ema_model is None else ema_model.state_dict(),
+        "scheduler": None if scheduler is None else scheduler.state_dict(),
+    }
+    torch.save(state_dicts, path)
+    if cloud_storage or to_gcs:
+        gs_upload_from_path(path)
+
+
+def save_state_dicts(state_dicts, path, to_gcs=False):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(state_dicts, path)
+    if to_gcs:
+        gs_upload_from_path(path)
+
+
 # Data.
 def get_data_stats(data_name):
     if data_name == "cifar10":
@@ -2000,6 +2368,14 @@ class InfiniteLoader(object):
             return next(self.iterator)
 
 
+def get_ema_avg_fn(gamma=0.999):
+    def ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
+        """Used for `torch.optim.swa_utils.AveragedModel`."""
+        return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
+
+    return ema_avg_fn
+
+
 class Comparator(object):
     def __init__(self, highest=True):
         super(Comparator, self).__init__()
@@ -2027,463 +2403,6 @@ class Comparator(object):
     @property
     def val(self):
         return self._best, self._aux
-
-
-# Bulky runner that doesn't work with DDP.
-class Runner(object):
-    def __init__(self,
-                 model: nn.Module,
-                 optimizer: optim.Optimizer,
-                 epochs: int,
-                 pause_every: int,
-                 train_dir: str,
-                 train_loader: data.DataLoader,
-                 model_dp: Optional[nn.Module] = None,
-                 val_loader: Optional[data.DataLoader] = None,
-                 test_loader: Optional[data.DataLoader] = None,
-                 device: Union[torch.device, str] = None,
-                 global_step: Optional[int] = 0,
-                 epoch: Optional[int] = 0,
-                 scheduler=None,
-                 ema_model=None,
-                 ema_model_dp: Optional[torch.nn.DataParallel] = None,
-                 ema_start: Optional[int] = 0,
-                 cloud_storage: Optional[bool] = False,
-                 save_state_dicts: Optional[bool] = False,
-                 tolerance: Optional[int] = 5000,
-                 grad_max_norm: Optional[float] = None,
-                 ckpts_dir: Optional[str] = None,
-                 results_dir: Optional[str] = None,
-                 options: Optional[dict] = None,
-                 skip_restore: Optional[bool] = False,
-                 clear_linecache=True):
-        """Override backward and pause function for this to run.
-
-        Too many args with obvious use cases... Listing only the non-obvious ones.
-
-        Args:
-            tolerance (int): Useful for early stopping, or even adhoc stopping (say stop when training loss doesn't
-                descend for 1k gradient updates.)
-            options: Custom arguments to take in that might be helpful.
-            skip_restore: If set to True, prevent the Trainer from restoring the state_dicts and record file, if these
-                files exist. This argument is only useful when calling `trainer.train`.
-            clear_linecache (bool, optional): Clears the linecache stored in RAM to avoid OOM.
-                Most necessary when the loader is processing a large amount of files.
-        """
-        super(Runner, self).__init__()
-        self.model = model
-        self.model_dp = model_dp
-        self.optimizer = optimizer
-        self.epochs = epochs
-        self.pause_every = pause_every
-        self.train_dir = train_dir
-
-        self.train_loader = train_loader
-        self.test_loader = test_loader
-        self.val_loader = val_loader
-        self.device = device
-        self.global_step = global_step
-        self.epoch = epoch
-        self.scheduler = scheduler
-        self.ema_model = ema_model
-        self.ema_model_dp = ema_model_dp
-        self.ema_start = ema_start
-        self.cloud_storage = cloud_storage
-        self.save_state_dicts = save_state_dicts
-        self.tolerance = tolerance
-        self.grad_max_norm = grad_max_norm
-
-        # Bookkeeping essentials.
-        self.train_loss_ema = EMAMeter()
-        self.train_losses = []
-        self.global_steps = []
-        self.record = {"global_steps": self.global_steps, "train_losses": self.train_losses}
-        self.record_template = None  # For adding other metrics to record.
-        self.skipped_steps = 0  # Record the number of skipped training steps, possibly due to sequences too long.
-        self.make_record()
-
-        show_env(args_or_device=device)
-
-        self.ckpts_dir = os.path.join(train_dir, 'ckpts') if ckpts_dir is None else ckpts_dir
-        self.results_dir = os.path.join(train_dir, 'results') if results_dir is None else results_dir
-
-        # Extra arguments taken in with the form of a dictionary.
-        self.options: dict = {} if options is None else options
-        self.skip_restore = skip_restore
-
-        os.makedirs(self.ckpts_dir, exist_ok=True)
-        os.makedirs(self.results_dir, exist_ok=True)
-
-        self.clear_linecache = clear_linecache
-
-    def get_batch_size(self, batch):
-        return len(batch[0])
-
-    @property
-    def trainable_params(self):
-        """Get the number of parameters wrt which gradients can be taken."""
-        return count_parameters(self.model, only_differentiable=True)
-
-    def train(self, set_detect_anomaly=False):
-        """Train the model, pausing once in a while to store `record` and state dicts."""
-        if not self.skip_restore:
-            self.restore_if_exists()
-
-        with torch.autograd.set_detect_anomaly(set_detect_anomaly):
-            self._train()
-
-    def _train(self):
-        """The actual training function."""
-        logging.warning(
-            f"model: {self.model}\n"
-            f"trainable_params: {self.trainable_params / 1e6:.5f} million\n"
-            f"optimizer: {self.optimizer}\n"
-        )
-        stop = False
-        for _ in mytqdm(range(self.epochs), cloud_storage=self.cloud_storage, desc="loop over epochs"):
-            if stop:
-                break
-            for i, batch in mytqdm(enumerate(self.train_loader), cloud_storage=self.cloud_storage, desc="one epoch"):
-                if stop:
-                    break
-
-                if self.skip_train_step(batch=batch):
-                    self.skipped_steps += 1
-                    continue
-
-                self.train_step(batch=batch)
-                gc.collect()
-
-                if self.global_step % self.pause_every == 0:
-                    self.global_steps.append(self.global_step)
-                    self.train_losses.append(self.train_loss_ema.val)
-                    self.record["skipped_steps"] = self.skipped_steps
-
-                    self.pause()
-                    self.save()
-                    self.write_record()
-                    if self.clear_linecache:
-                        linecache.clearcache()
-                    stop = self.stop()
-
-                self.global_step += 1
-            self.epoch += 1
-
-        if stop:
-            logging.warning(f"Stopped early at global_step: {self.global_step}, epoch: {self.epoch}")
-
-    @abc.abstractmethod
-    def evaluate_with_loader(self, model, loader, model_name='', loader_name='', eval_batches=sys.maxsize) -> Dict:
-        """Evaluate a given model with a given loader.
-
-        Returns:
-            A dictionary of the format
-                {acc: 0.96, xent: 0.3333}
-        """
-        raise NotImplementedError
-
-    def validate_and_evaluate(self,
-                              metric_name: str,
-                              highest=True,
-                              ckpt_paths: Optional[List[str]] = None,
-                              skip_ema_eval=True,
-                              skip_test_eval=True,
-                              valid_batches=sys.maxsize,
-                              test_batches=sys.maxsize,
-                              eval_ckpts=sys.maxsize,
-                              models: Tuple[nn.Module, nn.Module] = None) -> Dict:
-        """Loops over several checkpoints specified by a list of paths.
-
-        Returns the results of checkpoint with best `metric_name`.
-        Returns the results at the current state, if `ckpt_path` is not supplied.
-
-        Args:
-            metric_name: Name of the metric for validation.
-            highest: Pick the checkpoint with highest value if True; otherwise pick checkpoint with lowest.
-            ckpt_paths: A list of paths to checkpoints.
-            skip_ema_eval: Skip all ema_model evaluations if True.
-            skip_test_eval: Skip all test set evaluations if True.
-            valid_batches: Number of batches for validation.
-            test_batches: Number of batches for testing.
-            eval_ckpts: Number of ckpts to evaluate in total.
-            models: The models to evaluate. Either (self.model, self.ema_model) or (self.model_dp, self.ema_model_dp).
-                Sometimes we want to use the data parallel models, either because of VRAM or the format of the data.
-
-        Returns:
-            A dictionary of the format
-                {model_name: {val: {acc: 0.96}, test: {acc: 0.99}, ckpt_path: 'home/ckpts/global_step_100.ckpt'}, ...}
-        """
-        logging.warning(
-            f'Running evaluation over {min(eval_ckpts, len(ckpt_paths))} ckpts '
-            f'with valid_batches={valid_batches}, test_batches={test_batches}'
-        )
-
-        if models is None:
-            models = (self.model, self.ema_model)
-        if models not in ((self.model, self.ema_model), (self.model_dp, self.ema_model_dp)):
-            raise ValueError(
-                f'`models` should be either (self.model, self.ema_model) or (self.model_dp, self.ema_model_dp)')
-
-        # TODO: Run through the data if the model contains batch norm. Doesn't affect other normalization schemes.
-        if ckpt_paths is None:
-            return self.evaluate(
-                models,
-                skip_ema_eval=skip_ema_eval,
-                skip_test_eval=skip_test_eval,
-                valid_batches=valid_batches,
-                test_batches=test_batches,
-            )
-
-        model_comparator, ema_model_comparator = [Comparator(highest=highest) for _ in models]
-        for i, ckpt_path in tqdm.tqdm(enumerate(ckpt_paths)):
-            if i >= eval_ckpts:
-                break
-
-            state_dicts = torch.load(ckpt_path)
-            model_state_dict = state_dicts.get('model', None)
-            if model_state_dict is not None:
-                models[0].load_state_dict(model_state_dict)
-                logging.warning(f'Loaded model state_dict at: {ckpt_path}')
-
-            ema_state_dict = state_dicts.get('ema_model', None)
-            if ema_state_dict is not None:
-                models[1].load_state_dict(ema_state_dict)
-                logging.warning(f'Loaded ema_model state_dict at: {ckpt_path}')
-
-            # Respectively handle model and ema_model, since the checkpoint for each best may be different.
-            results_now = self.evaluate(
-                models,
-                skip_test_eval=skip_test_eval,
-                skip_ema_eval=skip_ema_eval,
-                valid_batches=valid_batches,
-                test_batches=test_batches,
-            )
-
-            model_results_now = results_now.get('model', None)
-            if model_results_now is not None:
-                model_results_now['ckpt_path'] = ckpt_path
-                model_comparator.step(model_results_now['val'][metric_name], **model_results_now)
-
-            ema_model_results_now = results_now.get('ema_model', None)
-            if ema_model_results_now is not None:
-                ema_model_results_now['ckpt_path'] = ckpt_path
-                ema_model_comparator.step(ema_model_results_now['val'][metric_name], **ema_model_results_now)
-
-        model_results, ema_model_results = [comp.val[1] for comp in (model_comparator, ema_model_comparator)]
-        return {"model": model_results, "ema_model": ema_model_results}
-
-    def evaluate(self,
-                 models: Tuple[nn.Module, nn.Module],
-                 skip_ema_eval=True,
-                 skip_test_eval=True,
-                 valid_batches=sys.maxsize,
-                 test_batches=sys.maxsize):
-        """Evaluate model and ema_model at the current state.
-
-        Returns:
-            A dictionary of the format
-                {model_name: {val: {acc: 0.96, xent: 0.33}, test: {acc: 0.99, , xent: 0.31}}, ...}
-        """
-        results = collections.defaultdict(dict)
-        for model, model_name in zip_(models, ('model', 'ema_model')):
-            for loader, loader_name, eval_batches in zip_(
-                (self.val_loader, self.test_loader), ("val", "test"), (valid_batches, test_batches)):
-                if model is None or loader is None:
-                    continue
-                if skip_ema_eval and model_name == "ema_model":
-                    continue
-                if skip_test_eval and loader_name == "test":
-                    continue
-
-                with Timer(msg=f"eval model={model_name}, loader={loader_name}"):
-                    results[model_name][loader_name] = self.evaluate_with_loader(
-                        model, loader, model_name=model_name, loader_name=loader_name, eval_batches=eval_batches)
-        return results
-
-    def save(self):
-        """Save state dicts of model checkpoints and related stuff."""
-        if self.save_state_dicts:
-            ckpt_path = os.path.join(self.ckpts_dir, f'global_step_{self.global_step:08d}.ckpt')
-            state_dicts = {
-                "model": self.model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-                "ema_model": self.ema_model.state_dict() if self.ema_model is not None else None,
-                "scheduler": self.scheduler.state_dict() if self.scheduler is not None else None,
-                "global_step": self.global_step,
-                "epoch": self.epoch,
-            }
-            torch.save(state_dicts, ckpt_path)
-            logging.warning(f"Saved checkpoint at: {ckpt_path}")
-
-            if self.cloud_storage:
-                gs_upload_from_path(ckpt_path, remove_local=True)
-                logging.warning(f"Uploaded checkpoint to: {ckpt_path}")
-
-    def write_record(self):
-        """Write all the stored results as done in `pause` to a json file."""
-        record_path = os.path.join(self.results_dir, f'record.json')
-        with open(record_path, 'w') as f:
-            json.dump(self.record, f, indent=4)
-        if self.cloud_storage:
-            gs_upload_from_path(record_path)
-
-    def restore_if_exists(self):
-        """Restore state dicts and record from latest if they exists."""
-        if os.path.exists(self.ckpts_dir):
-            if self.cloud_storage:
-                ckpt_paths = gs_listdir(self.ckpts_dir, full_path=True)
-            else:
-                ckpt_paths = listfiles(self.ckpts_dir)
-
-            if len(ckpt_paths) > 0:
-                latest_path = sorted(ckpt_paths)[-1]
-                if self.cloud_storage:
-                    gs_download_from_path(latest_path)
-
-                # TODO: This will fail if e.g. network timeout in the above download.
-                state_dicts = torch.load(latest_path)
-                self.model.load_state_dict(state_dicts['model'])
-                self.optimizer.load_state_dict(state_dicts['optimizer'])
-
-                ema_model_state_dict = state_dicts.get('ema_model', None)
-                if ema_model_state_dict is not None and self.ema_model is not None:
-                    self.ema_model.load_state_dict(ema_model_state_dict)
-
-                scheduler_state_dict = state_dicts.get('scheduler', None)
-                if scheduler_state_dict is not None and self.scheduler is not None:
-                    self.scheduler.load_state_dict(scheduler_state_dict)
-
-                self.global_step = state_dicts['global_step'] + 1
-                self.epoch = state_dicts['epoch']  # TODO: Slightly imprecise.
-                logging.warning(f'Trainer state_dicts restored from: {latest_path}')
-
-        if os.path.exists(self.results_dir):
-            if self.cloud_storage:
-                result_paths = gs_listdir(self.results_dir, full_path=True)
-            else:
-                result_paths = listfiles(self.results_dir)
-
-            if len(result_paths) > 0:
-                latest_path = sorted(result_paths)[-1]
-                if self.cloud_storage:
-                    gs_download_from_path(latest_path)
-
-                # TODO: This will fail if e.g. network timeout in the above download.
-                self.record = jload(latest_path)
-                self.global_steps = self.record['global_steps']
-                self.train_losses = self.record['train_losses']
-                self.skipped_steps = self.record['skipped_steps']
-                logging.warning(f'Trainer record restored from: {latest_path}')
-
-    def profile(self,
-                num_steps=100,
-                num_warmups=2,
-                record_shapes=False,
-                profile_memory=False,
-                use_cuda=True,
-                row_limit=20):
-        """Profile training for several steps."""
-        inf_loader = InfiniteLoader(self.train_loader)
-
-        # Warmup.
-        for _ in range(num_warmups):
-            self.train_step(next(inf_loader))
-
-        # Start actual recording.
-        with profiler.profile(record_shapes=record_shapes, profile_memory=profile_memory, use_cuda=use_cuda) as prof:
-            while num_steps > 0:
-                batch = next(inf_loader)
-                self.train_step(batch)
-                num_steps -= 1
-        profile_results = prof.key_averages().table(sort_by="cpu_time_total", row_limit=row_limit)
-        logging.warning(f'{profile_results}')
-        sys.exit()
-
-    # --- These methods need to be overridden; included are only examples ---
-    @abc.abstractmethod
-    def make_record(self):
-        """Create the record dictionary so that results can be saved in an online fashion."""
-        self.record["model"] = copy.deepcopy(self.record_template)
-        self.record["ema_model"] = copy.deepcopy(self.record_template)
-
-    @abc.abstractmethod
-    def train_step(self, batch):
-        """One step of gradient update."""
-        self.model.train()
-        self.model.zero_grad()
-        loss = self.compute_loss(batch)
-        loss.backward()
-        if self.grad_max_norm is not None:
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.grad_max_norm)
-        self.optimizer.step()
-        self.train_loss_ema.step(loss)
-
-        if self.scheduler is not None:
-            self.scheduler.step()
-        if self.ema_model is not None:
-            if self.global_step >= self.ema_start:
-                self.ema_model.update_parameters(self.model)
-
-    @abc.abstractmethod
-    def compute_loss(self, batch):
-        """Compute the loss and return a scalar."""
-        x, y = batch
-        x, y = x.to(self.device), y.to(self.device, non_blocking=True)
-        p = self.model(x)
-        loss = F.cross_entropy(p, y)
-        return loss
-
-    @abc.abstractmethod
-    @torch.no_grad()
-    def pause(self):
-        """Things to do when the number of iterations hit `pause_every`.
-
-        Should do
-            - update `global_steps` to reflect when paused
-            - evaluation on validation and test data,
-            - update `record`
-        """
-        if self.ema_model is not None:
-            models = (self.model, self.ema_model,)
-            model_names = ("model", "ema_model",)
-        else:
-            models = (self.model,)
-            model_names = ("model",)
-
-        for model, model_name in zip(models, model_names):
-            model.eval()  # Super important; don't forget!!!
-            losses = []
-
-            for x, y in self.test_loader:
-                x, y = x.to(self.device), y.to(self.device, non_blocking=True)
-                p = model(x)
-                loss = F.cross_entropy(p, y, reduction="none")
-                losses.append(loss)
-            test_loss = torch.cat(losses, dim=0).mean(dim=0)
-
-            logging.warning(
-                f"global_step: {self.global_step:08d}, "
-                f"epoch: {self.epoch},"
-                f"train_loss_ema: {self.train_loss_ema.val:.5f}, "
-                f"test_loss: {test_loss:.5f}, "
-            )
-
-            # Get the correct (sub)record by model name.
-            record = self.record[model_name]
-            record["test_loss"].append(test_loss)
-
-    @abc.abstractmethod
-    def stop(self):
-        """An early stopping criterion."""
-        return False
-
-    @abc.abstractmethod
-    def skip_train_step(self, batch):
-        """Skip the train step if True.
-
-        Useful for dealing with variable-sized batches, e.g. skip when might OOM.
-        """
-        return False
 
 
 class EarlyStopper(object):
@@ -2524,38 +2443,7 @@ class EarlyStopper(object):
         return False
 
 
-# Tensorflow.
-def tf_limit_memory_growth():
-    import tensorflow as tf  # Don't import this shit unless absolutely necessary.
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        try:
-            # Currently, memory growth needs to be the same across GPUs
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-        except RuntimeError as e:
-            # Memory growth must be set before GPUs have been initialized
-            print(e)
-
-
-@contextlib.contextmanager
-def tf_options(options):
-    """Grappler optimization options.
-
-    https://www.tensorflow.org/guide/graph_optimization#available_graph_optimizers
-    """
-    import tensorflow as tf  # Don't import this shit unless absolutely necessary.
-    old_opts = tf.config.optimizer.get_experimental_options()
-    tf.config.optimizer.set_experimental_options(options)
-    try:
-        yield
-    finally:
-        tf.config.optimizer.set_experimental_options(old_opts)
-
-
-# Logging sanitization.
+# Misc log sanitization.
 def early_stopping(global_steps: list, metrics: list, tolerance: int, ascending: bool):
     """Find the index s.t. quant is best.
 
@@ -2614,3 +2502,49 @@ def exp_(x):
     except OverflowError:
         ans = float('inf')
     return ans
+
+
+# Run on cloud.
+def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180):
+    """Schedule jobs on a VM with several GPUs.
+
+    Args:
+        commands: Sequence of strings. Each string is a command of the format:
+            python -m <script> <args>
+            Notes:
+                1) This command shouldn't contain CUDA_VISIBLE_DEVICES, since it gets added in this function.
+                2) It is the responsibility of each command to get the wait/no wait right!
+        wait_time_in_secs: The number of seconds to wait before scheduling the next job.
+            It's always good to wait for a bit, since a job might not immediately start running a GPU.
+    """
+    print(f'Scheduling {len(commands)} jobs...')
+    import GPUtil
+    import subprocess
+
+    for job_id, command in enumerate(commands):
+        empty_gpus = []
+        while len(empty_gpus) == 0:
+            # Don't use `getFirstAvailable`; it is very bad since it throws RuntimeError when no GPU is found.
+            empty_gpus = GPUtil.getAvailable(
+                order='first',
+                maxLoad=0.0001,
+                maxMemory=0.0001,
+                limit=1,
+            )
+            time.sleep(1)
+        print(f'empty gpus: {empty_gpus}')
+        gpu_id = empty_gpus[0]
+
+        command = f"export CUDA_VISIBLE_DEVICES={gpu_id}; {command}"
+
+        # This doesn't wait.
+        subprocess.Popen(
+            [command],
+            shell=True, stdin=None, stdout=None, stderr=None, close_fds=True
+        )
+        print('command: ')
+        print(command)
+        print(f'scheduled job: {job_id} on gpu: {gpu_id}')
+
+        # Give the program some time to be located on the GPU, before scheduling the next.
+        time.sleep(wait_time_in_secs)
