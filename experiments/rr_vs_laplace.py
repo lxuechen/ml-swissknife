@@ -49,9 +49,11 @@ def _uniform(n=1000, epsilon=1, t=1000):
         x = torch.rand(size=(n,))
 
         x_rr = rr(x, epsilon=epsilon)
+        assert x_rr.dim() == 0
         mse_rr.append(_squared_error(x_rr, mean=0.5))
 
         x_lp = laplace(x, epsilon=epsilon)
+        assert x_lp.dim() == 0
         mse_lp.append(_squared_error(x_lp, mean=0.5))
 
     mse_rr = torch.stack(mse_rr).mean()
@@ -67,9 +69,11 @@ def _bernoulli(n=1000, epsilon=1, t=1000, p=0.1):
         x = torch.bernoulli(p)
 
         x_rr = rr(x, epsilon=epsilon)
+        assert x_rr.dim() == 0
         mse_rr.append(_squared_error(x_rr, mean=0.5))
 
         x_lp = laplace(x, epsilon=epsilon)
+        assert x_lp.dim() == 0
         mse_lp.append(_squared_error(x_lp, mean=0.5))
 
     mse_rr = torch.stack(mse_rr).mean()
@@ -84,9 +88,11 @@ def _tight_uniform(n=1000, epsilon=1, t=1000):
         x = torch.rand(size=(n,)) * 0.02 + 0.49
 
         x_rr = rr(x, epsilon=epsilon)
+        assert x_rr.dim() == 0
         mse_rr.append(_squared_error(x_rr, mean=0.5))
 
         x_lp = laplace(x, epsilon=epsilon)
+        assert x_lp.dim() == 0
         mse_lp.append(_squared_error(x_lp, mean=0.5))
 
     mse_rr = torch.stack(mse_rr).mean()
