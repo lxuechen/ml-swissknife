@@ -1,5 +1,7 @@
 """
 python -m experiments.rr_vs_laplace
+
+exercise 6.1 from ECE377
 """
 
 import numpy as np
@@ -40,7 +42,7 @@ def _squared_error(x, mean):
     return (x - mean) ** 2
 
 
-def _uniform(n=10, epsilon=20, t=50):
+def _uniform(n=1000, epsilon=1, t=1000):
     mse_rr = []
     mse_lp = []
     for _ in tqdm.tqdm(range(t), desc="T"):
@@ -57,10 +59,49 @@ def _uniform(n=10, epsilon=20, t=50):
     print('rr', mse_rr, 'lp', mse_lp)
 
 
+def _bernoulli(n=1000, epsilon=1, t=1000, p=0.1):
+    p = torch.full(size=(n,), fill_value=p)
+    mse_rr = []
+    mse_lp = []
+    for _ in tqdm.tqdm(range(t), desc="T"):
+        x = torch.bernoulli(p)
+
+        x_rr = rr(x, epsilon=epsilon)
+        mse_rr.append(_squared_error(x_rr, mean=0.5))
+
+        x_lp = laplace(x, epsilon=epsilon)
+        mse_lp.append(_squared_error(x_lp, mean=0.5))
+
+    mse_rr = torch.stack(mse_rr).mean()
+    mse_lp = torch.stack(mse_lp).mean()
+    print('rr', mse_rr, 'lp', mse_lp)
+
+
+def _tight_uniform(n=1000, epsilon=1, t=1000):
+    mse_rr = []
+    mse_lp = []
+    for _ in tqdm.tqdm(range(t), desc="T"):
+        x = torch.rand(size=(n,)) * 0.02 + 0.49
+
+        x_rr = rr(x, epsilon=epsilon)
+        mse_rr.append(_squared_error(x_rr, mean=0.5))
+
+        x_lp = laplace(x, epsilon=epsilon)
+        mse_lp.append(_squared_error(x_lp, mean=0.5))
+
+    mse_rr = torch.stack(mse_rr).mean()
+    mse_lp = torch.stack(mse_lp).mean()
+    print('rr', mse_rr, 'lp', mse_lp)
+
+
 # Vary n.
-def main():
-    _uniform()
+def main(n=1000, epsilon=1):
+    _uniform(n=n, epsilon=epsilon, )
+    _bernoulli(n=n, epsilon=epsilon, )
+    _tight_uniform(n=n, epsilon=epsilon, )
 
 
 if __name__ == "__main__":
-    main()
+    import fire
+
+    fire.Fire(main)
