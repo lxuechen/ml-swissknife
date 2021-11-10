@@ -116,10 +116,14 @@ def report_node_and_scratch_dirs():
 
 # These are useful for naming directories with float or int parameter values.
 def float2str(x, precision=8):
+    if x is None:
+        return str(None)
     return f"{x:.{precision}f}".replace('.', "_")
 
 
 def int2str(x, leading_zeros=8):
+    if x is None:
+        return str(None)
     return f"{x:0{leading_zeros}d}"
 
 
