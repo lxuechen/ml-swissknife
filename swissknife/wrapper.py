@@ -137,6 +137,7 @@ class ContainerMeta(type):
 class Mode(metaclass=ContainerMeta):
     submit = "submit"
     local = "local"
+    gvm = "gvm"
 
 
 # Purely for backward compatibility.
