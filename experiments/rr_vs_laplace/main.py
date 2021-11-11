@@ -4,6 +4,8 @@ python -m experiments.rr_vs_laplace
 exercise 6.1 from ECE377
 """
 
+import fire
+
 import numpy as np
 import torch
 from torch import distributions
@@ -102,12 +104,10 @@ def _tight_uniform(n=1000, epsilon=1, t=1000):
 
 # Vary n.
 def main(n=1000, epsilon=1):
-    _uniform(n=n, epsilon=epsilon, )
-    _bernoulli(n=n, epsilon=epsilon, )
-    _tight_uniform(n=n, epsilon=epsilon, )
+    _uniform(n=n, epsilon=epsilon)
+    _bernoulli(n=n, epsilon=epsilon)
+    _tight_uniform(n=n, epsilon=epsilon)
 
 
 if __name__ == "__main__":
-    import fire
-
     fire.Fire(main)
