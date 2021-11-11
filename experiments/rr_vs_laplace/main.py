@@ -132,10 +132,15 @@ def _uniform(epsilon=1, t=1000, ns=(10, 100, 1000, 10000)):
     def sample_x(sample_size):
         return torch.rand(size=(sample_size,)), 0.5
 
-    mse_rr, mse_lp, ci_rr, ci_lp, err_rr, err_lp, mean_rr, mean_lp, true_mean = _make_estimates(
+    (mse_rr, mse_lp, mse_np, ci_rr, ci_lp, ci_np,
+     err_rr, err_lp, err_np, mean_rr, mean_lp, mean_np, true_mean) = _make_estimates(
         ns=ns, t=t, epsilon=epsilon, sample_x=sample_x
     )
-    plots = [dict(x=ns, y=mse_rr, label="RR"), dict(x=ns, y=mse_lp, label="Laplace")]
+    plots = [
+        dict(x=ns, y=mse_rr, label="RR"),
+        dict(x=ns, y=mse_lp, label="Laplace"),
+        dict(x=ns, y=mse_np, label="Non-private")
+    ]
     utils.plot_wrapper(
         img_path="./uniform_mse",
         suffixes=('.png', '.pdf'),
@@ -146,6 +151,7 @@ def _uniform(epsilon=1, t=1000, ns=(10, 100, 1000, 10000)):
     errorbars = [
         dict(x=ns, y=mean_rr, yerr=err_rr, label="RR", alpha=0.8),
         dict(x=ns, y=mean_lp, yerr=err_lp, label="Laplace", alpha=0.8),
+        dict(x=ns, y=mean_np, yerr=err_np, label="Non-private", alpha=0.8),
     ]
     utils.plot_wrapper(
         img_path="./uniform_ci",
@@ -159,10 +165,15 @@ def _bernoulli(epsilon=1, t=1000, ns=(10, 100, 1000, 10000), pfloat=0.1):
     def sample_x(sample_size):
         return torch.bernoulli(torch.full(size=(sample_size,), fill_value=pfloat)), pfloat
 
-    mse_rr, mse_lp, ci_rr, ci_lp, err_rr, err_lp, mean_rr, mean_lp, true_mean = _make_estimates(
+    (mse_rr, mse_lp, mse_np, ci_rr, ci_lp, ci_np,
+     err_rr, err_lp, err_np, mean_rr, mean_lp, mean_np, true_mean) = _make_estimates(
         ns=ns, t=t, epsilon=epsilon, sample_x=sample_x
     )
-    plots = [dict(x=ns, y=mse_rr, label="RR"), dict(x=ns, y=mse_lp, label="Laplace")]
+    plots = [
+        dict(x=ns, y=mse_rr, label="RR"),
+        dict(x=ns, y=mse_lp, label="Laplace"),
+        dict(x=ns, y=mse_np, label="Non-private")
+    ]
     utils.plot_wrapper(
         img_path="./bernoulli_mse",
         suffixes=('.png', '.pdf'),
@@ -173,6 +184,7 @@ def _bernoulli(epsilon=1, t=1000, ns=(10, 100, 1000, 10000), pfloat=0.1):
     errorbars = [
         dict(x=ns, y=mean_rr, yerr=err_rr, label="RR", alpha=0.8),
         dict(x=ns, y=mean_lp, yerr=err_lp, label="Laplace", alpha=0.8),
+        dict(x=ns, y=mean_np, yerr=err_np, label="Non-private", alpha=0.8),
     ]
     utils.plot_wrapper(
         img_path="./bernoulli_ci",
@@ -186,10 +198,15 @@ def _tight_uniform(epsilon=1, t=1000, ns=(10, 100, 1000, 10000)):
     def sample_x(sample_size):
         return torch.rand(size=(sample_size,)) * 0.02 + 0.49, 0.50
 
-    mse_rr, mse_lp, ci_rr, ci_lp, err_rr, err_lp, mean_rr, mean_lp, true_mean = _make_estimates(
+    (mse_rr, mse_lp, mse_np, ci_rr, ci_lp, ci_np,
+     err_rr, err_lp, err_np, mean_rr, mean_lp, mean_np, true_mean) = _make_estimates(
         ns=ns, t=t, epsilon=epsilon, sample_x=sample_x
     )
-    plots = [dict(x=ns, y=mse_rr, label="RR"), dict(x=ns, y=mse_lp, label="Laplace")]
+    plots = [
+        dict(x=ns, y=mse_rr, label="RR"),
+        dict(x=ns, y=mse_lp, label="Laplace"),
+        dict(x=ns, y=mse_np, label="Non-private")
+    ]
     utils.plot_wrapper(
         img_path="./tight_uniform_mse",
         suffixes=('.png', '.pdf'),
@@ -200,6 +217,7 @@ def _tight_uniform(epsilon=1, t=1000, ns=(10, 100, 1000, 10000)):
     errorbars = [
         dict(x=ns, y=mean_rr, yerr=err_rr, label="RR", alpha=0.8),
         dict(x=ns, y=mean_lp, yerr=err_lp, label="Laplace", alpha=0.8),
+        dict(x=ns, y=mean_np, yerr=err_np, label="Non-private", alpha=0.8),
     ]
     utils.plot_wrapper(
         img_path="./tight_uniform_ci",
