@@ -43,6 +43,10 @@ def laplace(x, epsilon):
     return (x + w).mean().item()
 
 
+def non_private(x):
+    return x.mean().item()
+
+
 def _squared_error(x, mean):
     return (x - mean) ** 2
 
@@ -50,18 +54,24 @@ def _squared_error(x, mean):
 def _make_estimates(ns, t, epsilon, sample_x):
     mse_rr = []
     mse_lp = []
+    mse_np = []
 
     mean_rr = []
     mean_lp = []
+    mean_np = []
 
     ci_rr = []
     ci_lp = []
+    ci_np = []
+
     for n in ns:
         err_rr = []
         err_lp = []
+        err_np = []
 
         x_rr_l = []
         x_lp_l = []
+        x_np_l = []
         for _ in tqdm.tqdm(range(t), desc="T"):
             x, true_mean = sample_x(n)
 
@@ -71,22 +81,30 @@ def _make_estimates(ns, t, epsilon, sample_x):
             x_lp = laplace(x, epsilon=epsilon)
             err_lp.append(_squared_error(x_lp, mean=true_mean))
 
+            x_np = non_private(x)
+            err_np.append(_squared_error(x_np, mean=true_mean))
+
             x_rr_l.append(x_rr)
             x_lp_l.append(x_lp)
+            x_np_l.append(x_np)
 
         mse_rr.append(torch.tensor(err_rr).mean().item())
         mse_lp.append(torch.tensor(err_lp).mean().item())
+        mse_np.append(torch.tensor(err_np).mean().item())
 
         ci_rr.append(_ci(x_rr_l))
         ci_lp.append(_ci(x_lp_l))
+        ci_np.append(_ci(x_np_l))
 
         mean_rr.append(np.mean(x_rr_l))
         mean_lp.append(np.mean(x_lp_l))
+        mean_np.append(np.mean(x_np_l))
 
     err_rr = [(hi - lo) for lo, hi in ci_rr]
     err_lp = [(hi - lo) for lo, hi in ci_lp]
+    err_np = [(hi - lo) for lo, hi in ci_np]
 
-    return mse_rr, mse_lp, ci_rr, ci_lp, err_rr, err_lp, mean_rr, mean_lp, true_mean
+    return mse_rr, mse_lp, mse_np, ci_rr, ci_lp, ci_np, err_rr, err_lp, err_np, mean_rr, mean_lp, mean_np, true_mean
 
 
 def _ci(sample, alpha=0.05):  # (Asymptotic) Confidence interval.
