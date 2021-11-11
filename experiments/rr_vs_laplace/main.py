@@ -1,15 +1,16 @@
 """
-python -m experiments.rr_vs_laplace
+python main.py
 
 exercise 6.1 from ECE377
 """
 
 import fire
-
 import numpy as np
 import torch
 from torch import distributions
 import tqdm
+
+from swissknife import utils
 
 torch.set_default_dtype(torch.float64)
 
@@ -44,69 +45,68 @@ def _squared_error(x, mean):
     return (x - mean) ** 2
 
 
-def _uniform(n=1000, epsilon=1, t=1000):
+def _make_mse_estimates(ns, t, epsilon, sample_x):
     mse_rr = []
     mse_lp = []
-    for _ in tqdm.tqdm(range(t), desc="T"):
-        x = torch.rand(size=(n,))
+    for n in ns:
+        err_rr = []
+        err_lp = []
+        for _ in tqdm.tqdm(range(t), desc="T"):
+            x, true_mean = sample_x(n)
 
-        x_rr = rr(x, epsilon=epsilon)
-        assert x_rr.dim() == 0
-        mse_rr.append(_squared_error(x_rr, mean=0.5))
+            x_rr = rr(x, epsilon=epsilon)
+            assert x_rr.dim() == 0
+            err_rr.append(_squared_error(x_rr, mean=true_mean))
 
-        x_lp = laplace(x, epsilon=epsilon)
-        assert x_lp.dim() == 0
-        mse_lp.append(_squared_error(x_lp, mean=0.5))
+            x_lp = laplace(x, epsilon=epsilon)
+            assert x_lp.dim() == 0
+            err_lp.append(_squared_error(x_lp, mean=true_mean))
 
-    mse_rr = torch.stack(mse_rr).mean()
-    mse_lp = torch.stack(mse_lp).mean()
-    print('rr', mse_rr, 'lp', mse_lp)
-
-
-def _bernoulli(n=1000, epsilon=1, t=1000, p=0.1):
-    p = torch.full(size=(n,), fill_value=p)
-    mse_rr = []
-    mse_lp = []
-    for _ in tqdm.tqdm(range(t), desc="T"):
-        x = torch.bernoulli(p)
-
-        x_rr = rr(x, epsilon=epsilon)
-        assert x_rr.dim() == 0
-        mse_rr.append(_squared_error(x_rr, mean=0.5))
-
-        x_lp = laplace(x, epsilon=epsilon)
-        assert x_lp.dim() == 0
-        mse_lp.append(_squared_error(x_lp, mean=0.5))
-
-    mse_rr = torch.stack(mse_rr).mean()
-    mse_lp = torch.stack(mse_lp).mean()
-    print('rr', mse_rr, 'lp', mse_lp)
+        mse_rr.append(torch.stack(err_rr).mean())
+        mse_lp.append(torch.stack(err_lp).mean())
+    return mse_rr, mse_lp
 
 
-def _tight_uniform(n=1000, epsilon=1, t=1000):
-    mse_rr = []
-    mse_lp = []
-    for _ in tqdm.tqdm(range(t), desc="T"):
-        x = torch.rand(size=(n,)) * 0.02 + 0.49
+def _uniform(epsilon=1, t=1000, ns=(10, 100, 1000, 10000)):
+    def sample_x(sample_size):
+        return torch.rand(size=(sample_size,)), 0.5
 
-        x_rr = rr(x, epsilon=epsilon)
-        assert x_rr.dim() == 0
-        mse_rr.append(_squared_error(x_rr, mean=0.5))
-
-        x_lp = laplace(x, epsilon=epsilon)
-        assert x_lp.dim() == 0
-        mse_lp.append(_squared_error(x_lp, mean=0.5))
-
-    mse_rr = torch.stack(mse_rr).mean()
-    mse_lp = torch.stack(mse_lp).mean()
-    print('rr', mse_rr, 'lp', mse_lp)
+    mse_rr, mse_lp = _make_mse_estimates(ns=ns, t=t, epsilon=epsilon, sample_x=sample_x)
+    plots = [dict(x=ns, y=mse_rr, label="RR"), dict(x=ns, y=mse_lp, label="Laplace")]
+    utils.plot_wrapper(
+        plots=plots,
+        options=dict(ylabel="$\mathrm{Unif}[0, 1] \quad \mathrm{MSE}$", xscale="log", xlabel="$N$")
+    )
 
 
-# Vary n.
-def main(n=1000, epsilon=1):
-    _uniform(n=n, epsilon=epsilon)
-    _bernoulli(n=n, epsilon=epsilon)
-    _tight_uniform(n=n, epsilon=epsilon)
+def _bernoulli(epsilon=1, t=1000, ns=(10, 100, 1000, 10000), pfloat=0.1):
+    def sample_x(sample_size):
+        return torch.bernoulli(torch.full(size=(sample_size,), fill_value=pfloat)), pfloat
+
+    mse_rr, mse_lp = _make_mse_estimates(ns=ns, t=t, epsilon=epsilon, sample_x=sample_x)
+    plots = [dict(x=ns, y=mse_rr, label="RR"), dict(x=ns, y=mse_lp, label="Laplace")]
+    utils.plot_wrapper(
+        plots=plots,
+        options=dict(ylabel="$\mathrm{Bern}(p=0.1) \quad \mathrm{MSE}$", xscale="log", xlabel="$N$")
+    )
+
+
+def _tight_uniform(epsilon=1, t=1000, ns=(10, 100, 1000, 10000)):
+    def sample_x(sample_size):
+        return torch.rand(size=(sample_size,)) * 0.02 + 0.49, 0.50
+
+    mse_rr, mse_lp = _make_mse_estimates(ns=ns, t=t, epsilon=epsilon, sample_x=sample_x)
+    plots = [dict(x=ns, y=mse_rr, label="RR"), dict(x=ns, y=mse_lp, label="Laplace")]
+    utils.plot_wrapper(
+        plots=plots,
+        options=dict(ylabel="$\mathrm{Unif}[0.49, 0.51] \quad \mathrm{MSE}$", xscale="log", xlabel="$N$")
+    )
+
+
+def main():
+    _uniform()
+    _bernoulli()
+    _tight_uniform()
 
 
 if __name__ == "__main__":
