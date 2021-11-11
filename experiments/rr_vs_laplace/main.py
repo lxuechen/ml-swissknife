@@ -4,6 +4,8 @@ python main.py
 exercise 6.1 from ECE377
 """
 
+import math
+
 import fire
 import numpy as np
 import torch
@@ -56,15 +58,36 @@ def _make_mse_estimates(ns, t, epsilon, sample_x):
 
             x_rr = rr(x, epsilon=epsilon)
             assert x_rr.dim() == 0
-            err_rr.append(_squared_error(x_rr, mean=true_mean))
+            err_rr.append(_squared_error(x_rr, mean=true_mean).item())
 
             x_lp = laplace(x, epsilon=epsilon)
             assert x_lp.dim() == 0
-            err_lp.append(_squared_error(x_lp, mean=true_mean))
+            err_lp.append(_squared_error(x_lp, mean=true_mean).item())
 
-        mse_rr.append(torch.stack(err_rr).mean())
-        mse_lp.append(torch.stack(err_lp).mean())
+        mse_rr.append(torch.tensor(err_rr).mean().item())
+        mse_lp.append(torch.tensor(err_lp).mean().item())
     return mse_rr, mse_lp
+
+
+def _ci(sample, alpha=0.05):  # (Asymptotic) Confidence interval.
+    alpha2zscore = {
+        0.05: 1.960,
+        0.1: 1.645,
+        0.15: 1.440,
+    }
+
+    if isinstance(sample, (list, tuple)):
+        sample = torch.tensor(sample)
+    sample: torch.Tensor
+    assert sample.dim() == 1
+    sample_size = len(sample)
+    sample_mean = sample.mean()
+    sample_std = sample.std(unbiased=False)
+    zscore = alpha2zscore[alpha]
+
+    lo = sample_mean - zscore * sample_std / math.sqrt(sample_size)
+    hi = sample_mean + zscore * sample_std / math.sqrt(sample_size)
+    return lo, hi
 
 
 def _uniform(epsilon=1, t=1000, ns=(10, 100, 1000, 10000)):
