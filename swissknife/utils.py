@@ -63,6 +63,36 @@ def average_over_seed(seq_of_seq):
     return seq_of_seq.mean(0), seq_of_seq.std(0)
 
 
+def confidence_interval(sample, alpha=0.05):
+    """Compute (asymptotic) confidence interval under the Normality assumption.
+
+    Assumes each sample is drawn from a Normal distribution.
+    This could still work if you have a large number of samples.
+    """
+    alpha2zscore = {
+        0.01: 2.58,
+        0.02: 2.33,
+        0.05: 1.960,
+        0.1: 1.645,
+        0.15: 1.440,
+    }
+
+    if isinstance(sample, (list, tuple)):
+        sample = torch.tensor(sample)
+    sample: torch.Tensor
+    if not sample.dim() == 1:
+        raise ValueError(f"`sample` must be 1-dimensional.")
+    sample_size = len(sample)
+    sample_mean = sample.mean()
+    sample_std = sample.std(unbiased=False)
+    zscore = alpha2zscore[alpha]
+
+    delta = zscore * sample_std / math.sqrt(sample_size)
+    low = sample_mean - delta
+    high = sample_mean + delta
+    return dict(low=low, high=high, delta=delta)
+
+
 def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False, default=None):
     """Dump a str or dictionary to a file in json format.
 
