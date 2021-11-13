@@ -90,7 +90,7 @@ def confidence_interval(sample, alpha=0.05):
     delta = zscore * sample_std / math.sqrt(sample_size)
     low = sample_mean - delta
     high = sample_mean + delta
-    return dict(low=low, high=high, delta=delta)
+    return dict(low=low, high=high, delta=delta, mean=sample_mean)
 
 
 def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False, default=None):
