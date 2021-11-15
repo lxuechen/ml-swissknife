@@ -17,3 +17,4 @@ pip install git+https://github.com/lxuechen/swissknife.git
 - [ ] Custom optimizers (HF, K-FAC)
 - [ ] Advanced seed averaging utils
 - [ ] Fast two-sample test utils
+- [x] Confidence interval utils
