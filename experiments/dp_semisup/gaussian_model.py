@@ -67,7 +67,7 @@ def classify(estimator, x):
 
 
 def compute_error_rate(estimator, x, y):
-    y_hat = torch.ge((estimator * x).sum(dim=1), 0).float()
+    y_hat = torch.where((estimator * x).sum(dim=1) > 0, 1., -1.)
     return torch.eq(y.squeeze(), y_hat).float().mean(dim=0).item()
 
 
@@ -84,21 +84,23 @@ def fairness():
     Expectation:
         - O(1/p) vs O(1/(1-p)); not very surprising.
         - example too simple; doing well on majority => doing well on minority.
+
+    Conclusion: This model is unsuited for fairness.
     """
-    epsilons = (0.5, 1., 1.5, 2, 2.5, 3., 3.5, 4, 4.5,)
-    probs = (0.5, 0.6, 0.7, 0.8, 0.9)
-    d = 10
-    mu = torch.randn((1, d))
-    sigma = 0.02
-    n_labeled = 10000
-    n_test = 5000
+    epsilons = (0.001, 0.01, 0.1, 0.5, 1., 2., 5.,)
+    probs = (0.999, 0.9999)
+    d = 20
+    mu = torch.randn((1, d)) * 2
+    sigma = 0.3
+    n_labeled = 100
+    n_test = 10000
     clipping_norm = 3
-    seeds = list(range(10))
+    seeds = list(range(100))
 
     errorbars = []
     for prob in probs:
-        errbar1 = dict(x=epsilons, y=[], yerr=[], label=f"group 1 (p={prob})")
-        errbar0 = dict(x=epsilons, y=[], yerr=[], label=f"group 0 (p={prob})")
+        errbar1 = dict(x=epsilons, y=[], yerr=[], label=f"group 1 (p={prob:.4f})", marker='o')
+        errbar0 = dict(x=epsilons, y=[], yerr=[], label=f"group 0 (p={1 - prob:.4f})", marker="^")
         errorbars.extend([errbar1, errbar0])
         for epsilon in epsilons:
             errs1, errs0 = [], []
@@ -126,6 +128,7 @@ def fairness():
 
     utils.plot_wrapper(
         errorbars=errorbars,
+        options=dict(xlabel="$\epsilon$", xscale="log", yscale='log')
     )
 
 
