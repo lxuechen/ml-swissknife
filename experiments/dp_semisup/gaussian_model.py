@@ -12,21 +12,27 @@ Where does randomness come from?
 import math
 
 import fire
+import numpy as np
 import torch
+import tqdm
+
+from swissknife import utils
 
 
 def make_labeled_data(n, d, sigma, prob, mu, group_id=2):
-    # mu: tensor of size (d,)
+    # mu: tensor of size (1, d,)
     if group_id == 2:  # Sample both groups.
         coin_flips = torch.bernoulli(torch.full(size=(n, 1), fill_value=prob))
         y = 2 * coin_flips - 1.  # Convert to Rademacher.
     elif group_id == 1:  # y=1 (bernoulli=1).
-        y = torch.full(size=(n, 1), fill_value=1)
+        y = torch.full(size=(n, 1), fill_value=1.)
     elif group_id == 0:  # y=-1 (bernoulli=0).
-        y = torch.full(size=(n, 1), fill_value=-1)
+        y = torch.full(size=(n, 1), fill_value=-1.)
     else:
         raise ValueError(f"Unknown group_id: {group_id}")
-    x = mu[None, :] * y + sigma * torch.randn(size=(n, d))  # Get features.
+    x = mu * y + sigma * torch.randn(size=(n, d))  # Get features.
+    # x: (sample_size, d).
+    # y: (sample_size, 1).
     return x, y
 
 
@@ -35,27 +41,34 @@ def make_unlabeled_data(n, d, sigma, mu, prob, group_id=2):
     return x
 
 
-def dp_estimator(x, y, clipping_norm, epsilon, delta):
+def dp_estimator(x, y, clipping_norm, epsilon, delta=None):
     # Clip features.
     coefficient = torch.clamp_max(clipping_norm / x.norm(dim=1, keepdim=True), 1.)
     x = x * coefficient
-    estimator = (x * y[:, None]).mean(dim=0)
+    estimator = (x * y).mean(dim=0)
 
     # Usual Gaussian mechanism.
     sample_size = x.size(0)
+    if delta is None:
+        delta = 1 / (2 * sample_size)
     sensitivity = 2 / sample_size * clipping_norm
     var = 2 * math.log(1.25 / delta) * sensitivity ** 2 / (epsilon ** 2)
 
-    return estimator + torch.randn_like(estimator) * torch.sqrt(var)
+    return estimator + torch.randn_like(estimator) * math.sqrt(var)
 
 
 def usual_estimator(x, y):
-    return (x * y[:, None]).mean(dim=0)
+    return (x * y).mean(dim=0)
 
 
 def classify(estimator, x):
     y_hat = torch.ge((estimator * x).sum(dim=1), 0).float()
     return y_hat
+
+
+def compute_error_rate(estimator, x, y):
+    y_hat = torch.ge((estimator * x).sum(dim=1), 0).float()
+    return torch.eq(y.squeeze(), y_hat).float().mean(dim=0).item()
 
 
 def fairness():
@@ -68,8 +81,52 @@ def fairness():
     Plot3: Check rate dependence on p (same plot multiple epsilon).
 
     Maybe also plot ratio between accuracies? Need to reduce variance!
+    Expectation:
+        - O(1/p) vs O(1/(1-p)); not very surprising.
+        - example too simple; doing well on majority => doing well on minority.
     """
-    pass
+    epsilons = (0.5, 1., 1.5, 2, 2.5, 3., 3.5, 4, 4.5,)
+    probs = (0.5, 0.6, 0.7, 0.8, 0.9)
+    d = 10
+    mu = torch.randn((1, d))
+    sigma = 0.02
+    n_labeled = 10000
+    n_test = 5000
+    clipping_norm = 3
+    seeds = list(range(10))
+
+    errorbars = []
+    for prob in probs:
+        errbar1 = dict(x=epsilons, y=[], yerr=[], label=f"group 1 (p={prob})")
+        errbar0 = dict(x=epsilons, y=[], yerr=[], label=f"group 0 (p={prob})")
+        errorbars.extend([errbar1, errbar0])
+        for epsilon in epsilons:
+            errs1, errs0 = [], []
+            for seed in tqdm.tqdm(seeds, desc="seeds"):
+                x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
+
+                theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
+
+                x1, y1 = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma, group_id=1)
+                err1 = compute_error_rate(estimator=theta_hat, x=x1, y=y1)
+
+                # Minority.
+                x0, y0 = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma, group_id=0)
+                err0 = compute_error_rate(estimator=theta_hat, x=x0, y=y0)
+
+                errs1.append(err1)
+                errs0.append(err0)
+
+            avg1, std1 = np.mean(errs1), np.std(errs1)
+            avg0, std0 = np.mean(errs0), np.std(errs0)
+            errbar1['y'].append(avg1)
+            errbar1['yerr'].append(std1)
+            errbar0['y'].append(avg0)
+            errbar0['yerr'].append(std0)
+
+    utils.plot_wrapper(
+        errorbars=errorbars,
+    )
 
 
 def self_training():
