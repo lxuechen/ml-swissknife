@@ -15,16 +15,23 @@ import fire
 import torch
 
 
-def make_labeled_data(n, d, sigma, prob, mu):
+def make_labeled_data(n, d, sigma, prob, mu, group_id=2):
     # mu: tensor of size (d,)
-    coin_flips = torch.bernoulli(torch.full(size=(n, 1), fill_value=prob))
-    y = 2 * coin_flips - 1.  # Convert to Rademacher.
+    if group_id == 2:  # Sample both groups.
+        coin_flips = torch.bernoulli(torch.full(size=(n, 1), fill_value=prob))
+        y = 2 * coin_flips - 1.  # Convert to Rademacher.
+    elif group_id == 1:  # y=1 (bernoulli=1).
+        y = torch.full(size=(n, 1), fill_value=1)
+    elif group_id == 0:  # y=-1 (bernoulli=0).
+        y = torch.full(size=(n, 1), fill_value=-1)
+    else:
+        raise ValueError(f"Unknown group_id: {group_id}")
     x = mu[None, :] * y + sigma * torch.randn(size=(n, d))  # Get features.
     return x, y
 
 
-def make_unlabeled_data(n, d, sigma, mu, prob):
-    x, _ = make_labeled_data(n=n, d=d, sigma=sigma, mu=mu, prob=prob)  # Throw away labels.
+def make_unlabeled_data(n, d, sigma, mu, prob, group_id=2):
+    x, _ = make_labeled_data(n=n, d=d, sigma=sigma, mu=mu, prob=prob, group_id=group_id)  # Throw away labels.
     return x
 
 
