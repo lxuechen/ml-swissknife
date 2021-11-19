@@ -62,13 +62,13 @@ def usual_estimator(x, y):
 
 
 def classify(estimator, x):
-    y_hat = torch.ge((estimator * x).sum(dim=1), 0).float()
+    y_hat = torch.where((estimator * x).sum(dim=1) > 0, 1., -1.)[:, None]
     return y_hat
 
 
 def compute_error_rate(estimator, x, y):
-    y_hat = torch.where((estimator * x).sum(dim=1) > 0, 1., -1.)
-    return torch.eq(y.squeeze(), y_hat).float().mean(dim=0).item()
+    y_hat = torch.where((estimator * x).sum(dim=1) > 0, 1., -1.)[:, None]
+    return torch.eq(y, y_hat).float().mean(dim=0).item()
 
 
 def fairness():
@@ -133,10 +133,56 @@ def fairness():
 
 
 def self_training():
-    pass
+    """Compare error with and without unlabeled data."""
+    epsilons = (0.001, 0.01, 0.1, 0.5, 1., 2., 5.,)
+    probs = (0.5,)
+    d = 100
+    mu = torch.randn((1, d)) * 2
+    sigma = 1
+    n_labeled = 100
+    n_unlabeled = 100000  # x100 factor.
+    n_test = 10000
+    clipping_norm = 3
+    seeds = list(range(100))
+
+    errorbars = []
+    for prob in probs:
+        errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o")
+        errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^")
+        errorbars.extend([errbar1, errbar0])
+        for epsilon in epsilons:
+            errs1, errs0 = [], []
+            for seed in tqdm.tqdm(seeds, desc="seeds"):
+                x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
+                x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
+
+                theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
+
+                # Without.
+                err1 = compute_error_rate(estimator=theta_hat, x=x_test, y=y_test)
+                errs1.append(err1)
+
+                # With unlabeled.
+                x_unlabeled = make_unlabeled_data(n=n_unlabeled, d=d, mu=mu, prob=prob, sigma=sigma)
+                y_unlabeled = classify(estimator=theta_hat, x=x_unlabeled)  # Pseudo-label.
+                theta_tilde = usual_estimator(x=x_unlabeled, y=y_unlabeled)
+                err0 = compute_error_rate(estimator=theta_tilde, x=x_test, y=y_test)
+                errs0.append(err0)
+
+            avg1, std1 = np.mean(errs1), np.std(errs1)
+            avg0, std0 = np.mean(errs0), np.std(errs0)
+            errbar1['y'].append(avg1)
+            errbar1['yerr'].append(std1)
+            errbar0['y'].append(avg0)
+            errbar0['yerr'].append(std0)
+
+    utils.plot_wrapper(
+        errorbars=errorbars,
+        options=dict(xlabel="$\epsilon$", xscale="log", yscale='log')
+    )
 
 
-def main(task="fairness"):
+def main(task="self_training"):
     if task == "fairness":
         fairness()
     elif task == "self_training":
