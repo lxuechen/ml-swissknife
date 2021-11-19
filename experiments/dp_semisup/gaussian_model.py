@@ -71,7 +71,7 @@ def compute_error_rate(estimator, x, y):
     return torch.eq(y, y_hat).float().mean(dim=0).item()
 
 
-def fairness():
+def fairness(**kwargs):
     """Compare majority vs minority group's error.
 
     Plot error as a function of d, n, p (imbalance ratio), epsilon.
@@ -132,15 +132,23 @@ def fairness():
     )
 
 
-def self_training():
-    """Compare error with and without unlabeled data."""
-    epsilons = (0.001, 0.01, 0.1, 0.5, 1., 2., 5.,)
+def self_training(alpha=0, beta=1, **kwargs):
+    """Compare error with and without unlabeled data.
+
+    Semi-sup estimator = alpha * private estimator + beta * PL estimator.
+
+    Questions:
+        - separation between overparam vs underparam?
+        - phase transition between low to high privacy?
+        - how does noise variance in the data model affect things?
+    """
+    epsilons = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1., 3.,)
     probs = (0.5,)
-    d = 100
+    d = 100  # This seems already overparameterized!
     mu = torch.randn((1, d)) * 2
-    sigma = 1
-    n_labeled = 100
-    n_unlabeled = 100000  # x100 factor.
+    sigma = 2
+    n_labeled = 50
+    n_unlabeled = 50000  # x100 factor.
     n_test = 10000
     clipping_norm = 3
     seeds = list(range(100))
@@ -166,7 +174,9 @@ def self_training():
                 x_unlabeled = make_unlabeled_data(n=n_unlabeled, d=d, mu=mu, prob=prob, sigma=sigma)
                 y_unlabeled = classify(estimator=theta_hat, x=x_unlabeled)  # Pseudo-label.
                 theta_tilde = usual_estimator(x=x_unlabeled, y=y_unlabeled)
-                err0 = compute_error_rate(estimator=theta_tilde, x=x_test, y=y_test)
+
+                theta_bar = alpha * theta_hat + beta * theta_tilde
+                err0 = compute_error_rate(estimator=theta_bar, x=x_test, y=y_test)
                 errs0.append(err0)
 
             avg1, std1 = np.mean(errs1), np.std(errs1)
@@ -182,11 +192,11 @@ def self_training():
     )
 
 
-def main(task="self_training"):
+def main(task="self_training", **kwargs):
     if task == "fairness":
-        fairness()
+        fairness(**kwargs)
     elif task == "self_training":
-        self_training()
+        self_training(**kwargs)
     else:
         raise ValueError
 
