@@ -132,7 +132,7 @@ def fairness(**kwargs):
     )
 
 
-def self_training(alpha=0, beta=1, **kwargs):
+def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     """Compare error with and without unlabeled data.
 
     Semi-sup estimator = alpha * private estimator + beta * PL estimator.
@@ -150,13 +150,13 @@ def self_training(alpha=0, beta=1, **kwargs):
     n_labeled = 50
     n_unlabeled = 50000  # x100 factor.
     n_test = 10000
-    clipping_norm = 3
-    seeds = list(range(100))
+    clipping_norm = 4
+    seeds = list(range(200))
 
     errorbars = []
     for prob in probs:
-        errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o")
-        errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^")
+        errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
+        errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
         errorbars.extend([errbar1, errbar0])
         for epsilon in epsilons:
             errs1, errs0 = [], []
@@ -186,10 +186,33 @@ def self_training(alpha=0, beta=1, **kwargs):
             errbar0['y'].append(avg0)
             errbar0['yerr'].append(std0)
 
-    utils.plot_wrapper(
-        errorbars=errorbars,
-        options=dict(xlabel="$\epsilon$", xscale="log", yscale='log')
-    )
+    if img_dir is None:
+        utils.plot_wrapper(
+            errorbars=errorbars,
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log')
+        )
+    else:
+        alpha_str = utils.float2str(alpha)
+        beta_str = utils.float2str(beta)
+        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}')
+        utils.plot_wrapper(
+            errorbars=errorbars,
+            suffixes=('.png',),
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log'),
+            img_path=img_path,
+        )
+
+
+def sweep_self_training(
+    pairs=None,
+    **kwargs
+):
+    if pairs is None:
+        N = 10
+        pairs = ((i / N, 1. - i / N) for i in range(N))  # (alpha, beta).
+    img_dir = "./self_training"
+    for alpha, beta in pairs:
+        self_training(alpha=alpha, beta=beta, img_dir=img_dir)
 
 
 def main(task="self_training", **kwargs):
@@ -197,6 +220,8 @@ def main(task="self_training", **kwargs):
         fairness(**kwargs)
     elif task == "self_training":
         self_training(**kwargs)
+    elif task == "sweep_self_training":
+        sweep_self_training(**kwargs)
     else:
         raise ValueError
 
