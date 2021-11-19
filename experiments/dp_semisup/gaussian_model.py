@@ -189,7 +189,9 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     if img_dir is None:
         utils.plot_wrapper(
             errorbars=errorbars,
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log')
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log',
+                         ylabel=f"Test accuracy",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
     else:
         alpha_str = utils.float2str(alpha)
@@ -198,7 +200,9 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         utils.plot_wrapper(
             errorbars=errorbars,
             suffixes=('.png',),
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log'),
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log',
+                         ylabel=f"Test accuracy",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
             img_path=img_path,
         )
 
