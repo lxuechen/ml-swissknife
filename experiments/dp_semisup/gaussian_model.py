@@ -57,7 +57,10 @@ def dp_estimator(x, y, clipping_norm, epsilon, delta=None):
     return estimator + torch.randn_like(estimator) * math.sqrt(var)
 
 
-def usual_estimator(x, y):
+def usual_estimator(x, y, clipping_norm=None):
+    if clipping_norm is not None:
+        coefficient = torch.clamp_max(clipping_norm / x.norm(dim=1, keepdim=True), 1.)
+        x = x * coefficient
     return (x * y).mean(dim=0)
 
 
@@ -66,7 +69,7 @@ def classify(estimator, x):
     return y_hat
 
 
-def compute_error_rate(estimator, x, y):
+def compute_accuracy(estimator, x, y):
     y_hat = torch.where((estimator * x).sum(dim=1) > 0, 1., -1.)[:, None]
     return torch.eq(y, y_hat).float().mean(dim=0).item()
 
@@ -110,11 +113,11 @@ def fairness(**kwargs):
                 theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
 
                 x1, y1 = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma, group_id=1)
-                err1 = compute_error_rate(estimator=theta_hat, x=x1, y=y1)
+                err1 = compute_accuracy(estimator=theta_hat, x=x1, y=y1)
 
                 # Minority.
                 x0, y0 = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma, group_id=0)
-                err0 = compute_error_rate(estimator=theta_hat, x=x0, y=y0)
+                err0 = compute_accuracy(estimator=theta_hat, x=x0, y=y0)
 
                 errs1.append(err1)
                 errs0.append(err0)
@@ -132,7 +135,11 @@ def fairness(**kwargs):
     )
 
 
-def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
+def gradient_descent(theta, lr=0.1):
+    theta = theta.clone().requires_grad_(True)
+
+
+def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **kwargs):
     """Compare error with and without unlabeled data.
 
     Semi-sup estimator = alpha * private estimator + beta * PL estimator.
@@ -144,7 +151,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     """
     epsilons = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1., 3.,)
     probs = (0.5,)
-    d = 100  # This seems already overparameterized!
+    d = 10  # This seems already overparameterized!
     mu = torch.randn((1, d)) * 2
     sigma = 2
     n_labeled = 50
@@ -167,7 +174,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
                 theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
 
                 # Without.
-                err1 = compute_error_rate(estimator=theta_hat, x=x_test, y=y_test)
+                err1 = compute_accuracy(estimator=theta_hat, x=x_test, y=y_test)
                 errs1.append(err1)
 
                 # With unlabeled.
@@ -176,7 +183,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
                 theta_tilde = usual_estimator(x=x_unlabeled, y=y_unlabeled)
 
                 theta_bar = alpha * theta_hat + beta * theta_tilde
-                err0 = compute_error_rate(estimator=theta_bar, x=x_test, y=y_test)
+                err0 = compute_accuracy(estimator=theta_bar, x=x_test, y=y_test)
                 errs0.append(err0)
 
             avg1, std1 = np.mean(errs1), np.std(errs1)
@@ -196,7 +203,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     else:
         alpha_str = utils.float2str(alpha)
         beta_str = utils.float2str(beta)
-        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}')
+        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_{d}')
         utils.plot_wrapper(
             errorbars=errorbars,
             suffixes=('.png',),
@@ -213,7 +220,7 @@ def sweep_self_training(
 ):
     if pairs is None:
         N = 10
-        pairs = ((i / N, 1. - i / N) for i in range(N))  # (alpha, beta).
+        pairs = ((i / N, 1. - i / N) for i in range(N + 1))  # (alpha, beta).
     img_dir = "./self_training"
     for alpha, beta in pairs:
         self_training(alpha=alpha, beta=beta, img_dir=img_dir)
