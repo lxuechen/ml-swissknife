@@ -144,6 +144,7 @@ def entropy_sharpening(theta, x, lr=1e-3, num_updates=100):
         loss = compute_entropy(theta, x)
         loss = loss.mean(dim=0)
         loss.backward()
+        assert not torch.isnan(loss).item()
         optimizer.step()
     return theta.detach().clone()
 
@@ -152,7 +153,10 @@ def compute_entropy(theta, x):
     # x: (batch_size, d).
     # theta: (d,).
     margin = (x * theta[None, :]).sum(dim=1)
-    entropy = - 1. / (1 + torch.exp(-margin)) * margin + F.softplus(margin)
+    # `torch.special.expit` seems amazingly numerically stable!!!
+    term1 = - torch.special.expit(margin) * margin
+    term2 = F.softplus(margin)
+    entropy = term1 + term2
     return entropy
 
 
@@ -168,7 +172,7 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
     """
     epsilons = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1., 3.,)
     probs = (0.5,)
-    d = 10  # This seems already overparameterized!
+    d = 5  # This seems already overparameterized!
     mu = torch.randn((1, d)) * 2
     sigma = 2
     n_labeled = 50
@@ -204,7 +208,7 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
                 err0 = compute_accuracy(estimator=theta_bar, x=x_test, y=y_test)
                 errs0.append(err0)
 
-                theta_ent = entropy_sharpening(theta=theta_bar, num_updates=20, lr=1e-2, x=x_unlabeled)
+                theta_ent = entropy_sharpening(theta=theta_bar, num_updates=50, lr=1e-1, x=x_unlabeled)
                 err2 = compute_accuracy(estimator=theta_ent, x=x_test, y=y_test)
                 errs2.append(err2)
 
