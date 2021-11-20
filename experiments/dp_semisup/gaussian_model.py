@@ -170,13 +170,13 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
         - phase transition between low to high privacy?
         - how does noise variance in the data model affect things?
     """
-    epsilons = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1., 3.,)
+    epsilons = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.,)
     probs = (0.5,)
-    d = 5  # This seems already overparameterized!
+    d = 3  # This seems already overparameterized!
     mu = torch.randn((1, d)) * 2
     sigma = 2
     n_labeled = 50
-    n_unlabeled = 50000  # x100 factor.
+    n_unlabeled = 100000  # x100 factor.
     n_test = 10000
     clipping_norm = 4
     seeds = list(range(100))
