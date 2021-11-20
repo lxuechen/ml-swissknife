@@ -139,7 +139,7 @@ def fairness(**kwargs):
 def entropy_sharpening(theta, x, lr=1e-3, num_updates=100):
     theta = theta.clone().requires_grad_(True)
     optimizer = torch.optim.Adam(params=(theta,), lr=lr)
-    for _ in tqdm.tqdm(range(num_updates), desc="inner loop"):
+    for _ in range(num_updates):
         optimizer.zero_grad()
         loss = compute_entropy(theta, x)
         loss = loss.mean(dim=0)
@@ -175,17 +175,17 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
     n_unlabeled = 50000  # x100 factor.
     n_test = 10000
     clipping_norm = 4
-    seeds = list(range(200))
+    seeds = list(range(100))
 
     errorbars = []
     for prob in probs:
         errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
         errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
         errbar2 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled + ent. reg.", marker='*', alpha=0.8, capsize=10)
-        errorbars.extend([errbar1, errbar0])
-        for epsilon in epsilons:
+        errorbars.extend([errbar1, errbar0, errbar2])
+        for epsilon in tqdm.tqdm(epsilons, desc="epsilon"):
             errs1, errs0, errs2 = [], [], []
-            for seed in tqdm.tqdm(seeds, desc="seeds"):
+            for seed in seeds:
                 x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
                 x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
 
