@@ -14,6 +14,7 @@ import math
 import fire
 import numpy as np
 import torch
+import torch.nn.functional as F
 import tqdm
 
 from swissknife import utils
@@ -144,15 +145,14 @@ def entropy_sharpening(theta, x, lr=1e-3, num_updates=100):
         loss = loss.mean(dim=0)
         loss.backward()
         optimizer.step()
-    return theta.clone().requires_grad_(False)
+    return theta.detach().clone()
 
 
 def compute_entropy(theta, x):
     # x: (batch_size, d).
     # theta: (d,).
     margin = (x * theta[None, :]).sum(dim=1)
-    exp_margin = torch.exp(margin)
-    entropy = exp_margin / (1 + exp_margin) * margin - torch.log(1 + exp_margin)
+    entropy = - 1. / (1 + torch.exp(-margin)) * margin + F.softplus(margin)
     return entropy
 
 
@@ -181,9 +181,10 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
     for prob in probs:
         errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
         errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
+        errbar2 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled + ent. reg.", marker='*', alpha=0.8, capsize=10)
         errorbars.extend([errbar1, errbar0])
         for epsilon in epsilons:
-            errs1, errs0 = [], []
+            errs1, errs0, errs2 = [], [], []
             for seed in tqdm.tqdm(seeds, desc="seeds"):
                 x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
                 x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
@@ -203,12 +204,19 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
                 err0 = compute_accuracy(estimator=theta_bar, x=x_test, y=y_test)
                 errs0.append(err0)
 
+                theta_ent = entropy_sharpening(theta=theta_bar, num_updates=20, lr=1e-2, x=x_unlabeled)
+                err2 = compute_accuracy(estimator=theta_ent, x=x_test, y=y_test)
+                errs2.append(err2)
+
+            avg2, std2 = np.mean(errs2), np.std(errs2)
             avg1, std1 = np.mean(errs1), np.std(errs1)
             avg0, std0 = np.mean(errs0), np.std(errs0)
             errbar1['y'].append(avg1)
             errbar1['yerr'].append(std1)
             errbar0['y'].append(avg0)
             errbar0['yerr'].append(std0)
+            errbar2['y'].append(avg2)
+            errbar2['yerr'].append(std2)
 
     if img_dir is None:
         utils.plot_wrapper(
@@ -244,6 +252,7 @@ def sweep_self_training(
 
 
 def main(task="self_training", **kwargs):
+    torch.manual_seed(0)
     if task == "fairness":
         fairness(**kwargs)
     elif task == "self_training":
