@@ -135,8 +135,25 @@ def fairness(**kwargs):
     )
 
 
-def gradient_descent(theta, lr=0.1):
+def entropy_sharpening(theta, x, lr=1e-3, num_updates=100):
     theta = theta.clone().requires_grad_(True)
+    optimizer = torch.optim.Adam(params=(theta,), lr=lr)
+    for _ in tqdm.tqdm(range(num_updates), desc="inner loop"):
+        optimizer.zero_grad()
+        loss = compute_entropy(theta, x)
+        loss = loss.mean(dim=0)
+        loss.backward()
+        optimizer.step()
+    return theta.clone().requires_grad_(False)
+
+
+def compute_entropy(theta, x):
+    # x: (batch_size, d).
+    # theta: (d,).
+    margin = (x * theta[None, :]).sum(dim=1)
+    exp_margin = torch.exp(margin)
+    entropy = exp_margin / (1 + exp_margin) * margin - torch.log(1 + exp_margin)
+    return entropy
 
 
 def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **kwargs):
