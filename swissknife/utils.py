@@ -1192,6 +1192,8 @@ def _plot(ax, plots, vlines, hlines, errorbars, scatters, hists, bars, fill_betw
     for entry in errorbars:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         kwargs.pop('aux', None)
+        if "capsize" not in kwargs:
+            kwargs["capsize"] = 5
         ax.errorbar(entry['x'], entry['y'], **kwargs)
     for entry in scatters:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
