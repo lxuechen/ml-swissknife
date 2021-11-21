@@ -133,3 +133,7 @@ dmypy.json
 
 # MAC
 .DS_Store
+
+# Figures
+*.png
+*.pdf
