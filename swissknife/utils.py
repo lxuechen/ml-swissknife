@@ -63,6 +63,10 @@ def average_over_seed(seq_of_seq):
     return seq_of_seq.mean(0), seq_of_seq.std(0)
 
 
+def single_standard_deviation(sample):
+    return dict(mean=np.mean(sample), delta=np.std(sample))
+
+
 def confidence_interval(sample, alpha=0.05):
     """Compute (asymptotic) confidence interval under the Normality assumption.
 
