@@ -57,11 +57,19 @@ def finetune(
     )
 
 
+def inference(prompt):
+    os.system(
+        f'openai api completions.create -m curie:ft-user-tfmcepzu9e4dn4mfwej3x788-2021-11-22-00-39-24 -p "{prompt}"'
+    )
+
+
 def main(task="format_e2e", **kwargs):
     if task == "format_e2e":
         format_e2e(**kwargs)
     elif task == "finetune":
         finetune(**kwargs)
+    elif task == "inference":
+        inference(**kwargs)
 
 
 if __name__ == "__main__":
