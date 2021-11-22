@@ -12,7 +12,7 @@ from swissknife import utils
 
 def format_e2e(
     base_dir="/Users/xuechenli/data/prefix-tuning/data/e2e_data",
-    out_dir="/Users/xuechenli/data/e2e_gpt3",
+    out_dir="/Users/xuechenli/data/e2e_gpt3_full",
 
     prompt_ending="\n\n###\n\n",
     completion_ending=" END",
@@ -38,6 +38,7 @@ def format_e2e(
             if len(outs) >= target_size:
                 break
 
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, 'w') as f:
             for out in outs:
                 f.write(json.dumps(out) + '\n')
