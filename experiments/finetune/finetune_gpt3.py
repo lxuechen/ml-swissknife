@@ -21,14 +21,14 @@ def get_latest_model_id(**kwargs):
     result = subprocess.check_output(cmd, shell=True)
     result = json.loads(result)
     last_job_result = result["data"][-1]
-    print("Last job stats: ")
-    print(json.dumps(last_job_result, indent=4))
+    logging.info("Last job stats: ")
+    logging.info(json.dumps(last_job_result, indent=4))
 
-    print("\n\nLast job id: ")
-    print(last_job_result["fine_tuned_model"])
+    logging.info("\n\nLast job id: ")
+    logging.info(last_job_result["fine_tuned_model"])
 
 
-def finetune(
+def fine_tunes(
     data_dir=os.path.join(os.path.expanduser('~'), 'data', 'e2e_gpt3_full'),
     download=True,  # Download the data if not found.
 
@@ -63,19 +63,24 @@ def finetune(
     )
 
 
-def generate(prompt, max_tokens=20):
+def completions(model_id, prompt, max_tokens=20, top_p=0.9, temperature=0.7, num_completions=1):
+    # https://beta.openai.com/docs/api-reference/completions
+    logging.info("\n\nCompletion:")
     os.system(
-        f'openai api completions.create -m curie:ft-user-tfmcepzu9e4dn4mfwej3x788-2021-11-22-00-39-24 '
+        f'openai api completions.create -m "{model_id}" '
         f'-p "{prompt}" '
-        f'-M {max_tokens}'
+        f'-M {max_tokens} '
+        f'-t {temperature} '
+        f'-n {num_completions} '
+        f'-P {top_p} '
     )
 
 
-def main(task="finetune", **kwargs):
-    if task == "finetune":
-        finetune(**kwargs)
-    elif task == "generate":
-        generate(**kwargs)
+def main(task="fine_tunes_create", **kwargs):
+    if task == "fine_tunes":
+        fine_tunes(**kwargs)
+    elif task == "completions":
+        completions(**kwargs)
     elif task == "get_latest_model_id":
         get_latest_model_id(**kwargs)
 
