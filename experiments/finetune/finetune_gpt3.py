@@ -12,6 +12,9 @@ import subprocess
 
 import fire
 
+logging.basicConfig()
+logging.getLogger().setLevel(logging.INFO)
+
 E2E_data_url = "https://drive.google.com/uc?id=1RNO-Ciz0-WU4-nyYzukbzXvq76TIZd5j"
 
 
@@ -63,9 +66,10 @@ def fine_tunes(
     )
 
 
-def completions(model_id, prompt, max_tokens=20, top_p=0.9, temperature=0.7, num_completions=1):
+def completions(model_id, prompt, max_tokens=30, top_p=0.9, temperature=0.7, num_completions=1):
     # https://beta.openai.com/docs/api-reference/completions
-    logging.info("\n\nCompletion:")
+    logging.info("Waiting for completion...\n")
+    logging.info("Completion:")
     os.system(
         f'openai api completions.create -m "{model_id}" '
         f'-p "{prompt}" '
