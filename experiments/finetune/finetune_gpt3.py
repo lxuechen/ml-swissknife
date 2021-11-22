@@ -11,6 +11,9 @@ import fire
 from swissknife import utils
 
 
+# TODO: Wrap this nicely!
+# TODO: Use more epochs on a smaller dataset
+# TODO: Best model curie:ft-user-tfmcepzu9e4dn4mfwej3x788-2021-11-22-01-51-37
 def format_e2e(
     base_dir="/Users/xuechenli/data/prefix-tuning/data/e2e_data",
     out_dir="/Users/xuechenli/data/e2e_gpt3_full",
@@ -52,14 +55,16 @@ def finetune(
     # line up ada (350m), babbage (1.5b), curie (6.7b), davinci (175b).
     # https://blog.eleuther.ai/gpt3-model-sizes/
     base_model="curie",
+    n_epochs=8,
 ):
     """Fine-tune with one of the GPT-3 models."""
     os.system(
-        f'openai api fine_tunes.create -t {train_path} -m {base_model}'
+        f'openai api fine_tunes.create -t {train_path} -m {base_model} --n_epochs {n_epochs}'
     )
 
 
 def inference(prompt):
+    # TODO: Use more tokens.
     os.system(
         f'openai api completions.create -m curie:ft-user-tfmcepzu9e4dn4mfwej3x788-2021-11-22-00-39-24 -p "{prompt}"'
     )
