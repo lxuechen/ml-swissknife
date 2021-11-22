@@ -4,6 +4,7 @@ Helpers for fine-tuning GPT-3.
 
 import json
 import os
+import sys
 
 import fire
 
@@ -16,7 +17,7 @@ def format_e2e(
 
     prompt_ending="\n\n###\n\n",
     completion_ending=" END",
-    target_size=1000,
+    target_size=sys.maxsize,
     files=(
         ("src1_train.txt", "train.jsonl"),
         ("src1_valid.txt", "valid.jsonl"),
@@ -45,7 +46,7 @@ def format_e2e(
 
 
 def finetune(
-    train_path="/Users/xuechenli/data/e2e_gpt3/train.jsonl",
+    train_path="/Users/xuechenli/data/e2e_gpt3_full/train.jsonl",
     # One of ada, babbage, curie.
     # Performance comparisons: generally ada > babbage > curie.
     # line up ada (350m), babbage (1.5b), curie (6.7b), davinci (175b).
