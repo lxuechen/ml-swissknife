@@ -29,7 +29,7 @@ def gpu_job_wrapper(
             log_path = f"{logs_prefix}/{create_random_job_id()}.out"
     # Don't need to exclude jagupard[4-8] per https://stanfordnlp.slack.com/archives/C0FSH01PY/p1621469284003100
     wrapped_command = (
-        f"nlprun -x=john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11 "
+        f"nlprun -x=john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15 "
         f"-a {conda_env} "
         f"-o {log_path} "
         f"-p {priority} "
