@@ -55,11 +55,18 @@ def finetune(
     # line up ada (350m), babbage (1.5b), curie (6.7b), davinci (175b).
     # https://blog.eleuther.ai/gpt3-model-sizes/
     base_model="curie",
-    n_epochs=8,
+    # Setting epochs to be more than 5 gives the error:
+    # You should not set n_epochs greater than 5. Please contact us if you'd like to set n_epochs to higher than 5.
+    n_epochs=5,
+    learning_rate_multiplier=0.1,
 ):
     """Fine-tune with one of the GPT-3 models."""
     os.system(
-        f'openai api fine_tunes.create -t {train_path} -m {base_model} --n_epochs {n_epochs}'
+        f'openai api fine_tunes.create '
+        f'-t {train_path} '
+        f'-m {base_model} '
+        f'--n_epochs {n_epochs} '
+        f'--learning_rate_multiplier {learning_rate_multiplier} '
     )
 
 
