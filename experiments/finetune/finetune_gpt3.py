@@ -144,7 +144,10 @@ def completions_multi(
 
     @formatter:off
     Example command (full evaluation -- this costs $$$!):
-        python finetune_gpt3.py --task "completions_multi" --in_file "/Users/xuechenli/data/e2e_gpt3_full/test.jsonl" --out_file "/Users/xuechenli/remote/swissknife/experiments/finetune/e2e-test-fine-tuned-curie.txt" --max_completions None
+        - old:
+            python finetune_gpt3.py --task "completions_multi" --in_file "/Users/xuechenli/data/e2e_gpt3_full/test.jsonl" --out_file "/Users/xuechenli/remote/swissknife/experiments/finetune/e2e-test-fine-tuned-curie.txt" --max_completions None
+        - with deduplicated prompts:
+            python finetune_gpt3.py --task "completions_multi" --in_file "/Users/xuechenli/data/e2e_gpt3_full/test-dedup.jsonl" --out_file "/Users/xuechenli/remote/swissknife/experiments/finetune/e2e-test-fine-tuned-curie-dedup-large-batch-no-padding.txt" --max_completions None
     @formatter:on
     """
     if model_id is None:
