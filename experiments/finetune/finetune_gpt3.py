@@ -134,8 +134,8 @@ def completions_multi(
     max_tokens=100,
     top_p=0.9,
     temperature=0.7,
-    n=3,
-    best_of=3,
+    n=5,
+    best_of=5,
     stop="END",
     max_completions=1,  # Limit the cost of generation!
     verbose=True,
