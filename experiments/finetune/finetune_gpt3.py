@@ -22,6 +22,15 @@ logging.getLogger().setLevel(logging.INFO)
 E2E_data_url = "https://drive.google.com/uc?id=1RNO-Ciz0-WU4-nyYzukbzXvq76TIZd5j"
 
 
+def list_jobs(verbose=True, **kwargs):
+    cmd = 'openai api fine_tunes.list'
+    result = subprocess.check_output(cmd, shell=True)
+    if verbose:
+        logging.info("All jobs:")
+        logging.info(json.dumps(json.loads(result), indent=4))
+    return result
+
+
 def get_latest_model_id(verbose=True, **kwargs):
     """Get the id of the last fine-tuned model."""
     cmd = 'openai api fine_tunes.list'
@@ -190,6 +199,8 @@ def main(task="fine_tunes_create", **kwargs):
         completions_multi(**kwargs)
     elif task == "get_latest_model_id":
         get_latest_model_id(**kwargs)
+    elif task == "list_jobs":
+        list_jobs(**kwargs)
     else:
         raise ValueError(f"Unknown task: {task}")
 
