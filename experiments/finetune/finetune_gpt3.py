@@ -54,6 +54,7 @@ def fine_tunes(
     n_epochs=5,
     learning_rate_multiplier=0.1,
     batch_size=4,
+    use_packing=False,
 ):
     """Fine-tune with one of the GPT-3 models of some size."""
     if not os.path.exists(data_dir):
@@ -67,7 +68,7 @@ def fine_tunes(
         os.system(f'unzip {out_path} -d {data_dir_par}')
 
     train_path = os.path.join(data_dir, 'train.jsonl')
-    os.system(
+    cmd = (
         f'openai api fine_tunes.create '
         f'-t {train_path} '
         f'-m {base_model} '
@@ -75,6 +76,11 @@ def fine_tunes(
         f'--learning_rate_multiplier {learning_rate_multiplier} '
         f'--batch_size {batch_size} '
     )
+    if use_packing:
+        cmd += "--use_packing "
+    else:
+        cmd += "--no_packing "
+    os.system(cmd)
 
 
 def completions(
