@@ -9,26 +9,35 @@ import json
 import logging
 import os
 import subprocess
+import sys
 
 import fire
+import openai
+import tqdm
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.INFO)
 
+# Data with requested format hosted in my personal gdrive.
 E2E_data_url = "https://drive.google.com/uc?id=1RNO-Ciz0-WU4-nyYzukbzXvq76TIZd5j"
 
 
-def get_latest_model_id(**kwargs):
+def get_latest_model_id(verbose=True, **kwargs):
     """Get the id of the last fine-tuned model."""
     cmd = 'openai api fine_tunes.list'
     result = subprocess.check_output(cmd, shell=True)
     result = json.loads(result)
     last_job_result = result["data"][-1]
-    logging.info("Last job stats: ")
-    logging.info(json.dumps(last_job_result, indent=4))
+    last_job_id = last_job_result["fine_tuned_model"]
 
-    logging.info("\n\nLast job id: ")
-    logging.info(last_job_result["fine_tuned_model"])
+    if verbose:
+        logging.info("Last job stats: ")
+        logging.info(json.dumps(last_job_result, indent=4))
+
+        logging.info("\n\nLast job id: ")
+        logging.info(last_job_id)
+
+    return last_job_id
 
 
 def fine_tunes(
@@ -66,18 +75,96 @@ def fine_tunes(
     )
 
 
-def completions(model_id, prompt, max_tokens=30, top_p=0.9, temperature=0.7, num_completions=1):
+def completions(
+    prompt: str,
+    model_id=None,
+    max_tokens=30,
+    top_p=0.9,
+    temperature=0.7,
+    n=5,
+    best_of=5,
+    stop="END",
+    verbose=True,
+):
     # https://beta.openai.com/docs/api-reference/completions
-    logging.info("Waiting for completion...\n")
-    logging.info("Completion:")
-    os.system(
-        f'openai api completions.create -m "{model_id}" '
-        f'-p "{prompt}" '
-        f'-M {max_tokens} '
-        f'-t {temperature} '
-        f'-n {num_completions} '
-        f'-P {top_p} '
+    if model_id is None:
+        model_id = get_latest_model_id(verbose=verbose)
+
+    if verbose:
+        logging.info("Waiting for completion...\n")
+
+    out = openai.Completion.create(
+        model=model_id,
+        prompt=prompt,
+        n=n,
+        best_of=best_of,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        stop=stop,
     )
+
+    if verbose:
+        logging.info("Completion:")
+        logging.info(str(out))
+    return out
+
+
+def completions_multi(
+    in_file,
+    out_file=None,
+    model_id=None,
+    max_tokens=30,
+    top_p=0.9,
+    temperature=0.7,
+    n=5,
+    best_of=5,
+    stop="END",
+    max_completions=1,  # Limit the cost of generation!
+):
+    """Get the completions for a file and (optionally) output to file the generations in e2e-metrics accepted format.
+
+    @formatter:off
+    Example command (full evaluation -- this costs $$$!):
+        python finetune_gpt3.py --task "completions_multi" --in_file "/Users/xuechenli/data/e2e_gpt3_full/test.jsonl" --out_file "/Users/xuechenli/remote/swissknife/experiments/finetune/e2e-test-fine-tuned-curie.txt" --max_completions None
+    @formatter:on
+    """
+    if model_id is None:
+        model_id = get_latest_model_id()
+
+    # Assume `in_file` has a bunch of lines, each with a json dict with a key "prompt".
+    with open(in_file, 'r') as f:
+        lines = f.readlines()
+    prompts = [json.loads(line.strip())["prompt"] for line in lines]
+
+    if max_completions is None:
+        max_completions = sys.maxsize
+    prompts = prompts[:max_completions]
+
+    outs = []
+    best_texts = []  # Collect best generations.
+
+    for prompt in tqdm.tqdm(prompts, desc="loop through prompts:"):
+        out = completions(
+            prompt=prompt,
+            model_id=model_id,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            temperature=temperature,
+            n=n,
+            best_of=best_of,
+            stop=stop,
+            verbose=False,
+        )
+        outs.append(out)
+
+        best_text = out["choices"][0]["text"].strip()
+        best_texts.append(best_text)
+        del out, best_text
+
+    if out_file is not None:
+        with open(out_file, 'w') as f:
+            f.write('\n'.join(best_texts))
 
 
 def main(task="fine_tunes_create", **kwargs):
@@ -85,8 +172,12 @@ def main(task="fine_tunes_create", **kwargs):
         fine_tunes(**kwargs)
     elif task == "completions":
         completions(**kwargs)
+    elif task == "completions_multi":
+        completions_multi(**kwargs)
     elif task == "get_latest_model_id":
         get_latest_model_id(**kwargs)
+    else:
+        raise ValueError(f"Unknown task: {task}")
 
 
 if __name__ == "__main__":
