@@ -53,6 +53,7 @@ def fine_tunes(
     #   You should not set n_epochs greater than 5. Please contact us if you'd like to set n_epochs to higher than 5.
     n_epochs=5,
     learning_rate_multiplier=0.1,
+    batch_size=4,
 ):
     """Fine-tune with one of the GPT-3 models of some size."""
     if not os.path.exists(data_dir):
@@ -72,6 +73,7 @@ def fine_tunes(
         f'-m {base_model} '
         f'--n_epochs {n_epochs} '
         f'--learning_rate_multiplier {learning_rate_multiplier} '
+        f'--batch_size {batch_size} '
     )
 
 
