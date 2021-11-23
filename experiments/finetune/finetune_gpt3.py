@@ -45,11 +45,11 @@ def fine_tunes(
     download=True,  # Download the data if not found.
 
     # One of ada, babbage, curie.
-    # Performance comparisons: generally ada > babbage > curie.
-    # line up ada (350m), babbage (1.5b), curie (6.7b), davinci (175b).
+    # Performance comparisons: generally ada < babbage < curie.
+    # Line up: ada (350m), babbage (1.5b), curie (6.7b), davinci (175b).
     # https://blog.eleuther.ai/gpt3-model-sizes/
     base_model="curie",
-    # Setting epochs to be more than 5 gives the error:
+    # Setting epochs to be more than 5 gives the error (a hack would be to duplicate the dataset):
     #   You should not set n_epochs greater than 5. Please contact us if you'd like to set n_epochs to higher than 5.
     n_epochs=5,
     learning_rate_multiplier=0.1,
@@ -121,6 +121,7 @@ def completions_multi(
     best_of=3,
     stop="END",
     max_completions=1,  # Limit the cost of generation!
+    verbose=True,
 ):
     """Get the completions for a file and (optionally) output to file the generations in e2e-metrics accepted format.
 
@@ -160,7 +161,11 @@ def completions_multi(
 
         best_text = out["choices"][0]["text"].strip()
         best_texts.append(best_text)
-        print(best_text)
+
+        if verbose:
+            logging.info(f"Prompt: {prompt}")
+            logging.info(f"Best completion: {best_text}\n")
+
         del out, best_text
 
     if out_file is not None:
