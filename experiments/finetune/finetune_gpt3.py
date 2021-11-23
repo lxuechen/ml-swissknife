@@ -207,6 +207,11 @@ def main(task="fine_tunes_create", **kwargs):
     else:
         raise ValueError(f"Unknown task: {task}")
 
+    # @formatter:off
+    # To evaluate:
+    # /Users/xuechenli/remote/e2e-metrics/measure_scores.py /Users/xuechenli/data/prefix-tuning/data/e2e_data/clean_references_test.txt ./e2e-test-fine-tuned-curie-dedup-large-batch-no-padding.txt --python
+    # @formatter:on
+
 
 if __name__ == "__main__":
     fire.Fire(main)
