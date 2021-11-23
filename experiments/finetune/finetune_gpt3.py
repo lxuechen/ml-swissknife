@@ -114,11 +114,11 @@ def completions_multi(
     in_file,
     out_file=None,
     model_id=None,
-    max_tokens=30,
+    max_tokens=100,
     top_p=0.9,
     temperature=0.7,
-    n=5,
-    best_of=5,
+    n=3,
+    best_of=3,
     stop="END",
     max_completions=1,  # Limit the cost of generation!
 ):
@@ -160,6 +160,7 @@ def completions_multi(
 
         best_text = out["choices"][0]["text"].strip()
         best_texts.append(best_text)
+        print(best_text)
         del out, best_text
 
     if out_file is not None:
