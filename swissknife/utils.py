@@ -631,6 +631,17 @@ def manual_dtype(args_or_dtype: Union[str, argparse.Namespace]):
         torch.set_default_dtype(torch.float16)
 
 
+def trainable_parameters(*modules: nn.Module):
+    """Return the parameters which require gradient."""
+    single_module = len(modules) == 1
+    outs = [
+        [param for param in module.parameters() if param.requires_grad] for module in modules
+    ]
+    if single_module:
+        return outs[0]
+    return outs
+
+
 def count_parameters(*modules: nn.Module, only_differentiable: Optional[bool] = False):
     """Count the number of parameters for each module."""
     param_lists = [list(m.parameters()) for m in modules]
