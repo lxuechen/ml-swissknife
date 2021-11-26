@@ -6,8 +6,12 @@ Goals:
         - Pretrained resnet
         - How does this vary with scale???
 
+@formatter:off
 Run from root:
-    python -m experiments.priv_fair.transfer_cifar --feature_path "simclr_r101_2x_sk0"
+    python -m experiments.priv_fair.transfer_cifar --feature_path "simclr_r101_2x_sk0" --batch_size=1024 --lr=4 --noise_multiplier=2.40
+@formatter:on
+
+Put all the converted features in `base_dir`
 """
 import argparse
 import os
@@ -105,5 +109,6 @@ if __name__ == '__main__':
     parser.add_argument('--feature_path', default=None)
     parser.add_argument('--max_epsilon', type=float, default=None)
     parser.add_argument('--logdir', default=None)
+    parser.add_argument('--base_dir', default="/nlp/scr/lxuechen/features", type=str)
     args = parser.parse_args()
     main(**vars(args))
