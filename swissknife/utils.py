@@ -2556,7 +2556,7 @@ def extract_argument(cmd: str, arg="--train_dir"):
     start = lo + len(arg)
     end = None  # Until the last.
     for index in range(start, len(cmd) - 1):
-        if cmd[index:index+2] == '--':
+        if cmd[index:index + 2] == '--':
             end = index
             break
     return cmd[start:end].strip()
