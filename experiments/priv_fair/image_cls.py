@@ -14,13 +14,16 @@ import random
 
 import fire
 import torch
+from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import torchvision as tv
 
+from ..simclrv2.resnet import get_resnet
+
 
 def exponential_decay(cls_id, base_size, alpha=0.8):
-    # Assume cls_id start from 0.
+    # Assume cls_id starts from 0.
     return int(alpha ** (cls_id + 1) * base_size)
 
 
@@ -74,8 +77,29 @@ def make_loaders(root=None, decay_type="power_law", base_size=5000, train_batch_
     return train_loader, test_loader, sum(cls_sizes)
 
 
+class SimCLRv2(nn.Module):
+    def __init__(self, depth=50, width_multiplier=1, sk_ratio=0):
+        super(SimCLRv2, self).__init__()
+        resnet, original_head = get_resnet(depth=depth, width_multiplier=width_multiplier, sk_ratio=sk_ratio)
+        state_dicts = torch.load(f'r{depth}_{width_multiplier}x_sk{sk_ratio}_ema.pth')
+        resnet.load_state_dict(state_dicts["resnet"])
+        original_head.load_state_dict(state_dicts["head"])
+
+        self.resnet = resnet.requires_grad_(False)
+        print(resnet)
+
+    def forward(self):
+        pass
+
+
+def train(model, optimizer, num_epoch):
+    for epoch in range(num_epoch):
+        pass
+
+
 def main():
     train_loader, test_loader, sample_size = make_loaders()
+    model = SimCLRv2()
 
 
 if __name__ == "__main__":
