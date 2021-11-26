@@ -23,6 +23,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import torchvision as tv
+import tqdm
 
 from swissknife import utils
 from ..simclrv2.resnet import get_resnet
@@ -108,7 +109,7 @@ class SimCLRv2(nn.Module):
 
 def test(model, loader, device, max_batches=100):
     zeons, xents = [], []
-    for i, tensors in loader:
+    for i, tensors in enumerate(loader):
         if i >= max_batches:
             break
         x, y = tuple(t.to(device) for t in tensors)
@@ -119,7 +120,7 @@ def test(model, loader, device, max_batches=100):
 
 
 def train(model, optimizer, num_epoch, train_loader, test_loader, device):
-    for epoch in range(num_epoch):
+    for epoch in tqdm.tqdm(range(num_epoch), desc="epochs"):
         for tensors in train_loader:
             optimizer.zero_grad()
             x, y = tuple(t.to(device) for t in tensors)
