@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -11,6 +12,7 @@ parser = argparse.ArgumentParser(description='SimCLR converter')
 parser.add_argument('tf_path', type=str, help='path of the input tensorflow file (ex: model.ckpt-250228)')
 parser.add_argument('--ema', action='store_true')
 parser.add_argument('--supervised', action='store_true')
+parser.add_argument('--ckpts_dir', type=str, default="/nlp/scr/lxuechen/simclr-ckpts")
 args = parser.parse_args()
 
 
@@ -94,6 +96,7 @@ def main():
 
     if args.supervised:
         save_location = f'r{depth}_{width}x_sk{1 if sk_ratio != 0 else 0}{"_ema" if use_ema_model else ""}.pth'
+        save_location = os.path.join(args.ckpt_dir, save_location)
         torch.save({'resnet': model.state_dict(), 'head': head.state_dict()}, save_location)
         return
     sd = {}
@@ -117,6 +120,7 @@ def main():
 
     # 3. dump the PyTorch weights.
     save_location = f'r{depth}_{width}x_sk{1 if sk_ratio != 0 else 0}{"_ema" if use_ema_model else ""}.pth'
+    save_location = os.path.join(args.ckpt_dir, save_location)
     torch.save({'resnet': model.state_dict(), 'head': head.state_dict()}, save_location)
 
 

@@ -12,7 +12,7 @@ from download import available_simclr_models, simclr_categories
 
 def main(category="pretrained"):
     category_hash = simclr_categories[category]
-    for model in ('r50_1x_sk0',):
+    for model in available_simclr_models:
         tf_path = os.path.join('.', model, 'model.ckpt-250228')
         os.system(f'python ./convert.py {tf_path} --ema')
 
