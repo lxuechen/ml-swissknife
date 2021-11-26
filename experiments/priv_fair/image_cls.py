@@ -6,6 +6,9 @@ Goals:
         - CLIP
         - Pretrained resnet
         - How does this vary with scale???
+
+Run from root:
+    python -m experiments.priv_fair.image_cls
 """
 
 from collections import defaultdict, OrderedDict
@@ -20,6 +23,8 @@ from torchvision import transforms
 import torchvision as tv
 
 from ..simclrv2.resnet import get_resnet
+
+base_dir = "/home/lxuechen_stanford_edu/software/swissknife/experiments/simclrv2"
 
 
 def exponential_decay(cls_id, base_size, alpha=0.8):
@@ -81,7 +86,9 @@ class SimCLRv2(nn.Module):
     def __init__(self, depth=50, width_multiplier=1, sk_ratio=0):
         super(SimCLRv2, self).__init__()
         resnet, original_head = get_resnet(depth=depth, width_multiplier=width_multiplier, sk_ratio=sk_ratio)
-        state_dicts = torch.load(f'r{depth}_{width_multiplier}x_sk{sk_ratio}_ema.pth')
+
+        checkpoint_path = os.path.join(base_dir, f'r{depth}_{width_multiplier}x_sk{sk_ratio}_ema.pth')
+        state_dicts = torch.load(checkpoint_path)
         resnet.load_state_dict(state_dicts["resnet"])
         original_head.load_state_dict(state_dicts["head"])
 
