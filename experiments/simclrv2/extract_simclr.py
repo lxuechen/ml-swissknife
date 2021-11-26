@@ -10,6 +10,7 @@ Run
 
 import numpy as np
 import tensorflow.compat.v1 as tf
+import tqdm
 
 from .download import available_simclr_models
 
@@ -144,7 +145,7 @@ def _preprocess(x):
     return x
 
 
-def _extract_single(model_name="r50_2x_sk1"):
+def _extract_single(model_name="r50_2x_sk1", evaluate=False):
     batch_size = 100
     x = tf.placeholder(shape=(batch_size, 32, 32, 3), dtype=tf.float32)
     x_preproc = tf.map_fn(_preprocess, x)
@@ -160,7 +161,7 @@ def _extract_single(model_name="r50_2x_sk1"):
     print("model loaded!")
 
     features_train = []
-    for i in range(len(xtrain) // batch_size):
+    for i in tqdm.tqdm(range(len(xtrain) // batch_size), desc="train batches"):
         x_batch = xtrain[i * batch_size:(i + 1) * batch_size]
         f = sess.run(features, feed_dict={x: x_batch})
         features_train.append(f)
@@ -169,7 +170,7 @@ def _extract_single(model_name="r50_2x_sk1"):
     print(features_train.shape)
 
     features_test = []
-    for i in range(len(xtest) // batch_size):
+    for i in tqdm.tqdm(range(len(xtest) // batch_size), desc="test batches"):
         x_batch = xtest[i * batch_size:(i + 1) * batch_size]
         f = sess.run(features, feed_dict={x: x_batch})
         features_test.append(f)
@@ -181,18 +182,19 @@ def _extract_single(model_name="r50_2x_sk1"):
     np.save(f"transfer/features/simclr_{model_name}_train.npy", features_train)
     np.save(f"transfer/features/simclr_{model_name}_test.npy", features_test)
 
-    mean = np.mean(features_train, axis=0)
-    var = np.var(features_train, axis=0)
+    if evaluate:
+        mean = np.mean(features_train, axis=0)
+        var = np.var(features_train, axis=0)
 
-    features_train_norm = (features_train - mean) / np.sqrt(var + 1e-5)
-    features_test_norm = (features_test - mean) / np.sqrt(var + 1e-5)
+        features_train_norm = (features_train - mean) / np.sqrt(var + 1e-5)
+        features_test_norm = (features_test - mean) / np.sqrt(var + 1e-5)
 
-    for C in [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]:
-        clf = LogisticRegression(random_state=0, max_iter=1000, C=C).fit(features_train, ytrain)
-        print(C, clf.score(features_train, ytrain), clf.score(features_test, ytest))
+        for C in [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]:
+            clf = LogisticRegression(random_state=0, max_iter=1000, C=C).fit(features_train, ytrain)
+            print(C, clf.score(features_train, ytrain), clf.score(features_test, ytest))
 
-        clf = LogisticRegression(random_state=0, max_iter=1000, C=C).fit(features_train_norm, ytrain)
-        print(C, clf.score(features_train_norm, ytrain), clf.score(features_test_norm, ytest))
+            clf = LogisticRegression(random_state=0, max_iter=1000, C=C).fit(features_train_norm, ytrain)
+            print(C, clf.score(features_train_norm, ytrain), clf.score(features_test_norm, ytest))
 
 
 def main():
