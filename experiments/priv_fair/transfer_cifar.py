@@ -1,5 +1,16 @@
-"""Another shameless copy"""
+"""Another shameless copy from Florian's codebase.
+
+Goals:
+    How much is the disparate impact when pre-trained models are used???
+        - CLIP
+        - Pretrained resnet
+        - How does this vary with scale???
+
+Run from root:
+    python -m experiments.priv_fair.transfer_cifar --feature_path "simclr_r101_2x_sk0"
+"""
 import argparse
+import os
 
 import numpy as np
 from opacus import PrivacyEngine
@@ -14,14 +25,15 @@ from .misc.train_utils import train, test
 
 def main(feature_path=None, batch_size=2048, mini_batch_size=256,
          lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
-         max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None):
+         max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
+         base_dir="/nlp/scr/lxuechen/features"):
     logger = Logger(logdir)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # get pre-computed features
-    x_train = np.load(f"{feature_path}_train.npy")
-    x_test = np.load(f"{feature_path}_test.npy")
+    x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
+    x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
 
     train_data, test_data = get_data("cifar10", augment=False)
     y_train = np.asarray(train_data.targets)
