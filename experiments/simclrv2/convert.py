@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser(description='SimCLR converter')
 parser.add_argument('tf_path', type=str, help='path of the input tensorflow file (ex: model.ckpt-250228)')
 parser.add_argument('--ema', action='store_true')
 parser.add_argument('--supervised', action='store_true')
-parser.add_argument('--ckpts_dir', type=str, default="/nlp/scr/lxuechen/simclr-ckpts")
+parser.add_argument('--ckpt_dir', type=str, default="/nlp/scr/lxuechen/simclr-ckpts")
 args = parser.parse_args()
 
 
