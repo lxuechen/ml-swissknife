@@ -3,6 +3,9 @@ Adapted from https://colab.research.google.com/github/google-research/simclr/blo
 
 Unmodified from Florian's codebase
     https://github.com/ftramer/Handcrafted-DP/blob/main/transfer/extract_simclr.py
+
+Run
+    python -m experiments.simclrv2.extract_simclr
 """
 
 import numpy as np
