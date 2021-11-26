@@ -114,7 +114,9 @@ class SimCLRv2(nn.Module):
         return self.new_head(features)
 
 
+@torch.no_grad()
 def test(model, loader, device, max_batches=100):
+    model.eval()
     zeons, xents = [], []
     for i, tensors in enumerate(loader):
         if i >= max_batches:
@@ -126,14 +128,15 @@ def test(model, loader, device, max_batches=100):
     return sum(zeons) / len(zeons), sum(xents) / len(xents)
 
 
+@torch.no_grad()
 def test_by_groups(model, loader, device, max_batches=100):
+    model.eval()
     zeons, xents = collections.OrderedDict(), collections.OrderedDict()
     for i, tensors in enumerate(loader):
         if i >= max_batches:
             break
         x, y = tuple(t.to(device) for t in tensors)
         y_hat = model(x)
-
         zeon = torch.eq(y_hat.argmax(dim=1), y).cpu().tolist()
         xent = F.cross_entropy(y_hat, y, reduction="none").cpu().tolist()
         for y_i, zeon_i, xent_i in utils.zip_(y, zeon, xent):
@@ -153,6 +156,7 @@ def test_by_groups(model, loader, device, max_batches=100):
 def train(model, optimizer, num_epoch, train_loader, test_loader, device):
     for epoch in tqdm.tqdm(range(num_epoch), desc="epochs"):
         for tensors in train_loader:
+            model.train()
             optimizer.zero_grad()
             x, y = tuple(t.to(device) for t in tensors)
             y_hat = model(x)
@@ -169,7 +173,7 @@ def train(model, optimizer, num_epoch, train_loader, test_loader, device):
         smallest_group_id = groups[-1]
         print(
             f"largest group zeon: {group_zeon[largest_group_id]:.4f}, "
-            f"smallest group zeon: {group_zeon[smallest_group_id]}"
+            f"smallest group zeon: {group_zeon[smallest_group_id]:.4f}"
         )
 
 
