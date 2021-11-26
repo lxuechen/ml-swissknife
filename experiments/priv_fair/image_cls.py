@@ -28,7 +28,7 @@ import tqdm
 from swissknife import utils
 from ..simclrv2.resnet import get_resnet
 
-base_dir = "/home/lxuechen_stanford_edu/software/swissknife/experiments/simclrv2"
+base_dir = "/nlp/scr/lxuechen/simclr-ckpts"
 
 
 def exponential_decay(cls_id, base_size, alpha=0.9):
@@ -89,7 +89,7 @@ def make_loaders(
 
 
 class SimCLRv2(nn.Module):
-    def __init__(self, depth=50, width_multiplier=1, sk_ratio=0, n_classes=10):
+    def __init__(self, depth=50, width_multiplier=2, sk_ratio=1, n_classes=10):
         super(SimCLRv2, self).__init__()
         resnet, original_head = get_resnet(depth=depth, width_multiplier=width_multiplier, sk_ratio=sk_ratio)
 
@@ -133,7 +133,7 @@ def train(model, optimizer, num_epoch, train_loader, test_loader, device):
 
 
 def main(lr=4, momentum=0.9, num_epoch=50, target_epsilon=3, target_delta=1e-5,
-         train_batch_size=2048, test_batch_size=1024, max_grad_norm=0.1, alpha=1):
+         train_batch_size=1024, test_batch_size=1024, max_grad_norm=0.1, alpha=1):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     train_loader, test_loader, sample_size = make_loaders(
         train_batch_size=train_batch_size, test_batch_size=test_batch_size, alpha=alpha,

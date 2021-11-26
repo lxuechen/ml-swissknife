@@ -6,13 +6,14 @@ You need Python<3.7 to enable tf==1.15.4!!! This is confusing.
 import os
 
 import fire
+import tqdm
 
 from download import available_simclr_models, simclr_categories
 
 
 def main(category="pretrained"):
     category_hash = simclr_categories[category]
-    for model in available_simclr_models:
+    for model in tqdm.tqdm(available_simclr_models):
         tf_path = os.path.join('.', model, 'model.ckpt-250228')
         os.system(f'python ./convert.py {tf_path} --ema')
 
