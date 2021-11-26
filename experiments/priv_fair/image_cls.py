@@ -101,7 +101,8 @@ class SimCLRv2(nn.Module):
         original_head.load_state_dict(state_dicts["head"])
 
         self.resnet = resnet.requires_grad_(False)
-        self.new_head = nn.Linear(2048, n_classes)
+        hidden_size = 2 ** width * 1024
+        self.new_head = nn.Linear(hidden_size, n_classes)
 
     def forward(self, x):
         features = self.resnet(x)
