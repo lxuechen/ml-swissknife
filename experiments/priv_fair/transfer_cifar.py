@@ -21,6 +21,7 @@ from opacus import PrivacyEngine
 import torch
 import torch.nn as nn
 
+from swissknife import utils
 from .misc.data import get_data
 from .misc.dp_utils import ORDERS, get_privacy_spent, get_renyi_divergence
 from .misc.log import Logger
@@ -30,7 +31,9 @@ from .misc.train_utils import train, test
 def main(feature_path=None, batch_size=2048, mini_batch_size=256,
          lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
          max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
-         base_dir="/nlp/scr/lxuechen/features"):
+         base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0):
+    utils.manual_seed(seed)
+
     logger = Logger(logdir)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -75,6 +78,7 @@ def main(feature_path=None, batch_size=2048, mini_batch_size=256,
     )
     privacy_engine.attach(optimizer)
 
+    history = []
     for epoch in range(0, epochs):
         print(f"\nEpoch: {epoch}")
 
@@ -95,6 +99,14 @@ def main(feature_path=None, batch_size=2048, mini_batch_size=256,
 
         logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc, epsilon)
 
+        history.append(
+            dict(epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc)
+        )
+
+    if train_dir is not None:
+        dump_path = os.path.join(train_dir, 'log_history.json')
+        utils.jdump(history, dump_path)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -110,5 +122,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_epsilon', type=float, default=None)
     parser.add_argument('--logdir', default=None)
     parser.add_argument('--base_dir', default="/nlp/scr/lxuechen/features", type=str)
+    parser.add_argument('--train_dir', default=None, type=str)
+    parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()
     main(**vars(args))

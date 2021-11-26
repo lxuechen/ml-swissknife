@@ -2551,7 +2551,18 @@ def exp_(x):
 
 
 # Run on cloud.
-def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180):
+def extract_argument(cmd: str, arg="--train_dir"):
+    lo = cmd.find(arg)
+    start = lo + len(arg)
+    end = None  # Until the last.
+    for index in range(start, len(cmd)):
+        if cmd[index] == '-':
+            end = index
+            break
+    return cmd[start:end].strip()
+
+
+def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180, log=True):
     """Schedule jobs on a VM with several GPUs.
 
     Args:
@@ -2562,6 +2573,7 @@ def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180):
                 2) It is the responsibility of each command to get the wait/no wait right!
         wait_time_in_secs: The number of seconds to wait before scheduling the next job.
             It's always good to wait for a bit, since a job might not immediately start running a GPU.
+        log: Write all logs to `train_dir/log.out` if True. So assumes command has `--train_dir` argument.
     """
     print(f'Scheduling {len(commands)} jobs...')
     import GPUtil
@@ -2582,6 +2594,13 @@ def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180):
         gpu_id = empty_gpus[0]
 
         command = f"export CUDA_VISIBLE_DEVICES={gpu_id}; {command}"
+        command = command.strip()  # Need this strip to remove new line char.
+        if log and '--train_dir' in command:
+            # Get argument for `train_dir`.
+            train_dir = extract_argument(command)
+            log_path = os.path.join(train_dir, 'log.out')
+            command += f" > {log_path} 2>&1 "
+            command = f"mkdir -p {train_dir}; \n{command}"
 
         # This doesn't wait.
         subprocess.Popen(
