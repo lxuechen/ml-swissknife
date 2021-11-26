@@ -138,7 +138,7 @@ def main(lr=1e-1, momentum=0.9, num_epoch=10, target_epsilon=3, target_delta=1e-
     train_loader, test_loader, sample_size = make_loaders(
         train_batch_size=train_batch_size, test_batch_size=test_batch_size, alpha=alpha,
     )
-    model = SimCLRv2()
+    model = SimCLRv2().to(device)
     optimizer = optim.SGD(utils.trainable_parameters(model), lr=lr, momentum=momentum)
     privacy_engine = PrivacyEngine(
         module=model,
