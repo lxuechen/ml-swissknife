@@ -26,7 +26,7 @@ import torchvision as tv
 import tqdm
 
 from swissknife import utils
-from ..simclrv2.resnet import get_resnet
+from ..simclrv2.resnet import get_resnet, name_to_params
 
 base_dir = "/nlp/scr/lxuechen/simclr-ckpts"
 
@@ -89,11 +89,13 @@ def make_loaders(
 
 
 class SimCLRv2(nn.Module):
-    def __init__(self, depth=50, width_multiplier=2, sk_ratio=1, n_classes=10):
+    def __init__(self, ckpt_name="r50_2x_sk1_ema.pth", n_classes=10):
         super(SimCLRv2, self).__init__()
-        resnet, original_head = get_resnet(depth=depth, width_multiplier=width_multiplier, sk_ratio=sk_ratio)
 
-        checkpoint_path = os.path.join(base_dir, f'r{depth}_{width_multiplier}x_sk{sk_ratio}_ema.pth')
+        depth, width, sk_ratio = name_to_params(ckpt_name)
+        resnet, original_head = get_resnet(depth=depth, width_multiplier=width, sk_ratio=sk_ratio)
+
+        checkpoint_path = os.path.join(base_dir, ckpt_name)
         state_dicts = torch.load(checkpoint_path)
         resnet.load_state_dict(state_dicts["resnet"])
         original_head.load_state_dict(state_dicts["head"])
