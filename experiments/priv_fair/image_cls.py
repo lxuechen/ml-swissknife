@@ -137,8 +137,9 @@ def test_by_groups(model, loader, device, max_batches=100):
             break
         x, y = tuple(t.to(device) for t in tensors)
         y_hat = model(x)
-        zeon = torch.eq(y_hat.argmax(dim=1), y).cpu().tolist()
+        zeon = torch.eq(y_hat.argmax(dim=1), y).cpu().float().tolist()
         xent = F.cross_entropy(y_hat, y, reduction="none").cpu().tolist()
+        y = y.cpu().tolist()
         for y_i, zeon_i, xent_i in utils.zip_(y, zeon, xent):
             if y_i not in zeons:
                 zeons[y_i] = [zeon_i]
