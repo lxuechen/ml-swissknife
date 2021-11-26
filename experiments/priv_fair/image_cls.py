@@ -9,13 +9,18 @@ Goals:
 
 Run from root:
     python -m experiments.priv_fair.image_cls
+
+Notes:
+    Test samples are shuffled (shuffle=True in test_loader).
 """
 
+import collections
 from collections import defaultdict, OrderedDict
 import os
 import random
 
 import fire
+import numpy as np
 from opacus import PrivacyEngine
 import torch
 from torch import nn, optim
@@ -84,7 +89,7 @@ def make_loaders(
         sampler=torch.utils.data.sampler.SubsetRandomSampler(example_ids),
         drop_last=True,
     )
-    test_loader = DataLoader(test_data, batch_size=test_batch_size, drop_last=False)
+    test_loader = DataLoader(test_data, batch_size=test_batch_size, drop_last=False, shuffle=True)
     return train_loader, test_loader, sum(cls_sizes)
 
 
@@ -121,6 +126,30 @@ def test(model, loader, device, max_batches=100):
     return sum(zeons) / len(zeons), sum(xents) / len(xents)
 
 
+def test_by_groups(model, loader, device, max_batches=100):
+    zeons, xents = collections.OrderedDict(), collections.OrderedDict()
+    for i, tensors in enumerate(loader):
+        if i >= max_batches:
+            break
+        x, y = tuple(t.to(device) for t in tensors)
+        y_hat = model(x)
+
+        zeon = torch.eq(y_hat.argmax(dim=1), y).cpu().tolist()
+        xent = F.cross_entropy(y_hat, y, reduction="none").cpu().tolist()
+        for y_i, zeon_i, xent_i in utils.zip_(y, zeon, xent):
+            if y_i not in zeons:
+                zeons[y_i] = [zeon_i]
+                xents[y_i] = [xent_i]
+            else:
+                zeons[y_i].append(zeon_i)
+                xents[y_i].append(xent_i)
+
+    for y_i in zeons.keys():
+        zeons[y_i] = np.mean(zeons[y_i])
+        xents[y_i] = np.mean(xents[y_i])
+    return zeons, xents
+
+
 def train(model, optimizer, num_epoch, train_loader, test_loader, device):
     for epoch in tqdm.tqdm(range(num_epoch), desc="epochs"):
         for tensors in train_loader:
@@ -131,12 +160,22 @@ def train(model, optimizer, num_epoch, train_loader, test_loader, device):
             loss = loss.sum(dim=0)
             loss.backward()
             optimizer.step()
+
         avg_zeon, avg_xent = test(model, test_loader, device=device)
-        print(f"Epoch {epoch}, avg_zeon: {avg_zeon}, avg_xent: {avg_xent}")
+        group_zeon, group_xent = test_by_groups(model, test_loader, device=device)
+        print(f"Epoch {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}")
+        groups = sorted(group_zeon.keys())
+        largest_group_id = groups[0]
+        smallest_group_id = groups[-1]
+        print(
+            f"largest group zeon: {group_zeon[largest_group_id]:.4f}, "
+            f"smallest group zeon: {group_zeon[smallest_group_id]}"
+        )
 
 
 def main(lr=4, momentum=0.9, num_epoch=50, target_epsilon=3, target_delta=1e-5,
          train_batch_size=1024, test_batch_size=1024, max_grad_norm=0.1, alpha=1):
+    # TODO: First test non-private. Then try some normalization.
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     train_loader, test_loader, sample_size = make_loaders(
         train_batch_size=train_batch_size, test_batch_size=test_batch_size, alpha=alpha,
