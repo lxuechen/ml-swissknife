@@ -148,6 +148,7 @@ def main(lr=1e-1, momentum=0.9, num_epoch=10, target_epsilon=3, target_delta=1e-
         sample_size=sample_size,
         loss_reduction="sum",
         max_grad_norm=max_grad_norm,
+        epochs=num_epoch,
     )
     privacy_engine.attach(optimizer=optimizer)
 
