@@ -31,17 +31,17 @@ from ..simclrv2.resnet import get_resnet
 base_dir = "/home/lxuechen_stanford_edu/software/swissknife/experiments/simclrv2"
 
 
-def exponential_decay(cls_id, base_size, alpha=0.8):
+def exponential_decay(cls_id, base_size, alpha=0.9):
     # Assume cls_id starts from 0.
     return int(alpha ** (cls_id + 1) * base_size)
 
 
-def power_law_decay(cls_id, base_size, alpha=0.8):
+def power_law_decay(cls_id, base_size, alpha=0.9):
     return int((cls_id + 1) ** (-alpha) * base_size)
 
 
 def make_loaders(
-    root=None, decay_type="power_law", base_size=5000, train_batch_size=1024, test_batch_size=1024,
+    root=None, decay_type="exponential", base_size=5000, train_batch_size=1024, test_batch_size=1024,
     alpha=0.9
 ):
     if root is None:
@@ -72,6 +72,7 @@ def make_loaders(
     decay_fn = {"power_law": power_law_decay, "exponential": exponential_decay}[decay_type]
     cls_ids = per_class_list.keys()
     cls_sizes = [decay_fn(cls_id=cls_id, base_size=base_size, alpha=alpha) for cls_id in cls_ids]
+    print(f'class sizes: {cls_sizes}')
 
     # Allocate indices by class.
     example_ids = []
@@ -133,8 +134,8 @@ def train(model, optimizer, num_epoch, train_loader, test_loader, device):
         print(f"Epoch {epoch}, avg_zeon: {avg_zeon}, avg_xent: {avg_xent}")
 
 
-def main(lr=1e-1, momentum=0.9, num_epoch=10, target_epsilon=3, target_delta=1e-5,
-         train_batch_size=1024, test_batch_size=1024, max_grad_norm=1, alpha=0.8):
+def main(lr=4, momentum=0.9, num_epoch=50, target_epsilon=3, target_delta=1e-5,
+         train_batch_size=2048, test_batch_size=1024, max_grad_norm=0.1, alpha=1):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     train_loader, test_loader, sample_size = make_loaders(
         train_batch_size=train_batch_size, test_batch_size=test_batch_size, alpha=alpha,
