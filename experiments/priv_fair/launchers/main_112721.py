@@ -37,7 +37,7 @@ def main(
         for task in tasks:
             for seed in seeds:
                 alpha_str = utils.float2str(alpha)
-                par_dir = os.path.join(base_dir, feature_path, f"task-{alpha_str}")
+                par_dir = os.path.join(base_dir, feature_path, f"{task}-{alpha_str}")
                 train_dir = os.path.join(par_dir, f'{seed}')
 
                 commands.append(
