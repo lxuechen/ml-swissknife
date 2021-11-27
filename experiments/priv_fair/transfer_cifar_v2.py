@@ -69,10 +69,14 @@ def get_cifar10_imbalanced_tensor_dataset(
 
     # IMPORTANT: Collect indices according to target sizes.
     example_ids = []
+    new_cls_sizes = []
     for cls_size, (cls_id, indices) in zip(cls_sizes, per_class_list.items()):
         random.shuffle(indices)
         offset_size = offset_sizes.get(str(cls_id), 0)  # Important to str it first!!!
-        example_ids.extend(indices[:cls_size + offset_size])
+        new_cls_size = cls_size + offset_size
+        example_ids.extend(indices[:new_cls_size])
+        new_cls_sizes.append(new_cls_size)
+    print(f'new class sizes: {new_cls_sizes}')
 
     x_train, y_train = x_train[example_ids], y_train[example_ids]
     trainset = torch.utils.data.TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
