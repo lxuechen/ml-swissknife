@@ -242,7 +242,13 @@ def write_config(args: argparse.Namespace, file_name='argparse.json', config_pat
 
     Doesn't write if in `eval` mode.
     """
+    if not hasattr(args, attr):
+        return
+
     train_dir = getattr(args, attr)
+    if train_dir is None:
+        return
+
     os.makedirs(train_dir, exist_ok=True)
     if config_path is None:
         config_path = os.path.join(train_dir, file_name)

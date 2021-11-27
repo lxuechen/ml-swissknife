@@ -107,7 +107,7 @@ def non_private_training(
     feature_path=None, batch_size=2048, mini_batch_size=256,
     lr=1, optim="SGD", momentum=0.9, nesterov=False, epochs=100, logdir=None,
     base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0, imba=False, alpha=0.9,
-    offset_sizes_path=None, **kwargs,
+    offset_sizes_path=None, base_size=5000, **kwargs,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
@@ -115,6 +115,7 @@ def non_private_training(
     if imba:
         trainset, testset = get_cifar10_imbalanced_tensor_dataset(
             base_dir=base_dir, feature_path=feature_path, alpha=alpha, offset_sizes_path=offset_sizes_path,
+            base_size=base_size,
         )
     else:
         trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
@@ -174,6 +175,7 @@ def private_training(
     base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0,
     imba=False, alpha=0.9,
     offset_sizes_path=None,
+    base_size=5000,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
@@ -181,6 +183,7 @@ def private_training(
     if imba:
         trainset, testset = get_cifar10_imbalanced_tensor_dataset(
             base_dir=base_dir, feature_path=feature_path, alpha=alpha, offset_sizes_path=offset_sizes_path,
+            base_size=base_size,
         )
     else:
         trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
@@ -286,6 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--imba', type=utils.str2bool, default=False, const=True, nargs="?")
     parser.add_argument('--alpha', type=float, default=0.9, help="Decay rate for power law or exponential.")
     parser.add_argument('--offset_sizes_path', type=str, default=None, help="Path to a json file specifying offsets.")
+    parser.add_argument('--base_size', type=int, default=5000)
     args = parser.parse_args()
     utils.write_argparse(args)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
