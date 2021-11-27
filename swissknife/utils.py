@@ -2567,7 +2567,7 @@ def extract_argument(cmd: str, arg="--train_dir"):
     return cmd[start:end].strip()
 
 
-def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180, log=True):
+def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180, log=True, maxMemory=1e-4, maxLoad=1e-4):
     """Schedule jobs on a VM with several GPUs.
 
     Args:
@@ -2590,8 +2590,8 @@ def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180, log=Tru
             # Don't use `getFirstAvailable`; it is very bad since it throws RuntimeError when no GPU is found.
             empty_gpus = GPUtil.getAvailable(
                 order='first',
-                maxLoad=0.0001,
-                maxMemory=0.0001,
+                maxLoad=maxLoad,
+                maxMemory=maxMemory,
                 limit=1,
             )
             time.sleep(1)

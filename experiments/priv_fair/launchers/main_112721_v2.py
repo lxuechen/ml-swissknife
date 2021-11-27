@@ -29,7 +29,7 @@ def _get_command(feature_path, seed, train_dir, task, alpha, imba):
 
 
 def main(
-    seeds=tuple(range(10)),
+    seeds=tuple(range(5)),
     alpha=0.8,
     base_dir="/nlp/scr/lxuechen/priv-fair",
     tasks=("private", "non_private"),
@@ -51,7 +51,7 @@ def main(
                     )
                 )
 
-    utils.gpu_scheduler(commands=commands, wait_time_in_secs=120)
+    utils.gpu_scheduler(commands=commands, wait_time_in_secs=60, maxMemory=0.3, maxLoad=0.3)
 
 
 if __name__ == "__main__":
