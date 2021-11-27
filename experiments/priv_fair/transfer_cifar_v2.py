@@ -126,11 +126,15 @@ def non_private_training(
         test_loss, test_acc = test(model, test_loader)
         logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc)
 
-        zeon_by_groups, xent_by_groups = test_by_groups(model, test_loader)
-        print(zeon_by_groups, xent_by_groups)
+        train_zeon_by_groups, train_xent_by_groups = test_by_groups(model, train_loader)
+        test_zeon_by_groups, test_xent_by_groups = test_by_groups(model, test_loader)
 
         history.append(
-            dict(epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc)
+            dict(
+                epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
+                train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
+                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups
+            )
         )
 
     if train_dir is not None:
@@ -206,11 +210,15 @@ def private_training(
 
         logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc, epsilon)
 
-        zeon_by_groups, xent_by_groups = test_by_groups(model, test_loader)
-        print(zeon_by_groups, xent_by_groups)
+        train_zeon_by_groups, train_xent_by_groups = test_by_groups(model, train_loader)
+        test_zeon_by_groups, test_xent_by_groups = test_by_groups(model, test_loader)
 
         history.append(
-            dict(epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc)
+            dict(
+                epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
+                train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
+                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups
+            )
         )
 
     if train_dir is not None:
