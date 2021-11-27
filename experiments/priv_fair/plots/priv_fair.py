@@ -2,6 +2,8 @@
 Check the accuracy gap as you vary scale for each group.
 
 python -m experiments.priv_fair.plots.priv_fair
+
+TODO: Replot after fixing bug.
 """
 
 import os

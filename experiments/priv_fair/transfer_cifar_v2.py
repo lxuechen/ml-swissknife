@@ -15,18 +15,19 @@ Run from root:
 Put all the converted features in `base_dir`
 """
 # TODO:
-#   3) disparate impact vs scale,
 #   4) increasing majority group help (positive transfer)?
 
 import argparse
 import collections
 import os
 import random
+from typing import Optional
 
 import numpy as np
 from opacus import PrivacyEngine
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 
 from swissknife import utils
 from .misc.data import get_data
@@ -36,8 +37,17 @@ from .misc.train_utils import train, test, test_by_groups
 from .shared import exponential_decay, power_law_decay
 
 
-def get_cifar10_imbalanced_tensor_dataset(base_dir, feature_path, decay_type="exponential", alpha=0.9, base_size=5000):
+def get_cifar10_imbalanced_tensor_dataset(
+    base_dir, feature_path, decay_type="exponential", alpha=0.9,
+    base_size=5000,
+    offset_sizes_path: Optional[str] = None,
+):
     # base_size: Sample size for the largest class.
+    if offset_sizes_path is not None and os.path.exists(offset_sizes_path):
+        offset_sizes = utils.jload(offset_sizes_path)
+    else:
+        offset_sizes = dict()
+
     x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
     x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
 
@@ -45,7 +55,7 @@ def get_cifar10_imbalanced_tensor_dataset(base_dir, feature_path, decay_type="ex
     y_train = np.asarray(train_data.targets)
     y_test = np.asarray(test_data.targets)
 
-    # Imbalance training set.
+    # Collect training example id for each class.
     per_class_list = collections.defaultdict(list)
     for ind, x in enumerate(train_data):
         _, label = x
@@ -57,11 +67,12 @@ def get_cifar10_imbalanced_tensor_dataset(base_dir, feature_path, decay_type="ex
     cls_sizes = [decay_fn(cls_id=cls_id, base_size=base_size, alpha=alpha) for cls_id in cls_ids]
     print(f'class sizes: {cls_sizes}')
 
-    # Allocate indices by class.
+    # IMPORTANT: Collect indices according to target sizes.
     example_ids = []
     for cls_size, (cls_id, indices) in zip(cls_sizes, per_class_list.items()):
         random.shuffle(indices)
-        example_ids.extend(indices[:cls_size])
+        offset_size = offset_sizes.get(str(cls_id), 0)  # Important to str it first!!!
+        example_ids.extend(indices[:cls_size + offset_size])
 
     x_train, y_train = x_train[example_ids], y_train[example_ids]
     trainset = torch.utils.data.TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
@@ -82,18 +93,28 @@ def get_cifar10_tensor_dataset(base_dir, feature_path):
     return trainset, testset
 
 
+def get_class_sizes(loader: DataLoader):
+    per_class_list = collections.defaultdict(list)
+    for ind, x in enumerate(loader.dataset):
+        _, label = x
+        per_class_list[int(label)].append(ind)
+    per_class_list = collections.OrderedDict(sorted(per_class_list.items(), key=lambda t: t[0]))
+    cls_sizes = [len(per_class_list[key]) for key in per_class_list.keys()]
+    return cls_sizes
+
+
 def non_private_training(
     feature_path=None, batch_size=2048, mini_batch_size=256,
     lr=1, optim="SGD", momentum=0.9, nesterov=False, epochs=100, logdir=None,
     base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0, imba=False, alpha=0.9,
-    **kwargs
+    offset_sizes_path=None, **kwargs,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
 
     if imba:
         trainset, testset = get_cifar10_imbalanced_tensor_dataset(
-            base_dir=base_dir, feature_path=feature_path, alpha=alpha
+            base_dir=base_dir, feature_path=feature_path, alpha=alpha, offset_sizes_path=offset_sizes_path,
         )
     else:
         trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
@@ -101,12 +122,15 @@ def non_private_training(
     bs = batch_size
     assert bs % mini_batch_size == 0
     n_acc_steps = bs // mini_batch_size
-    train_loader = torch.utils.data.DataLoader(
+    train_loader = DataLoader(
         trainset, batch_size=mini_batch_size, shuffle=True, num_workers=1, pin_memory=True, drop_last=True
     )
-    test_loader = torch.utils.data.DataLoader(
+    test_loader = DataLoader(
         testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
+
+    train_cls_sizes = get_class_sizes(train_loader)
+    test_cls_sizes = get_class_sizes(test_loader)
 
     # Get the shape of features.
     x_batch, y_batch = next(iter(train_loader))
@@ -133,7 +157,8 @@ def non_private_training(
             dict(
                 epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
                 train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
-                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups
+                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups,
+                train_cls_sizes=train_cls_sizes, test_cls_sizes=test_cls_sizes,
             )
         )
 
@@ -148,13 +173,14 @@ def private_training(
     max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
     base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0,
     imba=False, alpha=0.9,
+    offset_sizes_path=None,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
 
     if imba:
         trainset, testset = get_cifar10_imbalanced_tensor_dataset(
-            base_dir=base_dir, feature_path=feature_path, alpha=alpha
+            base_dir=base_dir, feature_path=feature_path, alpha=alpha, offset_sizes_path=offset_sizes_path,
         )
     else:
         trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
@@ -162,12 +188,15 @@ def private_training(
     bs = batch_size
     assert bs % mini_batch_size == 0
     n_acc_steps = bs // mini_batch_size
-    train_loader = torch.utils.data.DataLoader(
+    train_loader = DataLoader(
         trainset, batch_size=mini_batch_size, shuffle=True, num_workers=1, pin_memory=True, drop_last=True
     )
-    test_loader = torch.utils.data.DataLoader(
+    test_loader = DataLoader(
         testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
+
+    train_cls_sizes = get_class_sizes(train_loader)
+    test_cls_sizes = get_class_sizes(test_loader)
 
     # Get the shape of features.
     x_batch, y_batch = next(iter(train_loader))
@@ -217,7 +246,8 @@ def private_training(
             dict(
                 epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
                 train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
-                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups
+                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups,
+                train_cls_sizes=train_cls_sizes, test_cls_sizes=test_cls_sizes,
             )
         )
 
@@ -255,6 +285,7 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, default="private", choices=("private", "non_private"))
     parser.add_argument('--imba', type=utils.str2bool, default=False, const=True, nargs="?")
     parser.add_argument('--alpha', type=float, default=0.9, help="Decay rate for power law or exponential.")
+    parser.add_argument('--offset_sizes_path', type=str, default=None, help="Path to a json file specifying offsets.")
     args = parser.parse_args()
     utils.write_argparse(args)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

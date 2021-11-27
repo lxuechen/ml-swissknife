@@ -1,7 +1,7 @@
 """
-Measure the disparate impact across scales.
+Test if there's positive transfer across groups.
 
-python -m experiments.priv_fair.launchers.main_112721_v2
+python -m experiments.priv_fair.launchers.main_112721_v3
 
 - Reduce alpha
 - More seeds
@@ -31,7 +31,7 @@ def _get_command(feature_path, seed, train_dir, task, alpha, imba):
 def main(
     seeds=tuple(range(5)),
     alpha=0.8,
-    base_dir="/nlp/scr/lxuechen/priv-fair",
+    base_dir="/nlp/scr/lxuechen/priv-fair-group-transfer",
     tasks=("private", "non_private"),
     imba=True,
 ):
