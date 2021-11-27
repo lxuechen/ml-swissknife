@@ -1,11 +1,5 @@
 """Another shameless copy from Florian's codebase.
 
-Goals:
-    How much is the disparate impact when pre-trained models are used???
-        - CLIP
-        - Pretrained resnet
-        - How does this vary with scale???
-
 @formatter:off
 Run from root:
     python -m experiments.priv_fair.transfer_cifar --feature_path "simclr_r101_2x_sk0" --batch_size=1024 --lr=4 --noise_multiplier=2.40

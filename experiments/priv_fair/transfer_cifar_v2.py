@@ -4,15 +4,22 @@ Goals:
     How much is the disparate impact when pre-trained models are used???
         - CLIP
         - Pretrained resnet
-        - How does this vary with scale???
+        - SimCLR features
+        - How does this vary with scale
 
 @formatter:off
 Run from root:
-    python -m experiments.priv_fair.transfer_cifar --feature_path "simclr_r101_2x_sk0" --batch_size=1024 --lr=4 --noise_multiplier=2.40
+    python -m experiments.priv_fair.transfer_cifar_v2 --feature_path "simclr_r101_2x_sk0" --batch_size=1024 --lr=4 --noise_multiplier=2.40
 @formatter:on
 
 Put all the converted features in `base_dir`
 """
+# TODO:
+#   1) Non-private performance,
+#   2) evaluation by group,
+#   3) disparate impact vs scale,
+#   4) increasing majority group help (positive transfer)?
+
 import argparse
 import os
 
@@ -28,6 +35,23 @@ from .misc.log import Logger
 from .misc.train_utils import train, test
 
 
+def non_private():
+    pass
+
+
+def get_cifar10_tensor_dataset(base_dir, feature_path):
+    x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
+    x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
+
+    train_data, test_data = get_data("cifar10", augment=False)
+    y_train = np.asarray(train_data.targets)
+    y_test = np.asarray(test_data.targets)
+
+    trainset = torch.utils.data.TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
+    testset = torch.utils.data.TensorDataset(torch.from_numpy(x_test), torch.from_numpy(y_test))
+    return trainset, testset
+
+
 def main(feature_path=None, batch_size=2048, mini_batch_size=256,
          lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
          max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
@@ -39,15 +63,7 @@ def main(feature_path=None, batch_size=2048, mini_batch_size=256,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # get pre-computed features
-    x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
-    x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
-
-    train_data, test_data = get_data("cifar10", augment=False)
-    y_train = np.asarray(train_data.targets)
-    y_test = np.asarray(test_data.targets)
-
-    trainset = torch.utils.data.TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
-    testset = torch.utils.data.TensorDataset(torch.from_numpy(x_test), torch.from_numpy(y_test))
+    trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
 
     bs = batch_size
     assert bs % mini_batch_size == 0
@@ -59,19 +75,19 @@ def main(feature_path=None, batch_size=2048, mini_batch_size=256,
         testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
 
-    n_features = x_train.shape[-1]
+    # Get the shape of features.
+    x_batch, y_batch = next(iter(train_loader))
+    n_features = x_batch.size(-1)
     model = nn.Sequential(nn.Linear(n_features, 10)).to(device)
 
     if optim == "SGD":
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr,
-                                    momentum=momentum,
-                                    nesterov=nesterov)
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, nesterov=nesterov)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     privacy_engine = PrivacyEngine(
         model,
-        sample_rate=bs / len(train_data),
+        sample_rate=bs / len(trainset),
         alphas=ORDERS,
         noise_multiplier=noise_multiplier,
         max_grad_norm=max_grad_norm,
