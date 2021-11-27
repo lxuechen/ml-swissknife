@@ -48,7 +48,7 @@ def main(
                     )
                 )
 
-    utils.gpu_scheduler(commands=commands, wait_time_in_secs=60, maxMemory=0.3, maxLoad=0.3)
+    utils.gpu_scheduler(commands=commands, wait_time_in_secs=15, maxMemory=0.3, maxLoad=0.3)
 
 
 if __name__ == "__main__":
