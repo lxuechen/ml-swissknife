@@ -15,12 +15,13 @@ Run from root:
 Put all the converted features in `base_dir`
 """
 # TODO:
-#   1) imbalanced loader!
 #   3) disparate impact vs scale,
 #   4) increasing majority group help (positive transfer)?
 
 import argparse
+import collections
 import os
+import random
 
 import numpy as np
 from opacus import PrivacyEngine
@@ -32,6 +33,40 @@ from .misc.data import get_data
 from .misc.dp_utils import ORDERS, get_privacy_spent, get_renyi_divergence
 from .misc.log import Logger
 from .misc.train_utils import train, test, test_by_groups
+from .shared import exponential_decay, power_law_decay
+
+
+def get_cifar10_imbalanced_tensor_dataset(base_dir, feature_path, decay_type="exponential", alpha=0.9, base_size=5000):
+    # base_size: Sample size for the largest class.
+    x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
+    x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
+
+    train_data, test_data = get_data("cifar10", augment=False)
+    y_train = np.asarray(train_data.targets)
+    y_test = np.asarray(test_data.targets)
+
+    # Imbalance training set.
+    per_class_list = collections.defaultdict(list)
+    for ind, x in enumerate(train_data):
+        _, label = x
+        per_class_list[int(label)].append(ind)
+    per_class_list = collections.OrderedDict(sorted(per_class_list.items(), key=lambda t: t[0]))
+
+    decay_fn = {"power_law": power_law_decay, "exponential": exponential_decay}[decay_type]
+    cls_ids = per_class_list.keys()
+    cls_sizes = [decay_fn(cls_id=cls_id, base_size=base_size, alpha=alpha) for cls_id in cls_ids]
+    print(f'class sizes: {cls_sizes}')
+
+    # Allocate indices by class.
+    example_ids = []
+    for cls_size, (cls_id, indices) in zip(cls_sizes, per_class_list.items()):
+        random.shuffle(indices)
+        example_ids.extend(indices[:cls_size])
+
+    x_train, y_train = x_train[example_ids], y_train[example_ids]
+    trainset = torch.utils.data.TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
+    testset = torch.utils.data.TensorDataset(torch.from_numpy(x_test), torch.from_numpy(y_test))
+    return trainset, testset
 
 
 def get_cifar10_tensor_dataset(base_dir, feature_path):
@@ -49,13 +84,17 @@ def get_cifar10_tensor_dataset(base_dir, feature_path):
 
 def non_private_training(
     feature_path=None, batch_size=2048, mini_batch_size=256,
-    lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
-    max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
-    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0
+    lr=1, optim="SGD", momentum=0.9, nesterov=False, epochs=100, logdir=None,
+    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0, imba=False,
+    **kwargs
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
-    trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
+
+    if imba:
+        trainset, testset = get_cifar10_imbalanced_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
+    else:
+        trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
 
     bs = batch_size
     assert bs % mini_batch_size == 0
@@ -101,11 +140,16 @@ def private_training(
     feature_path=None, batch_size=2048, mini_batch_size=256,
     lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
     max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
-    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0
+    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0,
+    imba=False,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
-    trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
+
+    if imba:
+        trainset, testset = get_cifar10_imbalanced_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
+    else:
+        trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
 
     bs = batch_size
     assert bs % mini_batch_size == 0
@@ -135,6 +179,7 @@ def private_training(
         max_grad_norm=max_grad_norm,
     )
     privacy_engine.attach(optimizer)
+    print(f'sample size: {len(trainset)}')
 
     history = []
     for epoch in range(0, epochs):
@@ -196,6 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_dir', default=None, type=str)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--task', type=str, default="private_training")
+    parser.add_argument('--imba', type=utils.str2bool, default=False, const=True, nargs="?")
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
