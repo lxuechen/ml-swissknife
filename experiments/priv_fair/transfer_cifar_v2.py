@@ -219,9 +219,9 @@ def private_training(
 
 
 def main(task="private_training", **kwargs):
-    if task == "private_training":
+    if task == "private":
         private_training(**kwargs)
-    elif task == "non_private_training":
+    elif task == "non_private":
         # Hyperparameters for private training seems to also work.
         non_private_training(**kwargs)
     else:
@@ -244,7 +244,7 @@ if __name__ == '__main__':
     parser.add_argument('--base_dir', default="/nlp/scr/lxuechen/features", type=str)
     parser.add_argument('--train_dir', default=None, type=str)
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--task', type=str, default="private_training")
+    parser.add_argument('--task', type=str, default="private", choices=("private", "non_private"))
     parser.add_argument('--imba', type=utils.str2bool, default=False, const=True, nargs="?")
     parser.add_argument('--alpha', type=float, default=0.9, help="Decay rate for power law or exponential.")
     args = parser.parse_args()

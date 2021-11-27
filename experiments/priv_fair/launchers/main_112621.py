@@ -23,8 +23,8 @@ def _get_command(feature_path, seed, train_dir):
 
 
 def main(
-    seeds=(0, 1, 2, 3, 4),
-    base_dir="/nlp/scr/lxuechen/priv-fair",
+    seeds=tuple(range(5)),
+    base_dir="/nlp/scr/lxuechen/priv-fair-scale",
 ):
     commands = []
 
