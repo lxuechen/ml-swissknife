@@ -20,10 +20,11 @@ def main(
     # Show scale w.r.t depth.
     depths = (50, 101, 152)
     errorbars = []
-    for sk_mode in (1,):
-        for width_factor in (2,):
-            for task in ('non_private', 'private'):
-                for group in groups:
+    plots = []
+    for sk_mode in (0,):
+        for width_factor in (1,):
+            for group in groups:
+                for task in ('non_private', 'private'):
 
                     errorbar = dict(
                         x=depths, y=[], yerr=[],
@@ -52,12 +53,31 @@ def main(
 
                     errorbars.append(errorbar)
 
+                # Include the gaps.
+                group0 = errorbars[-2]
+                group1 = errorbars[-1]
+                plots.append(
+                    dict(
+                        x=group0["x"],
+                        y=[abs(s - t) for s, t in zip(group0["y"], group1["y"])],
+                        label=f"group {group}"
+                    )
+                )
+
     img_path = "/Users/xuechenli/remote/swissknife/experiments/priv_fair/plots/depth-group"
     utils.plot_wrapper(
         img_path=img_path,
         suffixes=(".png", ".pdf"),
         errorbars=errorbars,
         options=dict(xlabel="Depth (number of layers)", ylabel="CIFAR-10 Test error"),
+    )
+
+    img_path = "/Users/xuechenli/remote/swissknife/experiments/priv_fair/plots/depth-group-gap"
+    utils.plot_wrapper(
+        img_path=img_path,
+        suffixes=(".png", ".pdf"),
+        plots=plots,
+        options=dict(xlabel="Depth (number of layers)", ylabel="CIFAR-10 Test error private vs non-private gap"),
     )
 
 

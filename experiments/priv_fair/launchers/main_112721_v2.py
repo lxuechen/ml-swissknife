@@ -14,7 +14,7 @@ from swissknife import utils
 from ...simclrv2.download import available_simclr_models
 
 
-def _get_command(feature_path, seed, train_dir, task, alpha):
+def _get_command(feature_path, seed, train_dir, task, alpha, imba):
     command = f'''python -m experiments.priv_fair.transfer_cifar_v2 \
         --feature_path "{feature_path}" \
         --batch_size 1024 \
@@ -23,7 +23,8 @@ def _get_command(feature_path, seed, train_dir, task, alpha):
         --seed {seed} \
         --train_dir {train_dir} \
         --alpha {alpha} \
-        --task {task}'''
+        --task {task} \
+        --imba {imba}'''
     return command
 
 
@@ -32,6 +33,7 @@ def main(
     alpha=0.8,
     base_dir="/nlp/scr/lxuechen/priv-fair",
     tasks=("private", "non_private"),
+    imba=True,
 ):
     commands = []
 
@@ -44,10 +46,12 @@ def main(
                 train_dir = os.path.join(par_dir, f'{seed}')
 
                 commands.append(
-                    _get_command(feature_path=feature_path, seed=seed, train_dir=train_dir, alpha=alpha, task=task)
+                    _get_command(
+                        feature_path=feature_path, seed=seed, train_dir=train_dir, alpha=alpha, task=task, imba=imba
+                    )
                 )
 
-    utils.gpu_scheduler(commands=commands, wait_time_in_secs=150)
+    utils.gpu_scheduler(commands=commands, wait_time_in_secs=120)
 
 
 if __name__ == "__main__":
