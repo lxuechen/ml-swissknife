@@ -12,6 +12,9 @@ Run from root:
 
 Notes:
     Test samples are shuffled (shuffle=True in test_loader).
+
+TODO: This script doesn't work; likely due to wrong resolution.
+    First test non-private. Then try some normalization.
 """
 
 import collections
@@ -180,7 +183,6 @@ def train(model, optimizer, num_epoch, train_loader, test_loader, device):
 
 def main(lr=4, momentum=0.9, num_epoch=50, target_epsilon=3, target_delta=1e-5,
          train_batch_size=1024, test_batch_size=1024, max_grad_norm=0.1, alpha=1):
-    # TODO: First test non-private. Then try some normalization.
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     train_loader, test_loader, sample_size = make_loaders(
         train_batch_size=train_batch_size, test_batch_size=test_batch_size, alpha=alpha,
