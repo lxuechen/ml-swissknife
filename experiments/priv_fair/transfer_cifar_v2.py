@@ -15,7 +15,6 @@ Run from root:
 Put all the converted features in `base_dir`
 """
 # TODO:
-#   1) Non-private performance,
 #   2) evaluation by group,
 #   3) disparate impact vs scale,
 #   4) increasing majority group help (positive transfer)?
@@ -35,10 +34,6 @@ from .misc.log import Logger
 from .misc.train_utils import train, test
 
 
-def non_private():
-    pass
-
-
 def get_cifar10_tensor_dataset(base_dir, feature_path):
     x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
     x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
@@ -52,17 +47,60 @@ def get_cifar10_tensor_dataset(base_dir, feature_path):
     return trainset, testset
 
 
-def main(feature_path=None, batch_size=2048, mini_batch_size=256,
-         lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
-         max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
-         base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0):
+def non_private_training(
+    feature_path=None, batch_size=2048, mini_batch_size=256,
+    lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
+    max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
+    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0
+):
     utils.manual_seed(seed)
-
     logger = Logger(logdir)
+    trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    bs = batch_size
+    assert bs % mini_batch_size == 0
+    n_acc_steps = bs // mini_batch_size
+    train_loader = torch.utils.data.DataLoader(
+        trainset, batch_size=mini_batch_size, shuffle=True, num_workers=1, pin_memory=True, drop_last=True
+    )
+    test_loader = torch.utils.data.DataLoader(
+        testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=True
+    )
 
-    # get pre-computed features
+    # Get the shape of features.
+    x_batch, y_batch = next(iter(train_loader))
+    n_features = x_batch.size(-1)
+    model = nn.Sequential(nn.Linear(n_features, 10)).to(device)
+
+    if optim == "SGD":
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, nesterov=nesterov)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    history = []
+    for epoch in range(0, epochs):
+        print(f"\nEpoch: {epoch}")
+
+        train_loss, train_acc = train(model, train_loader, optimizer, n_acc_steps=n_acc_steps)
+        test_loss, test_acc = test(model, test_loader)
+        logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc)
+        history.append(
+            dict(epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc)
+        )
+
+    if train_dir is not None:
+        dump_path = os.path.join(train_dir, 'log_history.json')
+        utils.jdump(history, dump_path)
+
+
+def private_training(
+    feature_path=None, batch_size=2048, mini_batch_size=256,
+    lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
+    max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
+    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0
+):
+    utils.manual_seed(seed)
+    logger = Logger(logdir)
     trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
 
     bs = batch_size
@@ -124,6 +162,16 @@ def main(feature_path=None, batch_size=2048, mini_batch_size=256,
         utils.jdump(history, dump_path)
 
 
+def main(task="private_training", **kwargs):
+    if task == "private_training":
+        private_training(**kwargs)
+    elif task == "non_private_training":
+        # Hyperparameters for private training seems to also work.
+        non_private_training(**kwargs)
+    else:
+        raise ValueError(f"Unknown task: {task}")
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', type=int, default=256)
@@ -140,5 +188,8 @@ if __name__ == '__main__':
     parser.add_argument('--base_dir', default="/nlp/scr/lxuechen/features", type=str)
     parser.add_argument('--train_dir', default=None, type=str)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--task', type=str, default="private_training")
     args = parser.parse_args()
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     main(**vars(args))

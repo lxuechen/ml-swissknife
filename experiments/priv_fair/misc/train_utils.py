@@ -41,7 +41,8 @@ def train(model, train_loader, optimizer, n_acc_steps=1):
         else:
             with torch.no_grad():
                 # accumulate per-example gradients but don't take a step yet
-                optimizer.virtual_step()
+                if hasattr(optimizer, 'virtual_step'):
+                    optimizer.virtual_step()
 
         pred = output.max(1, keepdim=True)[1]
         correct += pred.eq(target.view_as(pred)).sum().item()
@@ -52,7 +53,7 @@ def train(model, train_loader, optimizer, n_acc_steps=1):
     train_acc = 100. * correct / num_examples
 
     print(f'Train set: Average loss: {train_loss:.4f}, '
-            f'Accuracy: {correct}/{num_examples} ({train_acc:.2f}%)')
+          f'Accuracy: {correct}/{num_examples} ({train_acc:.2f}%)')
 
     return train_loss, train_acc
 
