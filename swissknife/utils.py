@@ -63,8 +63,13 @@ def average_over_seed(seq_of_seq):
     return seq_of_seq.mean(0), seq_of_seq.std(0)
 
 
-def single_standard_deviation(sample):
-    return dict(mean=np.mean(sample), delta=np.std(sample))
+def single_standard_deviation(sample, return_type="tuple"):
+    if return_type == "tuple":
+        return np.mean(sample), np.std(sample)
+    elif return_type == "dict":
+        return dict(mean=np.mean(sample), delta=np.std(sample))
+    else:
+        raise ValueError(f"Unknown return_type: {return_type}")
 
 
 def confidence_interval(sample, alpha=0.05):
