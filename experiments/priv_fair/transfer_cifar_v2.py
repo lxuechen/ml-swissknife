@@ -15,7 +15,7 @@ Run from root:
 Put all the converted features in `base_dir`
 """
 # TODO:
-#   2) evaluation by group,
+#   1) imbalanced loader!
 #   3) disparate impact vs scale,
 #   4) increasing majority group help (positive transfer)?
 
@@ -31,7 +31,7 @@ from swissknife import utils
 from .misc.data import get_data
 from .misc.dp_utils import ORDERS, get_privacy_spent, get_renyi_divergence
 from .misc.log import Logger
-from .misc.train_utils import train, test
+from .misc.train_utils import train, test, test_by_groups
 
 
 def get_cifar10_tensor_dataset(base_dir, feature_path):
@@ -84,6 +84,10 @@ def non_private_training(
         train_loss, train_acc = train(model, train_loader, optimizer, n_acc_steps=n_acc_steps)
         test_loss, test_acc = test(model, test_loader)
         logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc)
+
+        zeon_by_groups, xent_by_groups = test_by_groups(model, test_loader)
+        print(zeon_by_groups, xent_by_groups)
+
         history.append(
             dict(epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc)
         )
@@ -152,6 +156,9 @@ def private_training(
             epsilon = None
 
         logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc, epsilon)
+
+        zeon_by_groups, xent_by_groups = test_by_groups(model, test_loader)
+        print(zeon_by_groups, xent_by_groups)
 
         history.append(
             dict(epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc)
