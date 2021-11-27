@@ -256,6 +256,6 @@ if __name__ == '__main__':
     parser.add_argument('--imba', type=utils.str2bool, default=False, const=True, nargs="?")
     parser.add_argument('--alpha', type=float, default=0.9, help="Decay rate for power law or exponential.")
     args = parser.parse_args()
-
+    utils.write_argparse(args)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     main(**vars(args))
