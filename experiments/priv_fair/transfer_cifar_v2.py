@@ -14,8 +14,6 @@ Run from root:
 
 Put all the converted features in `base_dir`
 """
-# TODO:
-#   4) increasing majority group help (positive transfer)?
 
 import argparse
 import collections
@@ -180,6 +178,7 @@ def private_training(
     imba=False, alpha=0.9,
     offset_sizes_path=None,
     base_size=5000,
+    target_epsilon=None, target_delta=None,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
@@ -214,6 +213,21 @@ def private_training(
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, nesterov=nesterov)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    if noise_multiplier is None:
+        if target_epsilon is None:
+            raise ValueError(f"`target_epsilon` cannot be None when `noise_multiplier` is None.")
+
+        import private_transformers
+        steps = (len(trainset) // bs) * epochs
+        noise_multiplier = private_transformers.privacy_utils.privacy_engine.get_sigma_from_rdp_cks(
+            target_epsilon=target_epsilon,
+            target_delta=target_delta,
+            sample_rate=bs / len(trainset),
+            steps=steps,  # IMPORTANT: Don't use epochs, as you can't take "half-steps"!!!
+            alphas=ORDERS,
+        )
+        print(f'`noise_multiplier`={noise_multiplier}')
 
     privacy_engine = PrivacyEngine(
         model,
@@ -255,6 +269,7 @@ def private_training(
                 train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
                 test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups,
                 train_cls_sizes=train_cls_sizes, test_cls_sizes=test_cls_sizes,
+                epsilon=epsilon,
             )
         )
 
@@ -280,7 +295,9 @@ if __name__ == '__main__':
     parser.add_argument('--optim', type=str, default="SGD", choices=["SGD", "Adam"])
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--nesterov', action="store_true")
-    parser.add_argument('--noise_multiplier', type=float, default=1)
+    parser.add_argument('--noise_multiplier', type=float, default=None)
+    parser.add_argument('--target_epsilon', type=float, default=None)
+    parser.add_argument('--target_delta', type=float, default=1e-5)
     parser.add_argument('--max_grad_norm', type=float, default=0.1)
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--feature_path', default=None)
