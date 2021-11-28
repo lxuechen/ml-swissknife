@@ -45,7 +45,7 @@ def main(
     commands = []
 
     for alpha in alphas:
-        for feature_path in available_simclr_models:
+        for feature_path in ('r152_1x_sk1', 'r152_2x_sk1', 'r152_3x_sk1'):
             feature_path = "simclr_" + feature_path
             for task in tasks:
                 for offset_size in (10, 20, 50, 100, 200, 500, 1000, 2000,):
