@@ -14,6 +14,19 @@ import tqdm
 
 from .download import available_simclr_models
 
+# Tensorflow is just annoying...
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
+
 tf.disable_eager_execution()
 import tensorflow_hub as hub
 from sklearn.linear_model import LogisticRegression
@@ -133,20 +146,46 @@ def preprocess_image(image, height, width, is_training=False,
     return preprocess_for_eval(image, height, width, test_crop)
 
 
-(xtrain, ytrain), (xtest, ytest) = tf.keras.datasets.cifar10.load_data()
-xtrain = xtrain.astype(np.float32) / 255.0
-xtest = xtest.astype(np.float32) / 255.0
-ytrain = ytrain.reshape(-1)
-ytest = ytest.reshape(-1)
-
-
 def _preprocess(x):
     x = preprocess_image(x, 224, 224, is_training=False, color_distort=False)
     return x
 
 
-def _extract_single(model_name="r50_2x_sk1", evaluate=False):
-    batch_size = 100
+def _extract_single(
+    model_name="r50_2x_sk1", evaluate=False, dataset="cifar-10.2",
+    batch_size=25  # Must be a multiple of the train and test sizes.
+):
+    if dataset == "cifar-10":
+        (xtrain, ytrain), (xtest, ytest) = tf.keras.datasets.cifar10.load_data()
+        xtrain = xtrain.astype(np.float32) / 255.0
+        xtest = xtest.astype(np.float32) / 255.0
+        ytrain = ytrain.reshape(-1)
+        ytest = ytest.reshape(-1)
+    elif dataset == "cinic-10":
+        raise NotImplemented
+    elif dataset == "cifar-10.2":
+        train_file = np.load(
+            '/home/lxuechen_stanford_edu/software/swissknife/experiments/priv_fair/data/cifar-10.2-master'
+            '/cifar102_train.npz',
+        )
+        test_file = np.load(
+            '/home/lxuechen_stanford_edu/software/swissknife/experiments/priv_fair/data/cifar-10.2-master'
+            '/cifar102_test.npz',
+        )
+        xtrain = train_file["images"]
+        xtest = test_file["images"]
+
+        ytrain = train_file["labels"]
+        ytest = test_file["labels"]
+
+        xtrain = xtrain.astype(np.float32) / 255.0
+        xtest = xtest.astype(np.float32) / 255.0
+
+        ytrain = ytrain.reshape(-1)
+        ytest = ytest.reshape(-1)
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
+
     x = tf.placeholder(shape=(batch_size, 32, 32, 3), dtype=tf.float32)
     x_preproc = tf.map_fn(_preprocess, x)
     print(x_preproc.get_shape().as_list())
@@ -178,9 +217,10 @@ def _extract_single(model_name="r50_2x_sk1", evaluate=False):
     features_test = np.concatenate(features_test, axis=0)
     print(features_test.shape)
 
-    os.makedirs("transfer/features/", exist_ok=True)
-    np.save(f"transfer/features/simclr_{model_name}_train.npy", features_train)
-    np.save(f"transfer/features/simclr_{model_name}_test.npy", features_test)
+    base_dir = f"/nlp/scr/lxuechen/features/{dataset}"
+    os.makedirs(base_dir, exist_ok=True)
+    np.save(f"{base_dir}/simclr_{model_name}_train.npy", features_train)
+    np.save(f"{base_dir}/simclr_{model_name}_test.npy", features_test)
 
     if evaluate:
         mean = np.mean(features_train, axis=0)
