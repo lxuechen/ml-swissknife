@@ -188,7 +188,7 @@ def _extract_single(
                     continue
                 images.append(img)
                 labels.append(get_label(img_path))
-            images = np.concatenate(images, axis=0)
+            images = np.stack(images, axis=0)
             labels = np.array(labels)
             split2data[split] = dict(x=images, y=labels)
 
