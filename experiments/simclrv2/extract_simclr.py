@@ -174,15 +174,12 @@ def _extract_single(
                     return class_label_index
             raise ValueError
 
-        split2data = dict()
         base_dir = "/nlp/scr/lxuechen/data/CINIC-10"
-        for split in ('train', 'valid', 'test'):
+
+        def get_images_and_labels(path):
             images = []
             labels = []
-            this_dir = utils.join(base_dir, split)
-            for i, img_path in tqdm.tqdm(
-                enumerate(utils.listfiles(this_dir)), desc=split
-            ):
+            for i, img_path in tqdm.tqdm(enumerate(utils.listfiles(path)), desc=path):
                 img = imageio.imread(img_path)
                 if img.shape != img_shape:
                     continue
@@ -190,17 +187,34 @@ def _extract_single(
                 labels.append(get_label(img_path))
             images = np.stack(images, axis=0)
             labels = np.array(labels)
-            split2data[split] = dict(x=images, y=labels)
 
-        xtrain = split2data["train"]['x']
-        ytrain = split2data["train"]['y']
-        xtest = split2data["test"]['x']
-        ytest = split2data["test"]['y']
+            images = images.astype(np.float32) / 255.0
+            labels = labels.reshape(-1)
+            print(images.shape)
+            print(images[0])
+            print(labels.shape)
+            return images, labels
 
-        xtrain = xtrain.astype(np.float32) / 255.0
-        xtest = xtest.astype(np.float32) / 255.0
-        ytrain = ytrain.reshape(-1)
-        ytest = ytest.reshape(-1)
+        # train
+        train_path = utils.join(base_dir, 'train')
+        train_npz_path = utils.join(base_dir, 'cinic10_train.npz')
+        if not os.path.exists(train_npz_path):
+            xtrain, ytrain = get_images_and_labels(path=train_path)
+            np.savez(images=xtrain, labels=ytrain)
+        else:
+            train_file = np.load(train_npz_path)
+            xtrain, ytrain = train_file["images"], train_file["labels"]
+
+        # test
+        test_path = utils.join(base_dir, 'test')
+        test_npz_path = utils.join(base_dir, 'cinic10_test.npz')
+        if not os.path.exists(test_npz_path):
+            xtest, ytest = get_images_and_labels(path=test_path)
+            np.savez(images=xtest, labels=ytest)
+        else:
+            test_file = np.load(test_npz_path)
+            xtest, ytest = test_file["images"], test_file["labels"]
+
     elif dataset == "cifar-10.2":
         train_file = np.load(
             '/home/lxuechen_stanford_edu/software/swissknife/experiments/priv_fair/data/cifar-10.2-master'
