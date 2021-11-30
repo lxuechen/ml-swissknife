@@ -200,7 +200,7 @@ def _extract_single(
         train_npz_path = utils.join(base_dir, 'cinic10_train.npz')
         if not os.path.exists(train_npz_path):
             xtrain, ytrain = get_images_and_labels(path=train_path)
-            np.savez(images=xtrain, labels=ytrain)
+            np.savez(train_npz_path, images=xtrain, labels=ytrain)
         else:
             train_file = np.load(train_npz_path)
             xtrain, ytrain = train_file["images"], train_file["labels"]
@@ -210,7 +210,7 @@ def _extract_single(
         test_npz_path = utils.join(base_dir, 'cinic10_test.npz')
         if not os.path.exists(test_npz_path):
             xtest, ytest = get_images_and_labels(path=test_path)
-            np.savez(images=xtest, labels=ytest)
+            np.savez(test_npz_path, images=xtest, labels=ytest)
         else:
             test_file = np.load(test_npz_path)
             xtest, ytest = test_file["images"], test_file["labels"]
