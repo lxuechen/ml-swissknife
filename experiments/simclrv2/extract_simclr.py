@@ -152,7 +152,7 @@ def _preprocess(x):
 
 
 def _extract_single(
-    model_name="r50_2x_sk1", evaluate=False, dataset="cifar-10.2",
+    model_name="r50_2x_sk1", evaluate=False, dataset="cinic-10",
     batch_size=25  # Must be a multiple of the train and test sizes.
 ):
     if dataset == "cifar-10":
@@ -162,7 +162,45 @@ def _extract_single(
         ytrain = ytrain.reshape(-1)
         ytest = ytest.reshape(-1)
     elif dataset == "cinic-10":
-        raise NotImplemented
+        import imageio
+        from swissknife import utils
+
+        img_shape = (32, 32, 3)  # Prescribed shape -- some images don't have this shape => fail!
+
+        def get_label(path):
+            class_labels = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+            for class_label_index, class_label in enumerate(class_labels):
+                if class_label in path:
+                    return class_label_index
+            raise ValueError
+
+        split2data = dict()
+        base_dir = "/nlp/scr/lxuechen/data/CINIC-10"
+        for split in ('train', 'valid', 'test'):
+            images = []
+            labels = []
+            this_dir = utils.join(base_dir, split)
+            for i, img_path in tqdm.tqdm(
+                enumerate(utils.listfiles(this_dir)), desc=split
+            ):
+                img = imageio.imread(img_path)
+                if img.shape != img_shape:
+                    continue
+                images.append(img)
+                labels.append(get_label(img_path))
+            images = np.concatenate(images, axis=0)
+            labels = np.array(labels)
+            split2data[split] = dict(x=images, y=labels)
+
+        xtrain = split2data["train"]['x']
+        ytrain = split2data["train"]['y']
+        xtest = split2data["test"]['x']
+        ytest = split2data["test"]['y']
+
+        xtrain = xtrain.astype(np.float32) / 255.0
+        xtest = xtest.astype(np.float32) / 255.0
+        ytrain = ytrain.reshape(-1)
+        ytest = ytest.reshape(-1)
     elif dataset == "cifar-10.2":
         train_file = np.load(
             '/home/lxuechen_stanford_edu/software/swissknife/experiments/priv_fair/data/cifar-10.2-master'
