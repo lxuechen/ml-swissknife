@@ -60,10 +60,15 @@ def main(
         plots = [dict(x=linear_interp_x, y=linear_interp_y, color='red', label=f"$R^2={r ** 2:.3f}$")]
 
         ood_dataset_name = dataset2name[ood_dataset]
+        img_path = (
+            f"/Users/xuechenli/remote/swissknife/experiments/priv_fair/plots/acc_on_the_line/cifar-10->{ood_dataset}"
+        )
         utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=('.png', '.pdf'),
             errorbars=[errorbar],
             plots=plots,
-            options=dict(linewidth=0., xlabel="CIFAR-10 accuracy", ylabel=f"{ood_dataset_name} accuracy")
+            options=dict(xlabel="CIFAR-10 accuracy", ylabel=f"{ood_dataset_name} accuracy")
         )
 
 
