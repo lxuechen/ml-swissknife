@@ -14,6 +14,11 @@ import numpy as np
 from swissknife import utils
 from ...simclrv2.download import available_simclr_models
 
+dataset2name = {
+    "cinic-10": "CINIC-10",
+    'cifar-10.2': "CIFAR-10.2"
+}
+
 
 def main(
     base_dir="/Users/xuechenli/Desktop/dump_a100/acc-on-the-line",
@@ -47,9 +52,18 @@ def main(
             errorbar["xerr"].append(xstd)
             errorbar["yerr"].append(ystd)
 
+        # Fit a line.
+        from scipy import stats
+        k, b, r, pval, stderr = stats.linregress(x=errorbar["x"], y=errorbar["y"])
+        linear_interp_x = np.array(errorbar["x"])
+        linear_interp_y = k * linear_interp_x + b
+        plots = [dict(x=linear_interp_x, y=linear_interp_y, color='red', label=f"$R^2={r ** 2:.3f}$")]
+
+        ood_dataset_name = dataset2name[ood_dataset]
         utils.plot_wrapper(
             errorbars=[errorbar],
-            options=dict(linewidth=0., xlabel="CIFAR-10 accuracy", ylabel=f"{ood_dataset} accuracy")
+            plots=plots,
+            options=dict(linewidth=0., xlabel="CIFAR-10 accuracy", ylabel=f"{ood_dataset_name} accuracy")
         )
 
 
