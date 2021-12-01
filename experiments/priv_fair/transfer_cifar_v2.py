@@ -28,14 +28,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from swissknife import utils
-from .misc.data import get_data
 from .misc.dp_utils import ORDERS, get_privacy_spent, get_renyi_divergence
 from .misc.log import Logger
 from .misc.train_utils import train, test, test_by_groups
 from .shared import exponential_decay, power_law_decay
 
 
-def get_cifar10_imbalanced_tensor_dataset(
+def get_imbalanced_tensor_dataset(
     base_dir, feature_path, decay_type="exponential", alpha=0.9,
     base_size=5000,
     offset_sizes_path: Optional[str] = None,
@@ -46,12 +45,11 @@ def get_cifar10_imbalanced_tensor_dataset(
     else:
         offset_sizes = dict()
 
-    x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
-    x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
+    train_data = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
+    test_data = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
 
-    train_data, test_data = get_data("cifar10", augment=False)
-    y_train = np.asarray(train_data.targets)
-    y_test = np.asarray(test_data.targets)
+    x_train, y_train = train_data["features"], train_data["labels"]
+    x_test, y_test = test_data["features"], test_data["labels"]
 
     # Collect training example id for each class.
     per_class_list = collections.defaultdict(list)
@@ -82,13 +80,12 @@ def get_cifar10_imbalanced_tensor_dataset(
     return trainset, testset
 
 
-def get_cifar10_tensor_dataset(base_dir, feature_path):
-    x_train = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
-    x_test = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
+def get_tensor_dataset(base_dir, feature_path):
+    train_data = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
+    test_data = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
 
-    train_data, test_data = get_data("cifar10", augment=False)
-    y_train = np.asarray(train_data.targets)
-    y_test = np.asarray(test_data.targets)
+    x_train, y_train = train_data["features"], train_data["labels"]
+    x_test, y_test = test_data["features"], test_data["labels"]
 
     trainset = torch.utils.data.TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
     testset = torch.utils.data.TensorDataset(torch.from_numpy(x_test), torch.from_numpy(y_test))
@@ -106,21 +103,24 @@ def get_class_sizes(loader: DataLoader):
 
 
 def non_private_training(
+    base_dir,
     feature_path=None, batch_size=2048, mini_batch_size=256,
     lr=1, optim="SGD", momentum=0.9, nesterov=False, epochs=100, logdir=None,
-    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0, imba=False, alpha=0.9,
-    offset_sizes_path=None, base_size=5000, **kwargs,
+    train_dir=None, seed=0, imba=False, alpha=0.9,
+    offset_sizes_path=None, base_size=5000,
+    ood_datasets=(),
+    **kwargs,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
 
     if imba:
-        trainset, testset = get_cifar10_imbalanced_tensor_dataset(
+        trainset, testset = get_imbalanced_tensor_dataset(
             base_dir=base_dir, feature_path=feature_path, alpha=alpha, offset_sizes_path=offset_sizes_path,
             base_size=base_size,
         )
     else:
-        trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
+        trainset, testset = get_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
 
     bs = batch_size
     assert bs % mini_batch_size == 0
@@ -131,9 +131,27 @@ def non_private_training(
     test_loader = DataLoader(
         testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
-
     train_cls_sizes = get_class_sizes(train_loader)
     test_cls_sizes = get_class_sizes(test_loader)
+
+    if len(ood_datasets) > 0:
+        ood_loaders = []
+        for ood_dataset in ood_datasets:
+            if ood_dataset == 'cinic-10':
+                this_path = "/nlp/scr/lxuechen/features/cinic-10"
+            elif ood_dataset == "cifar-10.2":
+                this_path = "/nlp/scr/lxuechen/features/cifar-10.2"
+            elif ood_dataset == "cifar-10":  # When in-distribution is cinic-10 or cifar-10.2.
+                this_path = "/nlp/scr/lxuechen/features/cifar-10"
+            else:
+                raise ValueError(f"Unknown ood_dataset: {ood_dataset}")
+            _, ood_testset = get_tensor_dataset(base_dir=this_path, feature_path=feature_path)
+            ood_loader = DataLoader(
+                ood_testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=False
+            )
+            ood_loaders.append(ood_loader)
+    else:
+        ood_loaders = []
 
     # Get the shape of features.
     x_batch, y_batch = next(iter(train_loader))
@@ -156,14 +174,18 @@ def non_private_training(
         train_zeon_by_groups, train_xent_by_groups = test_by_groups(model, train_loader)
         test_zeon_by_groups, test_xent_by_groups = test_by_groups(model, test_loader)
 
-        history.append(
-            dict(
-                epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
-                train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
-                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups,
-                train_cls_sizes=train_cls_sizes, test_cls_sizes=test_cls_sizes,
-            )
+        results = dict(
+            epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
+            train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
+            test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups,
+            train_cls_sizes=train_cls_sizes, test_cls_sizes=test_cls_sizes,
         )
+        if len(ood_datasets) > 0 and len(ood_loaders) > 0:
+            for ood_dataset, ood_loader in utils.zip_(ood_datasets, ood_loaders):
+                ood_zeon, ood_xent = test(model, ood_loader)
+                results[ood_dataset] = dict(test_xent=ood_xent, test_zeon=ood_zeon)
+
+        history.append(results)
 
     if train_dir is not None:
         dump_path = os.path.join(train_dir, 'log_history.json')
@@ -171,25 +193,27 @@ def non_private_training(
 
 
 def private_training(
+    base_dir,
     feature_path=None, batch_size=2048, mini_batch_size=256,
     lr=1, optim="SGD", momentum=0.9, nesterov=False, noise_multiplier=1,
-    max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None,
-    base_dir="/nlp/scr/lxuechen/features", train_dir=None, seed=0,
+    max_grad_norm=0.1, max_epsilon=None, epochs=100, logdir=None, train_dir=None, seed=0,
     imba=False, alpha=0.9,
     offset_sizes_path=None,
     base_size=5000,
     target_epsilon=None, target_delta=None,
+    ood_datasets=(),
+    **kwargs,
 ):
     utils.manual_seed(seed)
     logger = Logger(logdir)
 
     if imba:
-        trainset, testset = get_cifar10_imbalanced_tensor_dataset(
+        trainset, testset = get_imbalanced_tensor_dataset(
             base_dir=base_dir, feature_path=feature_path, alpha=alpha, offset_sizes_path=offset_sizes_path,
             base_size=base_size,
         )
     else:
-        trainset, testset = get_cifar10_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
+        trainset, testset = get_tensor_dataset(base_dir=base_dir, feature_path=feature_path)
 
     bs = batch_size
     assert bs % mini_batch_size == 0
@@ -200,9 +224,27 @@ def private_training(
     test_loader = DataLoader(
         testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
-
     train_cls_sizes = get_class_sizes(train_loader)
     test_cls_sizes = get_class_sizes(test_loader)
+
+    if len(ood_datasets) > 0:
+        ood_loaders = []
+        for ood_dataset in ood_datasets:
+            if ood_dataset == 'cinic-10':
+                this_path = "/nlp/scr/lxuechen/features/cinic-10"
+            elif ood_dataset == "cifar-10.2":
+                this_path = "/nlp/scr/lxuechen/features/cifar-10.2"
+            elif ood_dataset == "cifar-10":  # When in-distribution is cinic-10 or cifar-10.2.
+                this_path = "/nlp/scr/lxuechen/features/cifar-10"
+            else:
+                raise ValueError(f"Unknown ood_dataset: {ood_dataset}")
+            _, ood_testset = get_tensor_dataset(base_dir=this_path, feature_path=feature_path)
+            ood_loader = DataLoader(
+                ood_testset, batch_size=mini_batch_size, shuffle=False, num_workers=1, pin_memory=False
+            )
+            ood_loaders.append(ood_loader)
+    else:
+        ood_loaders = []
 
     # Get the shape of features.
     x_batch, y_batch = next(iter(train_loader))
@@ -263,15 +305,18 @@ def private_training(
         train_zeon_by_groups, train_xent_by_groups = test_by_groups(model, train_loader)
         test_zeon_by_groups, test_xent_by_groups = test_by_groups(model, test_loader)
 
-        history.append(
-            dict(
-                epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
-                train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
-                test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups,
-                train_cls_sizes=train_cls_sizes, test_cls_sizes=test_cls_sizes,
-                epsilon=epsilon,
-            )
+        results = dict(
+            epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
+            train_zeon_by_groups=train_zeon_by_groups, train_xent_by_groups=train_xent_by_groups,
+            test_zeon_by_groups=test_zeon_by_groups, test_xent_by_groups=test_xent_by_groups,
+            train_cls_sizes=train_cls_sizes, test_cls_sizes=test_cls_sizes,
         )
+        if len(ood_datasets) > 0 and len(ood_loaders) > 0:
+            for ood_dataset, ood_loader in utils.zip_(ood_datasets, ood_loaders):
+                ood_zeon, ood_xent = test(model, ood_loader)
+                results[ood_dataset] = dict(test_xent=ood_xent, test_zeon=ood_zeon)
+
+        history.append(results)
 
     if train_dir is not None:
         dump_path = os.path.join(train_dir, 'log_history.json')
@@ -303,7 +348,7 @@ if __name__ == '__main__':
     parser.add_argument('--feature_path', default=None)
     parser.add_argument('--max_epsilon', type=float, default=None)
     parser.add_argument('--logdir', default=None)
-    parser.add_argument('--base_dir', default="/nlp/scr/lxuechen/features", type=str)
+    parser.add_argument('--base_dir', default="/nlp/scr/lxuechen/features/cifar-10", type=str)
     parser.add_argument('--train_dir', default=None, type=str)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--task', type=str, default="private", choices=("private", "non_private"))
@@ -311,6 +356,7 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.9, help="Decay rate for power law or exponential.")
     parser.add_argument('--offset_sizes_path', type=str, default=None, help="Path to a json file specifying offsets.")
     parser.add_argument('--base_size', type=int, default=5000)
+    parser.add_argument('--ood_datasets', default=(), nargs='*')
     args = parser.parse_args()
     utils.write_argparse(args)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

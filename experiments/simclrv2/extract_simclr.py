@@ -5,7 +5,9 @@ Unmodified from Florian's codebase
     https://github.com/ftramer/Handcrafted-DP/blob/main/transfer/extract_simclr.py
 
 Run
-    python -m experiments.simclrv2.extract_simclr
+    python -m experiments.simclrv2.extract_simclr --dataset "cifar-10" &
+    python -m experiments.simclrv2.extract_simclr --dataset "cifar-10.2" &
+    python -m experiments.simclrv2.extract_simclr --dataset "cinic-10" &
 """
 
 import numpy as np
@@ -152,7 +154,9 @@ def _preprocess(x):
 
 
 def _extract_single(
-    model_name="r50_2x_sk1", evaluate=False, dataset="cinic-10",
+    model_name="r50_2x_sk1",
+    evaluate=False,
+    dataset="cifar-10",
     batch_size=25  # Must be a multiple of the train and test sizes.
 ):
     if dataset == "cifar-10":
@@ -271,8 +275,8 @@ def _extract_single(
 
     base_dir = f"/nlp/scr/lxuechen/features/{dataset}"
     os.makedirs(base_dir, exist_ok=True)
-    np.save(f"{base_dir}/simclr_{model_name}_train.npy", features_train)
-    np.save(f"{base_dir}/simclr_{model_name}_test.npy", features_test)
+    np.savez(f"{base_dir}/simclr_{model_name}_train.npy", features=features_train, labels=ytrain)
+    np.savez(f"{base_dir}/simclr_{model_name}_test.npy", features=features_test, labels=ytest)
 
     if evaluate:
         mean = np.mean(features_train, axis=0)
@@ -289,9 +293,9 @@ def _extract_single(
             print(C, clf.score(features_train_norm, ytrain), clf.score(features_test_norm, ytest))
 
 
-def main():
+def main(**kwargs):
     for model_name in available_simclr_models:
-        _extract_single(model_name=model_name)
+        _extract_single(model_name=model_name, **kwargs)
 
 
 if __name__ == "__main__":
