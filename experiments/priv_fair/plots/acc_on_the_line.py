@@ -22,7 +22,7 @@ def main(
     ood_datasets=("cinic-10", "cifar-10.2"),
 ):
     for ood_dataset in ood_datasets:  # One figure for each ood dataset.
-        errorbar = dict(x=[], y=[], yerr=[], xerr=[])
+        errorbar = dict(x=[], y=[], yerr=[], xerr=[], ls='none', fmt='none', )
         for model in available_simclr_models:  # Each model provides one datapoint.
             model = "simclr_" + model
             xvals, yvals = [], []
@@ -48,7 +48,8 @@ def main(
             errorbar["yerr"].append(ystd)
 
         utils.plot_wrapper(
-            errorbars=[errorbar]
+            errorbars=[errorbar],
+            options=dict(linewidth=0., xlabel="CIFAR-10 accuracy", ylabel=f"{ood_dataset} accuracy")
         )
 
 
