@@ -59,14 +59,14 @@ def train(model, train_loader, optimizer, n_acc_steps=1):
 
 
 @torch.no_grad()
-def test(model, test_loader):
+def test(model, test_loader, msg=''):
     device = next(model.parameters()).device
     model.eval()
     num_examples = 0
     test_loss = 0
     correct = 0
 
-    for data, target in test_loader:
+    for i, (data, target) in enumerate(test_loader):
         data, target = data.to(device), target.to(device)
         output = model(data)
         test_loss += F.cross_entropy(output, target, reduction='sum').item()
@@ -77,7 +77,8 @@ def test(model, test_loader):
     test_loss /= num_examples
     test_acc = 100. * correct / num_examples
 
-    print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{num_examples} ({test_acc:.2f}%)')
+    msg += f"Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{num_examples} ({test_acc:.2f}%)"
+    print(msg)
 
     return test_loss, test_acc
 
