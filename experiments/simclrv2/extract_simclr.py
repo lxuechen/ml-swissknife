@@ -8,6 +8,7 @@ Run
     python -m experiments.simclrv2.extract_simclr --dataset "cifar-10" &
     python -m experiments.simclrv2.extract_simclr --dataset "cifar-10.2" &
     python -m experiments.simclrv2.extract_simclr --dataset "cinic-10" &
+    python -m experiments.simclrv2.extract_simclr --dataset "cinic-10-pure" &
 """
 
 import numpy as np
@@ -156,8 +157,8 @@ def _preprocess(x):
 def _extract_single(
     model_name="r50_2x_sk1",
     evaluate=False,
-    dataset="cifar-10",
-    batch_size=200  # Must be a multiple of the train and test sizes.
+    dataset="cifar-10",  # One of cifar-10, cinic-10, cifar-10.2, cinic-10-pure.
+    batch_size=200,
 ):
     if dataset == "cifar-10":
         (xtrain, ytrain), (xtest, ytest) = tf.keras.datasets.cifar10.load_data()
@@ -165,11 +166,12 @@ def _extract_single(
         xtest = xtest.astype(np.float32) / 255.0
         ytrain = ytrain.reshape(-1)
         ytest = ytest.reshape(-1)
-    elif dataset == "cinic-10":
+    elif dataset in ("cinic-10", "cinic-10-pure"):
         import imageio
         from swissknife import utils
 
         img_shape = (32, 32, 3)  # Prescribed shape -- some images don't have this shape => fail!
+        base_dir = "/nlp/scr/lxuechen/data/CINIC-10"
 
         def get_label(path):
             class_labels = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
@@ -178,12 +180,13 @@ def _extract_single(
                     return class_label_index
             raise ValueError
 
-        base_dir = "/nlp/scr/lxuechen/data/CINIC-10"
-
         def get_images_and_labels(path):
             images = []
             labels = []
             for i, img_path in tqdm.tqdm(enumerate(utils.listfiles(path)), desc=path):
+                if dataset == "cinic-10-pure":  # Exclude the original CIFAR-10.
+                    if 'cifar10-train' in img_path or 'cifar10-test' in img_path:
+                        continue
                 img = imageio.imread(img_path)
                 if img.shape != img_shape:
                     continue
@@ -198,7 +201,7 @@ def _extract_single(
 
         # train
         train_path = utils.join(base_dir, 'train')
-        train_npz_path = utils.join(base_dir, 'cinic10_train.npz')
+        train_npz_path = utils.join(base_dir, f'{dataset}_train.npz')
         if not os.path.exists(train_npz_path):
             xtrain, ytrain = get_images_and_labels(path=train_path)
             np.savez(train_npz_path, images=xtrain, labels=ytrain)
@@ -208,7 +211,7 @@ def _extract_single(
 
         # test
         test_path = utils.join(base_dir, 'test')
-        test_npz_path = utils.join(base_dir, 'cinic10_test.npz')
+        test_npz_path = utils.join(base_dir, f'{dataset}_test.npz')
         if not os.path.exists(test_npz_path):
             xtest, ytest = get_images_and_labels(path=test_path)
             np.savez(test_npz_path, images=xtest, labels=ytest)
