@@ -113,4 +113,4 @@ def test_by_groups(model, test_loader):
     zeons = {key: zeons[key] for key in sorted(zeons.keys())}
     xents = {key: xents[key] for key in sorted(xents.keys())}
 
-    return zeons, xents
+    return xents, zeons

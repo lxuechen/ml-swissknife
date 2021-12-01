@@ -2,8 +2,6 @@
 Check the accuracy gap as you vary scale for each group.
 
 python -m experiments.priv_fair.plots.priv_fair
-
-TODO: Replot after fixing bug.
 """
 
 import os
@@ -17,14 +15,14 @@ def main(
     base_dir="/Users/xuechenli/Desktop/dump_a100/priv-fair",
     seeds=tuple(range(5)),
     groups=(0, 9),
-    alpha=0.9,
+    alpha=0.8,
 ):
     # Show scale w.r.t depth.
     depths = (50, 101, 152)
     errorbars = []
     plots = []
-    for sk_mode in (0,):
-        for width_factor in (1,):
+    for sk_mode in (1,):
+        for width_factor in (2,):
             for group in groups:
                 for task in ('non_private', 'private'):
 

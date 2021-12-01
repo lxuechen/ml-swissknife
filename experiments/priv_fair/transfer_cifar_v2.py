@@ -171,8 +171,8 @@ def non_private_training(
         test_loss, test_acc = test(model, test_loader)
         logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc)
 
-        train_zeon_by_groups, train_xent_by_groups = test_by_groups(model, train_loader)
-        test_zeon_by_groups, test_xent_by_groups = test_by_groups(model, test_loader)
+        train_xent_by_groups, train_zeon_by_groups = test_by_groups(model, train_loader)
+        test_xent_by_groups, test_zeon_by_groups = test_by_groups(model, test_loader)
 
         results = dict(
             epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
@@ -182,7 +182,7 @@ def non_private_training(
         )
         if len(ood_datasets) > 0 and len(ood_loaders) > 0:
             for ood_dataset, ood_loader in utils.zip_(ood_datasets, ood_loaders):
-                ood_zeon, ood_xent = test(model, ood_loader)
+                ood_xent, ood_zeon = test(model, ood_loader)
                 results[ood_dataset] = dict(test_xent=ood_xent, test_zeon=ood_zeon)
 
         history.append(results)
@@ -302,8 +302,8 @@ def private_training(
 
         logger.log_epoch(epoch, train_loss, train_acc, test_loss, test_acc, epsilon)
 
-        train_zeon_by_groups, train_xent_by_groups = test_by_groups(model, train_loader)
-        test_zeon_by_groups, test_xent_by_groups = test_by_groups(model, test_loader)
+        train_xent_by_groups, train_zeon_by_groups = test_by_groups(model, train_loader)
+        test_xent_by_groups, test_zeon_by_groups = test_by_groups(model, test_loader)
 
         results = dict(
             epoch=epoch, train_xent=train_loss, train_zeon=train_acc, test_xent=test_loss, test_zeon=test_acc,
@@ -313,7 +313,7 @@ def private_training(
         )
         if len(ood_datasets) > 0 and len(ood_loaders) > 0:
             for ood_dataset, ood_loader in utils.zip_(ood_datasets, ood_loaders):
-                ood_zeon, ood_xent = test(model, ood_loader, msg=f"{ood_dataset}: ")
+                ood_xent, ood_zeon = test(model, ood_loader, msg=f"{ood_dataset}: ")
                 results[ood_dataset] = dict(test_xent=ood_xent, test_zeon=ood_zeon)
 
         history.append(results)
