@@ -275,8 +275,8 @@ def _extract_single(
 
     base_dir = f"/nlp/scr/lxuechen/features/{dataset}"
     os.makedirs(base_dir, exist_ok=True)
-    np.savez(f"{base_dir}/simclr_{model_name}_train.npy", features=features_train, labels=ytrain)
-    np.savez(f"{base_dir}/simclr_{model_name}_test.npy", features=features_test, labels=ytest)
+    np.savez(f"{base_dir}/simclr_{model_name}_train.npz", features=features_train, labels=ytrain)
+    np.savez(f"{base_dir}/simclr_{model_name}_test.npz", features=features_test, labels=ytest)
 
     if evaluate:
         mean = np.mean(features_train, axis=0)
