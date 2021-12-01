@@ -2,10 +2,6 @@
 CIFAR-10 -> CINIC-10, CIFAR-10.2 experiment on 11/30/21.
 
 python -m experiments.priv_fair.plots.acc_on_the_line
-
-TODO:
-    Need script for probit regression.
-    Plot line interp + R^2.
 """
 
 import fire
@@ -25,11 +21,12 @@ def main(
     tasks=("private", "non_private"),
     seeds=tuple(range(5)),
     ood_datasets=("cinic-10", "cifar-10.2"),
+    colors=('red', 'blue'),
 ):
     for ood_dataset in ood_datasets:  # One figure for each ood dataset.
         plots = []
         ebars = []
-        for task in tasks:
+        for task, color in zip(tasks, colors):
             errorbar = dict(x=[], y=[], yerr=[], xerr=[], ls='none', fmt='none', label=f"{task}")
             for model in available_simclr_models:  # Each model provides one datapoint.
                 model = "simclr_" + model
@@ -60,7 +57,7 @@ def main(
             k, b, r, pval, stderr = stats.linregress(x=errorbar["x"], y=errorbar["y"])
             linear_interp_x = np.array(errorbar["x"])
             linear_interp_y = k * linear_interp_x + b
-            plot = dict(x=linear_interp_x, y=linear_interp_y, color='red', label=f"{task} ($R^2={r ** 2:.3f}$)")
+            plot = dict(x=linear_interp_x, y=linear_interp_y, color=color, label=f"{task} ($R^2={r ** 2:.3f}$)")
 
             ebars.append(errorbar)
             plots.append(plot)
