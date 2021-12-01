@@ -182,7 +182,7 @@ def non_private_training(
         )
         if len(ood_datasets) > 0 and len(ood_loaders) > 0:
             for ood_dataset, ood_loader in utils.zip_(ood_datasets, ood_loaders):
-                ood_xent, ood_zeon = test(model, ood_loader)
+                ood_xent, ood_zeon = test(model, ood_loader, msg=f"{ood_dataset}: ")
                 results[ood_dataset] = dict(test_xent=ood_xent, test_zeon=ood_zeon)
 
         history.append(results)
