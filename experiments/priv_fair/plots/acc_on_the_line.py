@@ -22,42 +22,48 @@ dataset2name = {
 
 def main(
     base_dir="/Users/xuechenli/Desktop/dump_a100/acc-on-the-line",
-    task="private",
+    tasks=("private", "non_private"),
     seeds=tuple(range(5)),
     ood_datasets=("cinic-10", "cifar-10.2"),
 ):
     for ood_dataset in ood_datasets:  # One figure for each ood dataset.
-        errorbar = dict(x=[], y=[], yerr=[], xerr=[], ls='none', fmt='none', )
-        for model in available_simclr_models:  # Each model provides one datapoint.
-            model = "simclr_" + model
-            xvals, yvals = [], []
-            for seed in seeds:
-                path = utils.join(base_dir, model, task, f"{seed}")
+        plots = []
+        ebars = []
+        for task in tasks:
+            errorbar = dict(x=[], y=[], yerr=[], xerr=[], ls='none', fmt='none', label=f"{task}")
+            for model in available_simclr_models:  # Each model provides one datapoint.
+                model = "simclr_" + model
+                xvals, yvals = [], []
+                for seed in seeds:
+                    path = utils.join(base_dir, model, task, f"{seed}")
 
-                log_history_path = utils.join(path, 'log_history.json')
-                log_history = utils.jload(log_history_path)
-                last_result = log_history[-1]
+                    log_history_path = utils.join(path, 'log_history.json')
+                    log_history = utils.jload(log_history_path)
+                    last_result = log_history[-1]
 
-                id_acc = last_result["test_zeon"]
-                od_acc = last_result[ood_dataset]["test_xent"]  # TODO: Fix this in the future.
+                    id_acc = last_result["test_zeon"]
+                    od_acc = last_result[ood_dataset]["test_zeon"]
 
-                xvals.append(id_acc)
-                yvals.append(od_acc)
+                    xvals.append(id_acc)
+                    yvals.append(od_acc)
 
-            xavg, xstd = np.mean(xvals), np.std(xvals)
-            yavg, ystd = np.mean(yvals), np.std(yvals)
-            errorbar["x"].append(xavg)
-            errorbar["y"].append(yavg)
+                xavg, xstd = np.mean(xvals), np.std(xvals)
+                yavg, ystd = np.mean(yvals), np.std(yvals)
+                errorbar["x"].append(xavg)
+                errorbar["y"].append(yavg)
 
-            errorbar["xerr"].append(xstd)
-            errorbar["yerr"].append(ystd)
+                errorbar["xerr"].append(xstd)
+                errorbar["yerr"].append(ystd)
 
-        # Fit a line.
-        from scipy import stats
-        k, b, r, pval, stderr = stats.linregress(x=errorbar["x"], y=errorbar["y"])
-        linear_interp_x = np.array(errorbar["x"])
-        linear_interp_y = k * linear_interp_x + b
-        plots = [dict(x=linear_interp_x, y=linear_interp_y, color='red', label=f"$R^2={r ** 2:.3f}$")]
+            # Fit a line.
+            from scipy import stats
+            k, b, r, pval, stderr = stats.linregress(x=errorbar["x"], y=errorbar["y"])
+            linear_interp_x = np.array(errorbar["x"])
+            linear_interp_y = k * linear_interp_x + b
+            plot = dict(x=linear_interp_x, y=linear_interp_y, color='red', label=f"{task} ($R^2={r ** 2:.3f}$)")
+
+            ebars.append(errorbar)
+            plots.append(plot)
 
         ood_dataset_name = dataset2name[ood_dataset]
         img_path = (
@@ -66,7 +72,7 @@ def main(
         utils.plot_wrapper(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
-            errorbars=[errorbar],
+            errorbars=ebars,
             plots=plots,
             options=dict(xlabel="CIFAR-10 accuracy", ylabel=f"{ood_dataset_name} accuracy")
         )
