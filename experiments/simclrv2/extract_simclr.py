@@ -157,7 +157,7 @@ def _extract_single(
     model_name="r50_2x_sk1",
     evaluate=False,
     dataset="cifar-10",
-    batch_size=25  # Must be a multiple of the train and test sizes.
+    batch_size=200  # Must be a multiple of the train and test sizes.
 ):
     if dataset == "cifar-10":
         (xtrain, ytrain), (xtest, ytest) = tf.keras.datasets.cifar10.load_data()
@@ -194,9 +194,6 @@ def _extract_single(
 
             images = images.astype(np.float32) / 255.0
             labels = labels.reshape(-1)
-            print(images.shape)
-            print(images[0])
-            print(labels.shape)
             return images, labels
 
         # train
@@ -260,18 +257,28 @@ def _extract_single(
         x_batch = xtrain[i * batch_size:(i + 1) * batch_size]
         f = sess.run(features, feed_dict={x: x_batch})
         features_train.append(f)
+    if batch_size * (len(xtrain) // batch_size) < len(xtrain):
+        x_batch = xtrain[(i + 1) * batch_size:]
+        f = sess.run(features, feed_dict={x: x_batch})
+        features_train.append(f)
 
     features_train = np.concatenate(features_train, axis=0)
     print(features_train.shape)
+    assert features_train.shape[0] == len(xtrain)
 
     features_test = []
     for i in tqdm.tqdm(range(len(xtest) // batch_size), desc="test batches"):
         x_batch = xtest[i * batch_size:(i + 1) * batch_size]
         f = sess.run(features, feed_dict={x: x_batch})
         features_test.append(f)
+    if batch_size * (len(xtest) // batch_size) < len(xtest):
+        x_batch = xtest[(i + 1) * batch_size:]
+        f = sess.run(features, feed_dict={x: x_batch})
+        features_test.append(f)
 
     features_test = np.concatenate(features_test, axis=0)
     print(features_test.shape)
+    assert features_test.shape[0] == len(xtest)
 
     base_dir = f"/nlp/scr/lxuechen/features/{dataset}"
     os.makedirs(base_dir, exist_ok=True)

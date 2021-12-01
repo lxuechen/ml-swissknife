@@ -45,8 +45,8 @@ def get_imbalanced_tensor_dataset(
     else:
         offset_sizes = dict()
 
-    train_data = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
-    test_data = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
+    train_data = np.load(os.path.join(base_dir, f"{feature_path}_train.npz"))
+    test_data = np.load(os.path.join(base_dir, f"{feature_path}_test.npz"))
 
     x_train, y_train = train_data["features"], train_data["labels"]
     x_test, y_test = test_data["features"], test_data["labels"]
@@ -81,8 +81,8 @@ def get_imbalanced_tensor_dataset(
 
 
 def get_tensor_dataset(base_dir, feature_path):
-    train_data = np.load(os.path.join(base_dir, f"{feature_path}_train.npy"))
-    test_data = np.load(os.path.join(base_dir, f"{feature_path}_test.npy"))
+    train_data = np.load(os.path.join(base_dir, f"{feature_path}_train.npz"))
+    test_data = np.load(os.path.join(base_dir, f"{feature_path}_test.npz"))
 
     x_train, y_train = train_data["features"], train_data["labels"]
     x_test, y_test = test_data["features"], test_data["labels"]
