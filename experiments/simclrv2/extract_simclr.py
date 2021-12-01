@@ -239,7 +239,7 @@ def _extract_single(
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
-    x = tf.placeholder(shape=(batch_size, 32, 32, 3), dtype=tf.float32)
+    x = tf.placeholder(shape=(None, 32, 32, 3), dtype=tf.float32)
     x_preproc = tf.map_fn(_preprocess, x)
     print(x_preproc.get_shape().as_list())
 
