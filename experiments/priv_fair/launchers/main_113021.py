@@ -28,7 +28,7 @@ def _get_command(feature_path, seed, train_dir, task, imba, target_epsilon):
 def main(
     seeds=tuple(range(5)),
     base_dir="/nlp/scr/lxuechen/acc-on-the-line",
-    tasks=("private",),
+    tasks=("private", "non_private"),
     imba=False,
     target_epsilon=3,
 ):
