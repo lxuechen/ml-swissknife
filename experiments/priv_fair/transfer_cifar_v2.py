@@ -53,8 +53,7 @@ def get_imbalanced_tensor_dataset(
 
     # Collect training example id for each class.
     per_class_list = collections.defaultdict(list)
-    for ind, x in enumerate(train_data):
-        _, label = x
+    for ind, label in enumerate(y_train):
         per_class_list[int(label)].append(ind)
     per_class_list = collections.OrderedDict(sorted(per_class_list.items(), key=lambda t: t[0]))
 
