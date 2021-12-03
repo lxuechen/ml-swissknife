@@ -11,7 +11,6 @@ import os
 import fire
 
 from swissknife import utils
-from ...simclrv2.download import available_simclr_models
 
 
 def _get_command(
@@ -48,7 +47,7 @@ def main(
         for feature_path in ('r152_1x_sk1', 'r152_2x_sk1', 'r152_3x_sk1'):
             feature_path = "simclr_" + feature_path
             for task in tasks:
-                for offset_size in (10, 20, 50, 100, 200, 500, 1000, 2000,):
+                for offset_size in (10, 50, 100, 500, 1000,):
                     for seed in seeds:
                         alpha_str = utils.float2str(alpha)
                         offset_size_str = utils.int2str(offset_size)
@@ -71,7 +70,7 @@ def main(
                             )
                         )
 
-    utils.gpu_scheduler(commands=commands, wait_time_in_secs=60, maxMemory=0.3, maxLoad=0.3)
+    utils.gpu_scheduler(commands=commands, wait_time_in_secs=15, maxMemory=0.3, maxLoad=0.3)
 
 
 if __name__ == "__main__":
