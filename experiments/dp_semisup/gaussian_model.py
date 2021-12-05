@@ -66,7 +66,7 @@ def usual_estimator(x, y, clipping_norm=None):
 
 
 def classify(estimator, x):
-    y_hat = torch.where((estimator * x).sum(dim=1) > 0, 1., -1.)[:, None]
+    y_hat = torch.where((estimator * x).sum(dim=1, keepdim=True) > 0, 1., -1.)
     return y_hat
 
 
@@ -74,7 +74,7 @@ def compute_accuracy(estimator, x, y, _print):
     y_hat = classify(estimator=estimator, x=x)
     if _print:
         print(torch.eq(y, y_hat).float().mean(dim=0).item())
-    return torch.eq(y, y_hat).float().mean(dim=0).item()
+    return (1. - (y - y_hat).abs().mean() / 2).item()
 
 
 def fairness(**kwargs):
@@ -173,22 +173,20 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         - how does noise variance in the data model affect things?
     """
 
-    epsilons = (0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 1)
+    epsilons = (0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4)
     probs = (0.5,)
     d = 3
     mu = torch.randn((1, d))
-    sigma = 0.3
-    n_labeled = 20
-    n_unlabeled = 10000  # x100 factor.
+    sigma = 0.5
+    n_labeled = 30
+    n_unlabeled = 30000  # x100 factor.
     n_test = 10000
     clipping_norm = 3.4  # Let this be the max norm.
-    seeds = list(range(100))
+    seeds = list(range(300))
 
     errorbars = []
     aligns = []
     for prob in probs:
-        x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
-
         errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
         errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
         errbar_opt = dict(x=epsilons, y=[], yerr=[], label="optimal", marker='x', alpha=0.8, capsize=10)
@@ -205,6 +203,11 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
             alis1, alis0, alis_opt = [], [], []
             for seed in seeds:
                 x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
+                x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
+
+                max_norm = x.norm(2, dim=1).max().item()
+                if max_norm > clipping_norm:
+                    print(f'max_norm: {max_norm}, clipping_norm: {clipping_norm}')
                 # -- correct
 
                 theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
@@ -261,13 +264,13 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     if img_dir is None:
         utils.plot_wrapper(
             errorbars=errorbars,
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log',
+            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
                          ylabel=f"Test accuracy",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
         utils.plot_wrapper(
             errorbars=aligns,
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='linear',
+            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
                          ylabel=f"Alignment",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
@@ -295,7 +298,6 @@ def sweep_self_training(pairs=None, **kwargs):
 
 
 def main(task="self_training", seed=0, **kwargs):
-    torch.manual_seed(seed)
     torch.set_default_dtype(torch.float64)
 
     if task == "fairness":
