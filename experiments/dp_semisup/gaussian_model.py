@@ -32,8 +32,7 @@ def make_labeled_data(n, d, sigma, prob, mu, group_id=2):
     else:
         raise ValueError(f"Unknown group_id: {group_id}")
     x = mu * y + sigma * torch.randn(size=(n, d))  # Get features.
-    # x: (sample_size, d).
-    # y: (sample_size, 1).
+    assert x.size() == (n, d) and y.size() == (n, 1)
     return x, y
 
 
@@ -162,7 +161,7 @@ def compute_entropy(theta, x):
     return entropy
 
 
-def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=False, **kwargs):
+def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     """Compare error with and without unlabeled data.
 
     Semi-sup estimator = alpha * private estimator + beta * PL estimator.
