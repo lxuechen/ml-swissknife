@@ -172,14 +172,14 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
     """
     epsilons = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.,)
     probs = (0.5,)
-    d = 3  # This seems already overparameterized!
-    mu = torch.randn((1, d)) * 2
+    d = 10
+    mu = torch.randn((1, d))
     sigma = 0.5
     n_labeled = 50
     n_unlabeled = 500000  # x100 factor.
     n_test = 10000
-    clipping_norm = 4
-    seeds = list(range(100))
+    clipping_norm = 5
+    seeds = list(range(20))
 
     errorbars = []
     for prob in probs:
