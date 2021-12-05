@@ -174,9 +174,9 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
     probs = (0.5,)
     d = 3  # This seems already overparameterized!
     mu = torch.randn((1, d)) * 2
-    sigma = 2
+    sigma = 0.5
     n_labeled = 50
-    n_unlabeled = 100000  # x100 factor.
+    n_unlabeled = 500000  # x100 factor.
     n_test = 10000
     clipping_norm = 4
     seeds = list(range(100))
@@ -186,9 +186,10 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
         errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
         errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
         errbar2 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled + ent. reg.", marker='*', alpha=0.8, capsize=10)
-        errorbars.extend([errbar1, errbar0, errbar2])
+        errbar_opt = dict(x=epsilons, y=[], yerr=[], label="optimal", marker='x', alpha=0.8, capsize=10)
+        errorbars.extend([errbar1, errbar0, errbar2, errbar_opt])
         for epsilon in tqdm.tqdm(epsilons, desc="epsilon"):
-            errs1, errs0, errs2 = [], [], []
+            errs1, errs0, errs2, errs_opt = [], [], [], []
             for seed in seeds:
                 x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
                 x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
@@ -212,15 +213,23 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
                 err2 = compute_accuracy(estimator=theta_ent, x=x_test, y=y_test)
                 errs2.append(err2)
 
-            avg2, std2 = np.mean(errs2), np.std(errs2)
+                # Optimal classifier.
+                err_opt = compute_accuracy(estimator=mu, x=x_test, y=y_test)
+                errs_opt.append(err_opt)
+
             avg1, std1 = np.mean(errs1), np.std(errs1)
             avg0, std0 = np.mean(errs0), np.std(errs0)
-            errbar1['y'].append(avg1)
-            errbar1['yerr'].append(std1)
+            avg2, std2 = np.mean(errs2), np.std(errs2)
+            avg_opt, std_opt = np.mean(errs_opt), np.std(errs_opt)
+
             errbar0['y'].append(avg0)
             errbar0['yerr'].append(std0)
+            errbar1['y'].append(avg1)
+            errbar1['yerr'].append(std1)
             errbar2['y'].append(avg2)
             errbar2['yerr'].append(std2)
+            errbar_opt['y'].append(avg_opt)
+            errbar_opt['yerr'].append(std_opt)
 
     if img_dir is None:
         utils.plot_wrapper(
@@ -262,6 +271,7 @@ def main(task="self_training", **kwargs):
     elif task == "self_training":
         self_training(**kwargs)
     elif task == "sweep_self_training":
+        # Make plots, each with a fixed interpolation coefficient between original private and self-supervised.
         sweep_self_training(**kwargs)
     else:
         raise ValueError
