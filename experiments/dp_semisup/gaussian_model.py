@@ -46,7 +46,7 @@ def dp_estimator(x, y, clipping_norm, epsilon, delta=None):
     # Clip features.
     coefficient = torch.clamp_max(clipping_norm / x.norm(dim=1, keepdim=True), 1.)
     x = x * coefficient
-    estimator = (x * y).mean(dim=0)
+    estimator = (x * y).mean(dim=0, keepdim=True)
 
     # Usual Gaussian mechanism.
     sample_size = x.size(0)
@@ -62,7 +62,7 @@ def usual_estimator(x, y, clipping_norm=None):
     if clipping_norm is not None:
         coefficient = torch.clamp_max(clipping_norm / x.norm(dim=1, keepdim=True), 1.)
         x = x * coefficient
-    return (x * y).mean(dim=0)
+    return (x * y).mean(dim=0, keepdim=True)
 
 
 def classify(estimator, x):
@@ -70,8 +70,10 @@ def classify(estimator, x):
     return y_hat
 
 
-def compute_accuracy(estimator, x, y):
-    y_hat = torch.where((estimator * x).sum(dim=1) > 0, 1., -1.)[:, None]
+def compute_accuracy(estimator, x, y, _print):
+    y_hat = classify(estimator=estimator, x=x)
+    if _print:
+        print(torch.eq(y, y_hat).float().mean(dim=0).item())
     return torch.eq(y, y_hat).float().mean(dim=0).item()
 
 
@@ -160,7 +162,7 @@ def compute_entropy(theta, x):
     return entropy
 
 
-def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **kwargs):
+def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=False, **kwargs):
     """Compare error with and without unlabeled data.
 
     Semi-sup estimator = alpha * private estimator + beta * PL estimator.
@@ -170,34 +172,43 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
         - phase transition between low to high privacy?
         - how does noise variance in the data model affect things?
     """
-    epsilons = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.,)
+
+    epsilons = (0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 1)
     probs = (0.5,)
-    d = 10
+    d = 3
     mu = torch.randn((1, d))
-    sigma = 0.5
-    n_labeled = 50
-    n_unlabeled = 500000  # x100 factor.
+    sigma = 0.3
+    n_labeled = 3
+    n_unlabeled = 10000  # x100 factor.
     n_test = 10000
-    clipping_norm = 5
-    seeds = list(range(20))
+    clipping_norm = 3.4  # Let this be the max norm.
+    seeds = list(range(100))
 
     errorbars = []
+    aligns = []
     for prob in probs:
-        errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
+        x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
+
         errbar0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
-        errbar2 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled + ent. reg.", marker='*', alpha=0.8, capsize=10)
+        errbar1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
         errbar_opt = dict(x=epsilons, y=[], yerr=[], label="optimal", marker='x', alpha=0.8, capsize=10)
-        errorbars.extend([errbar1, errbar0, errbar2, errbar_opt])
+        errorbars.extend([errbar0, errbar1, errbar_opt])
+
+        align0 = dict(x=epsilons, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
+        align1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
+        align_opt = dict(x=epsilons, y=[], yerr=[], label="optimal", marker='x', alpha=0.8, capsize=10)
+        aligns.extend([align0, align1, align_opt])
+
         for epsilon in tqdm.tqdm(epsilons, desc="epsilon"):
-            errs1, errs0, errs2, errs_opt = [], [], [], []
+            errs1, errs0, errs_opt = [], [], []
+            alis1, alis0, alis_opt = [], [], []
             for seed in seeds:
                 x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
-                x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
 
                 theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
 
                 # Without.
-                err1 = compute_accuracy(estimator=theta_hat, x=x_test, y=y_test)
+                err1 = compute_accuracy(estimator=theta_hat, x=x_test, y=y_test, _print=False)
                 errs1.append(err1)
 
                 # With unlabeled.
@@ -206,36 +217,56 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
                 theta_tilde = usual_estimator(x=x_unlabeled, y=y_unlabeled)
 
                 theta_bar = alpha * theta_hat + beta * theta_tilde
-                err0 = compute_accuracy(estimator=theta_bar, x=x_test, y=y_test)
+                err0 = compute_accuracy(estimator=theta_bar, x=x_test, y=y_test, _print=False)
                 errs0.append(err0)
 
-                theta_ent = entropy_sharpening(theta=theta_bar, num_updates=50, lr=1e-1, x=x_unlabeled)
-                err2 = compute_accuracy(estimator=theta_ent, x=x_test, y=y_test)
-                errs2.append(err2)
-
                 # Optimal classifier.
-                err_opt = compute_accuracy(estimator=mu, x=x_test, y=y_test)
+                err_opt = compute_accuracy(estimator=mu, x=x_test, y=y_test, _print=False)
                 errs_opt.append(err_opt)
 
-            avg1, std1 = np.mean(errs1), np.std(errs1)
+                def comp_align(est):
+                    return (est * mu).sum() / est.norm(2)
+
+                ali1 = comp_align(est=theta_hat)
+                ali0 = comp_align(est=theta_tilde)
+                ali_opt = comp_align(est=mu)
+                alis1.append(ali1)
+                alis0.append(ali0)
+                alis_opt.append(ali_opt)
+
             avg0, std0 = np.mean(errs0), np.std(errs0)
-            avg2, std2 = np.mean(errs2), np.std(errs2)
+            avg1, std1 = np.mean(errs1), np.std(errs1)
             avg_opt, std_opt = np.mean(errs_opt), np.std(errs_opt)
 
             errbar0['y'].append(avg0)
             errbar0['yerr'].append(std0)
             errbar1['y'].append(avg1)
             errbar1['yerr'].append(std1)
-            errbar2['y'].append(avg2)
-            errbar2['yerr'].append(std2)
             errbar_opt['y'].append(avg_opt)
             errbar_opt['yerr'].append(std_opt)
+
+            avg0, std0 = np.mean(alis0), np.std(alis0)
+            avg1, std1 = np.mean(alis1), np.std(alis1)
+            avg_opt, std_opt = np.mean(alis_opt), np.std(alis_opt)
+
+            align0['y'].append(avg0)
+            align0['yerr'].append(avg0)
+            align1['y'].append(avg1)
+            align1['yerr'].append(avg1)
+            align_opt['y'].append(avg_opt)
+            align_opt['yerr'].append(avg_opt)
 
     if img_dir is None:
         utils.plot_wrapper(
             errorbars=errorbars,
             options=dict(xlabel="$\epsilon$", xscale="log", yscale='log',
                          ylabel=f"Test accuracy",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
+        )
+        utils.plot_wrapper(
+            errorbars=aligns,
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log',
+                         ylabel=f"Alignment",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
     else:
@@ -252,10 +283,7 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=True, **
         )
 
 
-def sweep_self_training(
-    pairs=None,
-    **kwargs
-):
+def sweep_self_training(pairs=None, **kwargs):
     if pairs is None:
         N = 10
         pairs = ((i / N, 1. - i / N) for i in range(N + 1))  # (alpha, beta).
@@ -264,8 +292,10 @@ def sweep_self_training(
         self_training(alpha=alpha, beta=beta, img_dir=img_dir)
 
 
-def main(task="self_training", **kwargs):
-    torch.manual_seed(0)
+def main(task="self_training", seed=0, **kwargs):
+    torch.manual_seed(seed)
+    torch.set_default_dtype(torch.float64)
+
     if task == "fairness":
         fairness(**kwargs)
     elif task == "self_training":
