@@ -178,7 +178,7 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=False, *
     d = 3
     mu = torch.randn((1, d))
     sigma = 0.3
-    n_labeled = 3
+    n_labeled = 20
     n_unlabeled = 10000  # x100 factor.
     n_test = 10000
     clipping_norm = 3.4  # Let this be the max norm.
@@ -250,11 +250,11 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=False, *
             avg_opt, std_opt = np.mean(alis_opt), np.std(alis_opt)
 
             align0['y'].append(avg0)
-            align0['yerr'].append(avg0)
+            align0['yerr'].append(std0)
             align1['y'].append(avg1)
-            align1['yerr'].append(avg1)
+            align1['yerr'].append(std1)
             align_opt['y'].append(avg_opt)
-            align_opt['yerr'].append(avg_opt)
+            align_opt['yerr'].append(std_opt)
 
     if img_dir is None:
         utils.plot_wrapper(
@@ -265,7 +265,7 @@ def self_training(alpha=0, beta=1, img_dir=None, entropy_regularization=False, *
         )
         utils.plot_wrapper(
             errorbars=aligns,
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log',
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='linear',
                          ylabel=f"Alignment",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
