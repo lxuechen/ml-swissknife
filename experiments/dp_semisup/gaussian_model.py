@@ -43,7 +43,7 @@ def make_unlabeled_data(n, d, sigma, mu, prob, group_id=2):
 
 def dp_estimator(x, y, clipping_norm, epsilon, delta=None):
     # Clip features.
-    coefficient = torch.clamp_max(clipping_norm / x.norm(dim=1, keepdim=True), 1.)
+    coefficient = torch.clamp_max(clipping_norm / (x.norm(dim=1, keepdim=True) + 1e-7), 1.)
     x = x * coefficient
     estimator = (x * y).mean(dim=0, keepdim=True)
 
@@ -55,6 +55,7 @@ def dp_estimator(x, y, clipping_norm, epsilon, delta=None):
     var = 2 * math.log(1.25 / delta) * sensitivity ** 2 / (epsilon ** 2)
 
     return estimator + torch.randn_like(estimator) * math.sqrt(var)
+    # -- correct
 
 
 def usual_estimator(x, y, clipping_norm=None):
@@ -197,12 +198,14 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         align1 = dict(x=epsilons, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
         align_opt = dict(x=epsilons, y=[], yerr=[], label="optimal", marker='x', alpha=0.8, capsize=10)
         aligns.extend([align0, align1, align_opt])
+        # -- correct
 
         for epsilon in tqdm.tqdm(epsilons, desc="epsilon"):
             errs1, errs0, errs_opt = [], [], []
             alis1, alis0, alis_opt = [], [], []
             for seed in seeds:
                 x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
+                # -- correct
 
                 theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
 
