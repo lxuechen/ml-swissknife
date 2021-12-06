@@ -170,8 +170,8 @@ def self_training_vary_n_u(
     # Should not use a fixed random \mu; either randomize \mu, or use one with suitable norm.
     # mu = torch.randn((1, d))
     mu = torch.full(size=(1, d), fill_value=1.)
-    sigma = 1
-    n_labeled = 30
+    sigma = 0.8
+    n_labeled = 20
     n_test = 10000
     clipping_norm = 6  # Let this be the max norm.
     seeds = list(range(1000))
@@ -255,15 +255,19 @@ def self_training_vary_n_u(
     if img_dir is None:
         utils.plot_wrapper(
             errorbars=errorbars,
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='linear',
-                         ylabel=f"$\mathrm{{err}}$",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+            options=dict(
+                xlabel="$n_u$", xscale="log", yscale='linear',
+                ylabel=f"$1 - \mathrm{{err}}$",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
         )
         utils.plot_wrapper(
             errorbars=aligns,
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='linear',
-                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+            options=dict(
+                xlabel="$n_u$", xscale="log", yscale='linear',
+                ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
         )
     else:
         alpha_str = utils.float2str(alpha)
@@ -273,9 +277,11 @@ def self_training_vary_n_u(
         utils.plot_wrapper(
             errorbars=errorbars,
             suffixes=('.png', '.pdf'),
-            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$\mathrm{{err}}$",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+            options=dict(
+                xlabel="$n_u$", xscale="log", yscale='linear',
+                ylabel=f"$1 - \mathrm{{err}}$",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
             img_path=img_path,
         )
 
@@ -284,9 +290,11 @@ def self_training_vary_n_u(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
             errorbars=aligns,
-            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+            options=dict(
+                xlabel="$n_u$", xscale="log", yscale='linear',
+                ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
         )
 
 
