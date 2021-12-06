@@ -298,6 +298,7 @@ def default(
     gd_lr=1,
     clipping_norm=1.,
     d=10,
+    plot_ng2=False
 ):
     torch.set_default_dtype(torch.float32)
     torch.manual_seed(seed)
@@ -340,10 +341,13 @@ def default(
     plots = (
         {'x': ng_results['global_step'], 'y': ng_results['test_loss'], 'label': 'ng'},
         {'x': ng_oracle_results["global_step"], 'y': ng_oracle_results['test_loss'], 'label': 'ng (oracle)'},
-        {'x': ng2_results['global_step'], 'y': ng2_results['test_loss'], 'label': 'ng2'},
-        {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['test_loss'], 'label': 'ng2 (oracle)'},
         {'x': gd_results['global_step'], 'y': gd_results['test_loss'], 'label': 'gd'},
     )
+    if plot_ng2:
+        plots = plots + (
+            {'x': ng2_results['global_step'], 'y': ng2_results['test_loss'], 'label': 'ng2'},
+            {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['test_loss'], 'label': 'ng2 (oracle)'},
+        )
     options = {'xlabel': 'Iteration', 'ylabel': 'Test Loss', 'yscale': 'log'}
     img_path = os.path.join('.', 'plots', 'dp_ng.png')
     utils.plot(
@@ -355,11 +359,14 @@ def default(
     plots = (
         {'x': ng_results['global_step'], 'y': ng_results['dist2opt'], 'label': 'ng'},
         {'x': ng_oracle_results["global_step"], 'y': ng_oracle_results['dist2opt'], 'label': 'ng (oracle)'},
-        {'x': ng2_results['global_step'], 'y': ng2_results['dist2opt'], 'label': 'ng2'},
-        {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['dist2opt'], 'label': 'ng2 (oracle)'},
         {'x': gd_results['global_step'], 'y': gd_results['dist2opt'], 'label': 'gd'},
     )
-    options = {'xlabel': 'Iteration', 'ylabel': '$\| \\beta - \\beta_*\| $', 'yscale': 'log'}
+    if plot_ng2:
+        plots = plots + (
+            {'x': ng2_results['global_step'], 'y': ng2_results['dist2opt'], 'label': 'ng2'},
+            {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['dist2opt'], 'label': 'ng2 (oracle)'},
+        )
+    options = {'xlabel': 'Iteration', 'ylabel': '$\|\| \hat{\\beta} - \\beta \|\|_2 $', 'yscale': 'log'}
     img_path = os.path.join('.', 'plots', 'dp_ng_beta.png')
     utils.plot(
         img_path=img_path,
@@ -584,7 +591,7 @@ if __name__ == "__main__":
     # The following command's unlabeled data is reasonable, and learning rate for gradient descent is optimized.
     # Slightly tuning momentum more gives better results.
     # @formatter:off
-    # python3 -m explore.dp_ngd --noise_multiplier 10 --ng_lr 2e0 --T 600 --clipping_norm 1 --damping 1e-6 --n_unlabeled 5000 --d 10 --gd_lr 1e0
+    # python3  dp_ngd.py --noise_multiplier 10 --ng_lr 2e0 --T 600 --clipping_norm 1 --damping 1e-6 --n_unlabeled 5000 --d 10 --gd_lr 1e0 --task default
     # @formatter:on
 
     # dp_pgd1 (precondition -> clip + noise) needs small clipping norms
