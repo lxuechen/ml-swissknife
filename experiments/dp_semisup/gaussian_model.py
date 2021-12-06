@@ -183,7 +183,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     n_labeled = 30
     n_unlabeled = 30000  # x100 factor.
     n_test = 10000
-    clipping_norm = 5  # Let this be the max norm.
+    clipping_norm = 5.2  # Let this be the max norm.
     seeds = list(range(500))
 
     errorbars = []
