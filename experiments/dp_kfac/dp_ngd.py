@@ -169,6 +169,9 @@ def train(
     batch_size,
     verbose=False,
 ):
+    if delta is None:
+        delta = 1 / data["x_train"].shape[0] ** 1.1
+
     results = dict(global_step=[], train_loss=[], test_loss=[], dist2opt=[])
 
     state = dict(w=torch.zeros_like(data["beta"]), v=torch.zeros_like(data["beta"]))
@@ -238,6 +241,7 @@ def train(
         orders=DEFAULT_ALPHAS
     )
     epsilon, _ = rdp_accounting.get_privacy_spent(orders=DEFAULT_ALPHAS, rdp=rdp, delta=delta)
+    results["epsilon"] = epsilon
 
     print(
         f"After training: algo: {algo}, "
@@ -260,7 +264,7 @@ def _main(
     T=100,
     lr=0.1,
     algo="gd",
-    delta=2e-4,
+    delta=None,
     damping=1e-4,
     noise_std=1e-3,
     batch_size=1024,
@@ -349,7 +353,10 @@ def default(
             {'x': ng2_results['global_step'], 'y': ng2_results['test_loss'], 'label': 'ng2'},
             {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['test_loss'], 'label': 'ng2 (oracle)'},
         )
-    options = {'xlabel': 'Iteration', 'ylabel': 'Test Loss', 'yscale': 'log'}
+    options = {
+        'xlabel': 'Iteration', 'ylabel': 'Test Loss', 'yscale': 'log',
+        'title': f"$\epsilon={gd_results['epsilon']:.2f}, n_l={n_train}, n_u={n_unlabeled}, B={batch_size}$"
+    }
     img_path = os.path.join('.', 'plots', 'dp_ng')
     utils.plot_wrapper(
         img_path=img_path,
@@ -368,7 +375,10 @@ def default(
             {'x': ng2_results['global_step'], 'y': ng2_results['dist2opt'], 'label': 'ng2'},
             {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['dist2opt'], 'label': 'ng2 (oracle)'},
         )
-    options = {'xlabel': 'Iteration', 'ylabel': '$\|\| \hat{\\beta} - \\beta \|\|_2 $', 'yscale': 'log'}
+    options = {
+        'xlabel': 'Iteration', 'ylabel': '$\|\| \hat{\\beta} - \\beta \|\|_2 $', 'yscale': 'log',
+        'title': f"$\epsilon={gd_results['epsilon']:.2f}, n_l={n_train}, n_u={n_unlabeled}, B={batch_size}$"
+    }
     img_path = os.path.join('.', 'plots', 'dp_ng_beta')
     utils.plot_wrapper(
         img_path=img_path,
