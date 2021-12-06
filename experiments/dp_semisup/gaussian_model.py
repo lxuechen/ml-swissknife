@@ -163,7 +163,7 @@ def compute_entropy(theta, x):
 
 
 def self_training_vary_n_u(
-    alpha=0, beta=1, img_dir=None, epsilon=2., n_us=(5, 10, 30, 100, 300, 1000, 3000, 10000), **kwargs
+    alpha=0, beta=1, img_dir=None, epsilon=2., n_us=(1, 5, 10, 30, 100, 300, 1000, 3000, 10000, 30000), **kwargs
 ):
     probs = (0.5,)
     d = 3
@@ -173,7 +173,7 @@ def self_training_vary_n_u(
     sigma = 0.8
     n_labeled = 20
     n_test = 10000
-    clipping_norm = 6  # Let this be the max norm.
+    clipping_norm = 5.6  # Let this be the max norm.
     seeds = list(range(1000))
 
     errorbars = []
@@ -259,7 +259,7 @@ def self_training_vary_n_u(
                 xlabel="$n_u$", xscale="log", yscale='linear',
                 ylabel=f"$1 - \mathrm{{err}}$",
                 title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
-                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
         )
         utils.plot_wrapper(
             errorbars=aligns,
@@ -267,13 +267,13 @@ def self_training_vary_n_u(
                 xlabel="$n_u$", xscale="log", yscale='linear',
                 ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
                 title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
-                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
         )
     else:
         alpha_str = utils.float2str(alpha)
         beta_str = utils.float2str(beta)
 
-        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_err')
+        img_path = utils.join(img_dir, f'vary_n_u_alpha_{alpha_str}_beta_{beta_str}_d_{d}_err')
         utils.plot_wrapper(
             errorbars=errorbars,
             suffixes=('.png', '.pdf'),
@@ -281,11 +281,11 @@ def self_training_vary_n_u(
                 xlabel="$n_u$", xscale="log", yscale='linear',
                 ylabel=f"$1 - \mathrm{{err}}$",
                 title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
-                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
             img_path=img_path,
         )
 
-        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_alignment')
+        img_path = utils.join(img_dir, f'vary_n_u_alpha_{alpha_str}_beta_{beta_str}_d_{d}_alignment')
         utils.plot_wrapper(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
@@ -294,7 +294,7 @@ def self_training_vary_n_u(
                 xlabel="$n_u$", xscale="log", yscale='linear',
                 ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
                 title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, \epsilon={epsilon}, \sigma={sigma}, "
-                      f"\|\| \mu \|\|_2={mu.norm().item()}$"),
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
         )
 
 
@@ -402,15 +402,19 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     if img_dir is None:
         utils.plot_wrapper(
             errorbars=errorbars,
-            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$1 - \mathrm{{err}}$",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
+            options=dict(
+                xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                ylabel=f"$1 - \mathrm{{err}}$",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, n_u={n_unlabeled}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
         )
         utils.plot_wrapper(
             errorbars=aligns,
-            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
+            options=dict(
+                xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, n_u={n_unlabeled}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
         )
     else:
         alpha_str = utils.float2str(alpha)
@@ -420,9 +424,11 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         utils.plot_wrapper(
             errorbars=errorbars,
             suffixes=('.png', '.pdf'),
-            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$1 - \mathrm{{err}}$",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
+            options=dict(
+                xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                ylabel=f"$1 - \mathrm{{err}}$",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, n_u={n_unlabeled}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
             img_path=img_path,
         )
 
@@ -431,9 +437,11 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
             img_path=img_path,
             suffixes=('.png', '.pdf'),
             errorbars=aligns,
-            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
-                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
+            options=dict(
+                xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
+                title=f"$\\alpha={alpha}, \\beta={beta}, d={d}, n_l={n_labeled}, n_u={n_unlabeled}, \sigma={sigma}, "
+                      f"\|\| \mu \|\|_2={mu.norm().item():.4f}$"),
         )
 
 
@@ -455,7 +463,7 @@ def main(task="self_training", seed=0, **kwargs):
         # python gaussian_model.py --task "self_training"
         self_training(**kwargs)
     elif task == "self_training_vary_n_u":
-        # python gaussian_model.py --task "self_training_vary_n_u"
+        # python gaussian_model.py --task "self_training_vary_n_u" --img_dir "./self_training/"
         self_training_vary_n_u(**kwargs)
     elif task == "sweep_self_training":
         # python gaussian_model.py --task "sweep_self_training"
