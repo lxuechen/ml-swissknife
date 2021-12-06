@@ -296,7 +296,8 @@ def default(
     seed=42,
     ng_lr=10,
     gd_lr=1,
-    clipping_norm=1.,
+    ng_clipping_norm=1.,
+    gd_clipping_norm=1.,
     d=10,
     plot_ng2=False
 ):
@@ -308,7 +309,7 @@ def default(
         **dict(
             lr=ng_lr,
             noise_multiplier=noise_multiplier,
-            clipping_norm=clipping_norm,
+            clipping_norm=ng_clipping_norm,
             T=T,
             damping=damping,
             noise_std=label_noise_std,
@@ -326,7 +327,7 @@ def default(
         **dict(
             lr=gd_lr,
             noise_multiplier=noise_multiplier,
-            clipping_norm=clipping_norm,
+            clipping_norm=gd_clipping_norm,
             T=T,
             algo="gd",
             noise_std=label_noise_std,
@@ -591,7 +592,7 @@ if __name__ == "__main__":
     # The following command's unlabeled data is reasonable, and learning rate for gradient descent is optimized.
     # Slightly tuning momentum more gives better results.
     # @formatter:off
-    # python3  dp_ngd.py --noise_multiplier 10 --ng_lr 2e0 --T 600 --clipping_norm 1 --damping 1e-6 --n_unlabeled 5000 --d 10 --gd_lr 1e0 --task default
+    # python3  dp_ngd.py --noise_multiplier 5 --ng_lr 1e0 --T 1000 --ng_clipping_norm 0.1 --damping 1e-6 --n_unlabeled 5000 --d 10 --gd_lr 1e0 --gd_clipping_norm 0.1 --task default
     # @formatter:on
 
     # dp_pgd1 (precondition -> clip + noise) needs small clipping norms
