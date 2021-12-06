@@ -267,7 +267,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         utils.plot_wrapper(
             errorbars=errorbars,
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"\\text{{err}}",
+                         ylabel=f"$\mathrm{{err}}$",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
         utils.plot_wrapper(
@@ -285,7 +285,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
             errorbars=errorbars,
             suffixes=('.png', '.pdf'),
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"\\text{{err}}",
+                         ylabel=f"$\mathrm{{err}}$",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
             img_path=img_path,
         )
