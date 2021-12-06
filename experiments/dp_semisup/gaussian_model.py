@@ -316,8 +316,10 @@ def main(task="self_training", seed=0, **kwargs):
     if task == "fairness":
         fairness(**kwargs)
     elif task == "self_training":
+        # python gaussian_model.py --task "self_training"
         self_training(**kwargs)
     elif task == "sweep_self_training":
+        # python gaussian_model.py --task "sweep_self_training"
         # Make plots, each with a fixed interpolation coefficient between original private and self-supervised.
         sweep_self_training(**kwargs)
     else:
