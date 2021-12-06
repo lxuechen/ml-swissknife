@@ -369,9 +369,10 @@ def default(
             {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['dist2opt'], 'label': 'ng2 (oracle)'},
         )
     options = {'xlabel': 'Iteration', 'ylabel': '$\|\| \hat{\\beta} - \\beta \|\|_2 $', 'yscale': 'log'}
-    img_path = os.path.join('.', 'plots', 'dp_ng_beta.png')
-    utils.plot(
+    img_path = os.path.join('.', 'plots', 'dp_ng_beta')
+    utils.plot_wrapper(
         img_path=img_path,
+        suffixes=('.png', '.pdf'),
         plots=plots,
         options=options,
     )
