@@ -173,16 +173,18 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         - how does noise variance in the data model affect things?
     """
 
-    epsilons = (0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4)
+    epsilons = (0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8, 2.0)
     probs = (0.5,)
     d = 3
-    mu = torch.randn((1, d))
-    sigma = 0.5
+    # Should not use a fixed random \mu; either randomize \mu, or use one with suitable norm.
+    # mu = torch.randn((1, d))
+    mu = torch.full(size=(1, d), fill_value=1.)
+    sigma = 1
     n_labeled = 30
     n_unlabeled = 30000  # x100 factor.
     n_test = 10000
-    clipping_norm = 3.4  # Let this be the max norm.
-    seeds = list(range(300))
+    clipping_norm = 5  # Let this be the max norm.
+    seeds = list(range(500))
 
     errorbars = []
     aligns = []
@@ -265,32 +267,43 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         utils.plot_wrapper(
             errorbars=errorbars,
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"Test accuracy",
+                         ylabel=f"\\text{{err}}",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
         utils.plot_wrapper(
             errorbars=aligns,
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"Alignment",
+                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
     else:
         alpha_str = utils.float2str(alpha)
         beta_str = utils.float2str(beta)
-        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_{d}')
+
+        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_err')
         utils.plot_wrapper(
             errorbars=errorbars,
-            suffixes=('.png',),
-            options=dict(xlabel="$\epsilon$", xscale="log", yscale='log',
-                         ylabel=f"Test accuracy",
+            suffixes=('.png', 'pdf'),
+            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                         ylabel=f"\\text{{err}}",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
             img_path=img_path,
+        )
+
+        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_alignment')
+        utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=('.png', 'pdf'),
+            errorbars=aligns,
+            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
 
 
 def sweep_self_training(pairs=None, **kwargs):
     if pairs is None:
-        N = 10
+        N = 5
         pairs = ((i / N, 1. - i / N) for i in range(N + 1))  # (alpha, beta).
     img_dir = "./self_training"
     for alpha, beta in pairs:
