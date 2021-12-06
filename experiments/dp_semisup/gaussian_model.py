@@ -50,7 +50,7 @@ def dp_estimator(x, y, clipping_norm, epsilon, delta=None):
     # Usual Gaussian mechanism.
     sample_size = x.size(0)
     if delta is None:
-        delta = 1 / (2 * sample_size)
+        delta = 1 / (sample_size ** 1.1)
     sensitivity = 2 / sample_size * clipping_norm
     var = 2 * math.log(1.25 / delta) * sensitivity ** 2 / (epsilon ** 2)
 
@@ -183,7 +183,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     n_labeled = 30
     n_unlabeled = 30000  # x100 factor.
     n_test = 10000
-    clipping_norm = 5.2  # Let this be the max norm.
+    clipping_norm = 5.5  # Let this be the max norm.
     seeds = list(range(500))
 
     errorbars = []
