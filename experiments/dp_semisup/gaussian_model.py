@@ -162,6 +162,134 @@ def compute_entropy(theta, x):
     return entropy
 
 
+def self_training_vary_n_u(
+    alpha=0, beta=1, img_dir=None, epsilon=2., n_us=(5, 10, 30, 100, 300, 1000, 3000, 10000), **kwargs
+):
+    probs = (0.5,)
+    d = 3
+    # Should not use a fixed random \mu; either randomize \mu, or use one with suitable norm.
+    # mu = torch.randn((1, d))
+    mu = torch.full(size=(1, d), fill_value=1.)
+    sigma = 1
+    n_labeled = 30
+    n_test = 10000
+    clipping_norm = 6  # Let this be the max norm.
+    seeds = list(range(1000))
+
+    errorbars = []
+    aligns = []
+    for prob in probs:
+        errbar0 = dict(x=n_us, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
+        errbar1 = dict(x=n_us, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
+        errbar_opt = dict(x=n_us, y=[], yerr=[], label="optimal", marker='x', alpha=0.8, capsize=10)
+        errorbars.extend([errbar0, errbar1, errbar_opt])
+
+        align0 = dict(x=n_us, y=[], yerr=[], label="w/  unlabeled", marker="^", alpha=0.8, capsize=10)
+        align1 = dict(x=n_us, y=[], yerr=[], label="w/o unlabeled", marker="o", alpha=0.8, capsize=10)
+        align_opt = dict(x=n_us, y=[], yerr=[], label="optimal", marker='x', alpha=0.8, capsize=10)
+        aligns.extend([align0, align1, align_opt])
+
+        for n_u in tqdm.tqdm(n_us, desc="n_u"):
+            errs1, errs0, errs_opt = [], [], []
+            alis1, alis0, alis_opt = [], [], []
+            for seed in seeds:
+                x, y = make_labeled_data(n=n_labeled, d=d, mu=mu, prob=prob, sigma=sigma)
+                x_test, y_test = make_labeled_data(n=n_test, d=d, mu=mu, prob=prob, sigma=sigma)
+
+                max_norm = x.norm(2, dim=1).max().item()
+                if max_norm > clipping_norm:
+                    print(f'max_norm: {max_norm}, clipping_norm: {clipping_norm}')
+                # -- correct
+
+                theta_hat = dp_estimator(x=x, y=y, clipping_norm=clipping_norm, epsilon=epsilon)
+
+                # Without.
+                err1 = compute_accuracy(estimator=theta_hat, x=x_test, y=y_test, _print=False)
+                errs1.append(err1)
+
+                # With unlabeled.
+                x_unlabeled = make_unlabeled_data(n=n_u, d=d, mu=mu, prob=prob, sigma=sigma)
+                y_unlabeled = classify(estimator=theta_hat, x=x_unlabeled)  # Pseudo-label.
+                theta_tilde = usual_estimator(x=x_unlabeled, y=y_unlabeled)
+
+                theta_bar = alpha * theta_hat + beta * theta_tilde
+                err0 = compute_accuracy(estimator=theta_bar, x=x_test, y=y_test, _print=False)
+                errs0.append(err0)
+
+                # Optimal classifier.
+                err_opt = compute_accuracy(estimator=mu, x=x_test, y=y_test, _print=False)
+                errs_opt.append(err_opt)
+
+                def comp_align(est):
+                    return (est * mu).sum() / est.norm(2)
+
+                ali1 = comp_align(est=theta_hat)
+                ali0 = comp_align(est=theta_tilde)
+                ali_opt = comp_align(est=mu)
+                alis1.append(ali1)
+                alis0.append(ali0)
+                alis_opt.append(ali_opt)
+
+            avg0, std0 = np.mean(errs0), np.std(errs0)
+            avg1, std1 = np.mean(errs1), np.std(errs1)
+            avg_opt, std_opt = np.mean(errs_opt), np.std(errs_opt)
+
+            errbar0['y'].append(avg0)
+            errbar0['yerr'].append(std0)
+            errbar1['y'].append(avg1)
+            errbar1['yerr'].append(std1)
+            errbar_opt['y'].append(avg_opt)
+            errbar_opt['yerr'].append(std_opt)
+
+            avg0, std0 = np.mean(alis0), np.std(alis0)
+            avg1, std1 = np.mean(alis1), np.std(alis1)
+            avg_opt, std_opt = np.mean(alis_opt), np.std(alis_opt)
+
+            align0['y'].append(avg0)
+            align0['yerr'].append(std0)
+            align1['y'].append(avg1)
+            align1['yerr'].append(std1)
+            align_opt['y'].append(avg_opt)
+            align_opt['yerr'].append(std_opt)
+
+    if img_dir is None:
+        utils.plot_wrapper(
+            errorbars=errorbars,
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='linear',
+                         ylabel=f"$\mathrm{{err}}$",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+        )
+        utils.plot_wrapper(
+            errorbars=aligns,
+            options=dict(xlabel="$\epsilon$", xscale="log", yscale='linear',
+                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+        )
+    else:
+        alpha_str = utils.float2str(alpha)
+        beta_str = utils.float2str(beta)
+
+        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_err')
+        utils.plot_wrapper(
+            errorbars=errorbars,
+            suffixes=('.png', '.pdf'),
+            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                         ylabel=f"$\mathrm{{err}}$",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+            img_path=img_path,
+        )
+
+        img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_alignment')
+        utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=('.png', '.pdf'),
+            errorbars=aligns,
+            options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
+                         ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
+                         title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}"),
+        )
+
+
 def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
     """Compare error with and without unlabeled data.
 
@@ -267,7 +395,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         utils.plot_wrapper(
             errorbars=errorbars,
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$\mathrm{{err}}$",
+                         ylabel=f"$1 - \mathrm{{err}}$",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
         )
         utils.plot_wrapper(
@@ -285,7 +413,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
             errorbars=errorbars,
             suffixes=('.png', '.pdf'),
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
-                         ylabel=f"$\mathrm{{err}}$",
+                         ylabel=f"$1 - \mathrm{{err}}$",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
             img_path=img_path,
         )
@@ -318,6 +446,9 @@ def main(task="self_training", seed=0, **kwargs):
     elif task == "self_training":
         # python gaussian_model.py --task "self_training"
         self_training(**kwargs)
+    elif task == "self_training_vary_n_u":
+        # python gaussian_model.py --task "self_training_vary_n_u"
+        self_training_vary_n_u(**kwargs)
     elif task == "sweep_self_training":
         # python gaussian_model.py --task "sweep_self_training"
         # Make plots, each with a fixed interpolation coefficient between original private and self-supervised.
