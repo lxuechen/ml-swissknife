@@ -283,7 +283,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_err')
         utils.plot_wrapper(
             errorbars=errorbars,
-            suffixes=('.png', 'pdf'),
+            suffixes=('.png', '.pdf'),
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
                          ylabel=f"\\text{{err}}",
                          title=f"$\\alpha={alpha}, \\beta={beta}, d={d}$, n_l={n_labeled}, n_u={n_unlabeled}"),
@@ -293,7 +293,7 @@ def self_training(alpha=0, beta=1, img_dir=None, **kwargs):
         img_path = utils.join(img_dir, f'alpha_{alpha_str}_beta_{beta_str}_d_{d}_alignment')
         utils.plot_wrapper(
             img_path=img_path,
-            suffixes=('.png', 'pdf'),
+            suffixes=('.png', '.pdf'),
             errorbars=aligns,
             options=dict(xlabel="$\epsilon$", xscale="linear", yscale='linear',
                          ylabel=f"$\\frac{{ \mu^\\top \\theta }}{{ \|\| \\theta \|\|_2 }} $",
