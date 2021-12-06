@@ -350,9 +350,10 @@ def default(
             {'x': ng2_oracle_results["global_step"], 'y': ng2_oracle_results['test_loss'], 'label': 'ng2 (oracle)'},
         )
     options = {'xlabel': 'Iteration', 'ylabel': 'Test Loss', 'yscale': 'log'}
-    img_path = os.path.join('.', 'plots', 'dp_ng.png')
-    utils.plot(
+    img_path = os.path.join('.', 'plots', 'dp_ng')
+    utils.plot_wrapper(
         img_path=img_path,
+        suffixes=('.png', '.pdf'),
         plots=plots,
         options=options,
     )
