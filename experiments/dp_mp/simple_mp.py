@@ -86,16 +86,26 @@ def fine_tune_gpt2_with_dp_on_mock_data(
     return model
 
 
-def main():
+def main(model_name_or_path='gpt2'):
     torch.set_default_dtype(torch.float64)
 
-    mp_final_model = fine_tune_gpt2_with_dp_on_mock_data(mp=True, disable_randomness=True)
-    final_model = fine_tune_gpt2_with_dp_on_mock_data(mp=False, disable_randomness=True)
+    pretrained_model: transformers.GPT2LMHeadModel = transformers.GPT2LMHeadModel.from_pretrained(model_name_or_path)
+    mp_final_model = fine_tune_gpt2_with_dp_on_mock_data(
+        mp=True, disable_randomness=True, model_name_or_path=model_name_or_path
+    )
+    final_model = fine_tune_gpt2_with_dp_on_mock_data(
+        mp=False, disable_randomness=True, model_name_or_path=model_name_or_path
+    )
 
     with torch.no_grad():
+        pretrained_model_flat = torch.cat(tuple(t.flatten() for t in pretrained_model.parameters()))
         mp_final_model_flat = torch.cat(tuple(t.flatten() for t in mp_final_model.parameters()))
         final_model_flat = torch.cat(tuple(t.flatten() for t in final_model.parameters()))
-        print(torch.norm(mp_final_model_flat - final_model_flat))
+
+        print(f'2-norm of param. difference between MP and single-GPU fine-tuned models:'
+              f'{torch.norm(mp_final_model_flat - final_model_flat):.4f}')
+        print(f'2-norm of param. difference between pretrained and single-GPU fine-tuned models: '
+              f'{torch.norm(pretrained_model_flat - final_model_flat):.4f}')
 
 
 if __name__ == "__main__":
