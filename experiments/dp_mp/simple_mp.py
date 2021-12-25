@@ -31,16 +31,18 @@ def get_batch(batch_size=4, seq_len=100, disable_randomness=True):
     return x
 
 
-def train_gpt2_with_dp_on_mock_data(
-    model=None, mp=True, base_device=0, batch_size=4, num_updates=3,
-    disable_randomness=True,
+def fine_tune_gpt2_with_dp_on_mock_data(
+    mp=True, base_device=0, batch_size=4, num_updates=3,
+    disable_randomness=True, model_name_or_path='gpt2',
 ):
-    if model is None:
-        model: transformers.GPT2LMHeadModel = transformers.GPT2LMHeadModel.from_pretrained('gpt2')
+    # `disable_randomness` removes all noise added during training; makes testing easy.
+    config = transformers.AutoConfig.from_pretrained(model_name_or_path)
+    config.output_hidden_states = True
     if disable_randomness:
-        model.config.attn_pdrop = 0.
-        model.config.resid_pdrop = 0.
-        model.config.embd_pdrop = 0.
+        config.attn_pdrop = config.embd_pdrop = config.resid_pdrop = 0.
+    model: transformers.GPT2LMHeadModel = transformers.GPT2LMHeadModel.from_pretrained(
+        model_name_or_path, config=config
+    )
 
     if mp:
         model.parallelize()  # This essentially does everything for model parallelism.
@@ -58,9 +60,11 @@ def train_gpt2_with_dp_on_mock_data(
         epochs=3,
     )
     privacy_engine.attach(optimizer=optimizer)
+    if disable_randomness:
+        privacy_engine.noise_multiplier = 0.  # Only for testing purposes.
 
     model.train()
-    for _ in range(num_updates):
+    for update_idx in range(num_updates):
         input_ids = get_batch(batch_size=batch_size, disable_randomness=disable_randomness)
         outputs = model(input_ids, return_dict=True)
         labels = input_ids[:, 1:, ]
@@ -70,6 +74,10 @@ def train_gpt2_with_dp_on_mock_data(
         # This step is different from existing workflows:
         #   Don't call `loss.backward`; leave it to `optimizer.step` to handle backward.
         optimizer.step(loss=loss)
+
+        # Check if the devices are correct.
+        print(f'mp: {mp}, update_idx: {update_idx}')
+        print(f'  devices of hidden_states: {tuple(str(h.device) for h in outputs.hidden_states)}')
         del input_ids, outputs, labels, logits
 
     model.cpu()
@@ -81,16 +89,13 @@ def train_gpt2_with_dp_on_mock_data(
 def main():
     torch.set_default_dtype(torch.float64)
 
-    mp_final_model = train_gpt2_with_dp_on_mock_data(mp=True, disable_randomness=True)
-    final_model = train_gpt2_with_dp_on_mock_data(mp=False, disable_randomness=True)
+    mp_final_model = fine_tune_gpt2_with_dp_on_mock_data(mp=True, disable_randomness=True)
+    final_model = fine_tune_gpt2_with_dp_on_mock_data(mp=False, disable_randomness=True)
 
-    mp_final_model_flat = torch.cat(
-        tuple(t.flatten() for t in mp_final_model.parameters())
-    )
-    final_model_flat = torch.cat(
-        tuple(t.flatten() for t in final_model.parameters())
-    )
-    print(torch.norm(mp_final_model_flat - final_model_flat))
+    with torch.no_grad():
+        mp_final_model_flat = torch.cat(tuple(t.flatten() for t in mp_final_model.parameters()))
+        final_model_flat = torch.cat(tuple(t.flatten() for t in final_model.parameters()))
+        print(torch.norm(mp_final_model_flat - final_model_flat))
 
 
 if __name__ == "__main__":
