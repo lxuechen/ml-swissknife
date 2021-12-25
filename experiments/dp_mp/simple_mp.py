@@ -2,6 +2,10 @@
 
 Runs numerical tests comparing the model fine-tuned from MP against the model
 fine-tuned from single-GPU.
+
+Requirements:
+    pip install git+https://github.com/lxuechen/private-transformers.git
+    pip install fire
 """
 
 import fire
