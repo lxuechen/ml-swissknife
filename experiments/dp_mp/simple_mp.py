@@ -1,4 +1,8 @@
-"""Model parallelism with HF and DP-Adam demo."""
+"""Model parallelism with HF and DP-Adam demo.
+
+Runs numerical tests comparing the model fine-tuned from MP against the model
+fine-tuned from single-GPU.
+"""
 
 import fire
 import private_transformers
