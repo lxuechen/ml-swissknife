@@ -101,9 +101,12 @@ def main(model_name_or_path='gpt2'):
     mp_final_model = fine_tune_gpt2_with_dp_on_mock_data(
         mp=True, disable_randomness=True, model_name_or_path=model_name_or_path
     )
+    print('end MP model fine-tuning')
+
     final_model = fine_tune_gpt2_with_dp_on_mock_data(
         mp=False, disable_randomness=True, model_name_or_path=model_name_or_path
     )
+    print('end single-GPU model fine-tuning')
 
     with torch.no_grad():
         pretrained_model_flat = torch.cat(tuple(t.flatten() for t in pretrained_model.parameters()))
