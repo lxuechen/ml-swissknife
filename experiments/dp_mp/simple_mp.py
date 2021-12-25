@@ -1,4 +1,4 @@
-"""Simple model parallelism demonstration."""
+"""Model parallelism with HF and DP-Adam demo."""
 
 import fire
 import private_transformers
@@ -21,7 +21,7 @@ def get_base_device(base_device_index=0):
 def get_batch(batch_size=4, seq_len=100, disable_randomness=True):
     """Create a mock batch of data.
 
-    Always generate the same batch when `disable_randomness` is True.
+    Always generate the same batch when `disable_randomness` is True; for testing.
     """
     generator = torch.Generator()
     if disable_randomness:
@@ -76,9 +76,17 @@ def fine_tune_gpt2_with_dp_on_mock_data(
         optimizer.step(loss=loss)
 
         # Check if the devices are correct.
-        print(f'mp: {mp}, update_idx: {update_idx}')
+        print(f'mp: {mp}, fine-tuning update_idx: {update_idx}\n')
         print(f'  devices of hidden_states: {tuple(str(h.device) for h in outputs.hidden_states)}')
         del input_ids, outputs, labels, logits
+
+    # Check where all the state tensors are stored.
+    state_name_to_device = {
+        name: str(optimizer.state[param]['exp_avg'].device)
+        for name, param in model.named_parameters()
+    }
+    print(f'Optimizer states -> devices: \n'
+          f'  {state_name_to_device}')
 
     model.cpu()
     del optimizer, privacy_engine
