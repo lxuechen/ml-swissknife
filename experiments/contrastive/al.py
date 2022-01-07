@@ -42,7 +42,7 @@ class ActiveLearner4Contrastive(object):
 
 if __name__ == "__main__":
     model = torch.nn.Linear(100, 10)
-    tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-uncased', use_fast=False)
 
     # @formatter:off
     pwd = os.getcwd()
