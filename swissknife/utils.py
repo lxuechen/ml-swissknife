@@ -156,14 +156,14 @@ def read_csv(f: Union[str, io.IOBase], mode="r", delimiter='\t'):
 
 
 def write_csv(
-    f: Union[str, io.IOBase],
+    f: str,
     fieldnames: Union[List, Tuple],
     lines: Union[Tuple, List],  # Each line is a list with corresponding columns.
     mode="w",
     delimiter='\t'
 ):
-    if not isinstance(f, io.IOBase):
-        f = open(f, mode=mode)
+    os.makedirs(os.path.dirname(f), exist_ok=True)
+    f = open(f, mode=mode)
     writer = csv.writer(f, delimiter=delimiter)
     writer.writerow(fieldnames)
     for line in lines:
