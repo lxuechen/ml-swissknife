@@ -1,3 +1,8 @@
+"""
+
+Run from repo/experiments/
+    python -m contrastive.data_utils
+"""
 import csv
 import os
 
@@ -34,10 +39,10 @@ def data_glue_format():
         return [_sentence, _label]
 
     for src in (
-        "/Users/xuechenli/remote/swissknife/experiments/contrastive/data/orig",
-        "/Users/xuechenli/remote/swissknife/experiments/contrastive/data/new",
-        "/Users/xuechenli/remote/swissknife/experiments/contrastive/data/combined",
-        "/Users/xuechenli/remote/swissknife/experiments/contrastive/data/combined/paired",
+        "./contrastive/data/orig",
+        "./contrastive/data/new",
+        "./contrastive/data/combined",
+        "./contrastive/data/combined/paired",
     ):
         for split in ('train', 'dev', 'test'):
             src_paths = utils.list_file_paths(src)
@@ -57,8 +62,8 @@ def data_glue_format():
             )
 
     # Build a dictionary that maps an original sentence to a modified sentence and label.
-    paired_src = "/Users/xuechenli/remote/swissknife/experiments/contrastive/data/combined/paired"
-    orig_src = "/Users/xuechenli/remote/swissknife/experiments/contrastive/data/orig"
+    paired_src = "./contrastive/data/combined/paired"
+    orig_src = "./contrastive/data/orig"
     for split in ("train", "dev", "test"):
         out_dict = {}  # Dict to write.
 
@@ -125,15 +130,15 @@ def data_glue_format():
         # @formatter:off
         utils.jdump(
             out_dict,
-            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-map/{split}.json"
+            f"./contrastive/data-glue-format/combined-map/{split}.json"
         )
         utils.write_csv(
-            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/originals/{split}.csv",
+            f"./contrastive/data-glue-format/combined-ordered/originals/{split}.csv",
             fieldnames=["sentence", "label"],
             lines=originals,
         )
         utils.write_csv(
-            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/modifications/{split}.csv",
+            f"./contrastive/data-glue-format/combined-ordered/modifications/{split}.csv",
             fieldnames=["sentence", "label"],
             lines=modifications,
         )
