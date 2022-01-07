@@ -17,6 +17,7 @@ import argparse
 import collections
 import contextlib
 import copy
+import csv
 import datetime
 import gc
 import io
@@ -73,9 +74,9 @@ def single_standard_deviation(sample, return_type="tuple"):
 
 
 def confidence_interval(sample, alpha=0.05):
-    """Compute (asymptotic) confidence interval under the Normality assumption.
+    """Compute (asymptotic) confidence interval under the normality assumption.
 
-    Assumes each sample is drawn from a Normal distribution.
+    Assumes each sample is drawn from a normal distribution.
     This could still work if you have a large number of samples.
     """
     alpha2zscore = {
@@ -140,6 +141,34 @@ def jload(f: Union[str, io.IOBase], mode="r"):
     jdict = json.load(f)
     f.close()
     return jdict
+
+
+def read_csv(f: Union[str, io.IOBase], mode="r", delimiter='\t'):
+    if not isinstance(f, io.IOBase):
+        f = open(f, mode=mode)
+    reader = csv.DictReader(f, delimiter=delimiter)
+    out = dict(
+        fieldnames=reader.fieldnames,
+        rows=tuple(line for line in reader)
+    )
+    f.close()
+    return out
+
+
+def write_csv(
+    f: Union[str, io.IOBase],
+    fieldnames: Union[List, Tuple],
+    lines: Union[Tuple, List],  # Each line is a list with corresponding columns.
+    mode="w",
+    delimiter='\t'
+):
+    if not isinstance(f, io.IOBase):
+        f = open(f, mode=mode)
+    writer = csv.writer(f, delimiter=delimiter)
+    writer.writerow(fieldnames)
+    for line in lines:
+        writer.writerow(line)
+    f.close()
 
 
 def readlines(f: Union[str, io.IOBase], mode="r", strip=True):

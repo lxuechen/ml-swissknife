@@ -46,16 +46,15 @@ def data_glue_format():
             tgt_dir = os.path.dirname(tgt_path)
             os.system(f'mkdir -p {tgt_dir}')
 
-            with open(src_path, 'r') as src_f:
-                reader = csv.DictReader(src_f, delimiter='\t')
-                src_lines = [line for line in reader]
+            src_csv = utils.read_csv(src_path, delimiter='\t')
+            src_lines = src_csv["rows"]
 
             # 1) lower case sentences, 2) negative -> 0, positive -> 1
-            with open(tgt_path, 'w') as tgt_f:
-                writer = csv.writer(tgt_f, delimiter='\t')
-                writer.writerow(['sentence', 'label'])
-                for src_line in src_lines:
-                    writer.writerow(unwrap_line(src_line))
+            utils.write_csv(
+                tgt_path,
+                fieldnames=['sentence', 'label'],
+                lines=[unwrap_line(src_line) for src_line in src_lines]
+            )
 
     # Build a dictionary that maps an original sentence to a modified sentence and label.
     paired_src = "/Users/xuechenli/remote/swissknife/experiments/contrastive/data/combined/paired"
@@ -66,10 +65,9 @@ def data_glue_format():
         # Collect the original source.
         orig_src_paths = utils.list_file_paths(orig_src)
         orig_src_path = get_str_with_keyword(orig_src_paths, split)
-        with open(orig_src_path, 'r') as orig_src_f:
-            reader = csv.DictReader(orig_src_f, delimiter='\t')
-            orig_src_lines = [line["Text"].lower() for line in reader]
-        del orig_src_f
+
+        orig_src_csv = utils.read_csv(orig_src_path, delimiter='\t')
+        orig_src_lines = [line["Text"].lower() for line in orig_src_csv["rows"]]
 
         # Get paired dataset; need to know which is original, which is new.
         paired_src_paths = utils.list_file_paths(paired_src)
