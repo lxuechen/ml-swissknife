@@ -82,17 +82,21 @@ class ActiveLearner4Contrastive(object):
         fieldnames = raw_originals["fieldnames"]
         rows = [unpack_row(r) for r in raw_originals["rows"]]
         added_rows = [unpack_row(r) for i, r in enumerate(raw_modifications["rows"]) if i in selected_indices]
-        rows.extend(added_rows)
+        rows = rows + added_rows
         al_path = utils.join(self.al_dir, 'train.tsv')
+        # Write so you could load.
         utils.write_csv(
             al_path,
             fieldnames=fieldnames,
             rows=rows,
         )
 
+        # Load into memory.
         this_args = copy.deepcopy(self.data_args)
         this_args.data_dir = self.al_dir
         al_dataset = GlueDataset(this_args, tokenizer=self.tokenizer, mode='train')
+        os.system(f'rm {self.al_dir}/cached_*')
+
         return al_dataset
 
 
