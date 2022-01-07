@@ -13,6 +13,7 @@ import transformers
 from transformers import GlueDataset
 from transformers.data.data_collator import default_data_collator
 
+from swissknife import utils
 from . import compiled_args
 
 
@@ -44,10 +45,24 @@ class ActiveLearner4Contrastive(object):
             collate_fn=default_data_collator,
             num_workers=0,
         )
+        entropies = []
         for batch in originals_loader:
             batch = {key: val.to(device) for key, val in batch.items()}
             outs = model(**batch)
-            print(outs)
+            logits = outs.logits
+
+            probs = logits.softmax(dim=-1)
+            logprobs = logits.log_softmax(dim=-1)
+            ents = -(probs * logprobs).sum(dim=1)
+            entropies.extend(ents.tolist())
+
+        indices = list(range(len(entropies)))
+        entropies, indices = utils.parallel_sort(entropies, indices, reverse=True)  # Large entropies first.
+        pool_size = len(self.modifications)
+        selected_size = int(pool_size * pool_fetch_percentage)
+        selected_indices = indices[:selected_size]
+
+        # Write some of the stuff out!
 
 
 if __name__ == "__main__":
