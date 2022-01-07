@@ -28,14 +28,14 @@ class ActiveLearner4Contrastive(object):
     ):
         super(ActiveLearner4Contrastive, self).__init__()
         self.model = model
-        self.originals_path = originals_dir
-        self.modifications_path = modifications_dir
-        self.tokenizer = tokenizer
+        self.data_args = data_args
+
+        self.originals_dir = originals_dir
+        self.modifications_dir = modifications_dir
 
         this_args = copy.deepcopy(data_args)
         this_args.data_dir = originals_dir
         self.originals = GlueDataset(this_args, tokenizer=tokenizer, mode='train')
-        self.modifications = GlueDataset(this_args, tokenizer=tokenizer, mode='train')
 
     def fetch_from_pool_with_uncertainty(self, pool_fetch_percentage: float):
         originals_loader = DataLoader(
@@ -58,11 +58,15 @@ class ActiveLearner4Contrastive(object):
 
         indices = list(range(len(entropies)))
         entropies, indices = utils.parallel_sort(entropies, indices, reverse=True)  # Large entropies first.
-        pool_size = len(self.modifications)
+        pool_size = len(self.originals)
         selected_size = int(pool_size * pool_fetch_percentage)
         selected_indices = indices[:selected_size]
 
-        # Write some of the stuff out!
+        originals_path = utils.join(self.originals_dir, 'train.tsv')
+        modifications_path = utils.join(self.modifications_dir, 'train.tsv')
+        raw_originals = utils.read_csv(originals_path)
+        raw_modifications = utils.read_csv(modifications_path)
+        print(raw_modifications, raw_originals)
 
 
 if __name__ == "__main__":
