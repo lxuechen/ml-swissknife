@@ -58,7 +58,7 @@ def data_glue_format():
             utils.write_csv(
                 tgt_path,
                 fieldnames=['sentence', 'label'],
-                lines=[unwrap_line(src_line) for src_line in src_lines]
+                rows=[unwrap_line(src_line) for src_line in src_lines]
             )
 
     # Build a dictionary that maps an original sentence to a modified sentence and label.
@@ -135,12 +135,12 @@ def data_glue_format():
         utils.write_csv(
             f"./contrastive/data-glue-format/combined-ordered/originals/{split}.tsv",
             fieldnames=["sentence", "label"],
-            lines=originals,
+            rows=originals,
         )
         utils.write_csv(
             f"./contrastive/data-glue-format/combined-ordered/modifications/{split}.tsv",
             fieldnames=["sentence", "label"],
-            lines=modifications,
+            rows=modifications,
         )
         # @formatter:on
 
