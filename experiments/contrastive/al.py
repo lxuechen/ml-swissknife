@@ -81,9 +81,8 @@ class ActiveLearner4Contrastive(object):
 
         fieldnames = raw_originals["fieldnames"]
         rows = [unpack_row(r) for r in raw_originals["rows"]]
-        rows.extend(
-            [unpack_row(r) for i, r in raw_modifications["rows"] if i in selected_indices]
-        )
+        added_rows = [unpack_row(r) for i, r in enumerate(raw_modifications["rows"]) if i in selected_indices]
+        rows.extend(added_rows)
         al_path = utils.join(self.al_dir, 'train.tsv')
         utils.write_csv(
             al_path,
