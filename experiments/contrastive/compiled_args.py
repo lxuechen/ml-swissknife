@@ -51,7 +51,8 @@ class DynamicDataTrainingArguments(DataTrainingArguments):
 @dataclass
 class DynamicTrainingArguments(transformers.TrainingArguments):
     eval_epochs: int = field(default=10, metadata={"help": "Evaluate once such epochs"})
-    evaluate_before_training: bool = field(default=False, metadata={"help": "Run evaluation before training."})
+    evaluate_before_training: bool = field(default=False)
+    evaluate_after_training: bool = field(default=False)
     lr_decay: str = field(
         default="no", metadata={"help": "Apply the usual linear decay if `yes`, otherwise no deacy."}
     )
