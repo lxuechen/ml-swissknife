@@ -44,8 +44,8 @@ if __name__ == "__main__":
     tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-uncased')
 
     # @formatter:off
-    originals_dir = "/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/oringals/train.tsv"
-    modifications_dir = "/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/modifications/train.tsv"
+    originals_dir = "/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/oringals/"
+    modifications_dir = "/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/modifications/"
     # @formatter:on
 
     data_args = compiled_args.DynamicDataTrainingArguments(data_dir='', task_name='sst-2')
