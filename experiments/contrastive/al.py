@@ -26,6 +26,7 @@ class ActiveLearner4Contrastive(object):
         originals_dir: str,
         modifications_dir: str,
         al_dir: str,
+        verbose=False,
     ):
         super(ActiveLearner4Contrastive, self).__init__()
         self.model = model
@@ -39,6 +40,8 @@ class ActiveLearner4Contrastive(object):
         this_args = copy.deepcopy(self.data_args)
         this_args.data_dir = originals_dir
         self.originals_dataset = GlueDataset(this_args, tokenizer=tokenizer, mode='train')
+        if verbose:
+            print(f'Size of original set: {len(self.originals_dataset)}')
 
     def fetch_from_pool_with_uncertainty(
         self, pool_fetch_percentage: float, model: torch.nn.Module
@@ -115,4 +118,5 @@ if __name__ == "__main__":
         al_dir=al_dir,
         data_args=data_args,
     )
-    al.fetch_from_pool_with_uncertainty(pool_fetch_percentage=0.1, model=model)
+    al_dataset = al.fetch_from_pool_with_uncertainty(pool_fetch_percentage=0.1, model=model)
+    print(len(al_dataset))
