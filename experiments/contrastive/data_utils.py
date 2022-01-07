@@ -133,12 +133,12 @@ def data_glue_format():
             f"./contrastive/data-glue-format/combined-map/{split}.json"
         )
         utils.write_csv(
-            f"./contrastive/data-glue-format/combined-ordered/originals/{split}.csv",
+            f"./contrastive/data-glue-format/combined-ordered/originals/{split}.tsv",
             fieldnames=["sentence", "label"],
             lines=originals,
         )
         utils.write_csv(
-            f"./contrastive/data-glue-format/combined-ordered/modifications/{split}.csv",
+            f"./contrastive/data-glue-format/combined-ordered/modifications/{split}.tsv",
             fieldnames=["sentence", "label"],
             lines=modifications,
         )
