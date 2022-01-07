@@ -87,11 +87,16 @@ def data_glue_format():
 
         # Build mapping.
         num_lost_pairs = 0
+        originals, modifications = [], []
         for idx, pair in enumerate(pairs):
             if pair[0][0] in orig_src_lines:
                 out_dict[pair[0][0]] = pair[1]
+                originals.append(pair[0])
+                modifications.append(pair[1])
             elif pair[1][0] in orig_src_lines:
                 out_dict[pair[1][0]] = pair[0]
+                originals.append(pair[1])
+                modifications.append(pair[0])
             else:
                 num_lost_pairs += 1
                 text1, text2 = pair[0][0], pair[1][0]
@@ -117,14 +122,24 @@ def data_glue_format():
             f"len orig {len(orig_src_lines)}, len out_dict: {len(out_dict)}"
         )
 
+        # @formatter:off
         utils.jdump(
             out_dict,
             f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-map/{split}.json"
         )
+        utils.write_csv(
+            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/originals-{split}.csv",
+            fieldnames=["sentence", "label"],
+            lines=originals,
+        )
+        utils.write_csv(
+            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/modifications-{split}.csv",
+            fieldnames=["sentence", "label"],
+            lines=modifications,
+        )
+        # @formatter:on
 
 
-# TODO: reader hlep for wsv
-# TODO: Write helper for csv!
 def main(task="data_glue_format"):
     if task == "data_glue_format":
         data_glue_format()
