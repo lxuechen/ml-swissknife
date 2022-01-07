@@ -8,8 +8,10 @@ import copy
 import os
 
 import torch
+from torch.utils.data import DataLoader
 import transformers
 from transformers import GlueDataset
+from transformers.data.data_collator import default_data_collator
 
 from . import compiled_args
 
@@ -31,17 +33,26 @@ class ActiveLearner4Contrastive(object):
 
         this_args = copy.deepcopy(data_args)
         this_args.data_dir = originals_dir
-        originals = GlueDataset(this_args, tokenizer=tokenizer, mode='train')
-        modifications = GlueDataset(this_args, tokenizer=tokenizer, mode='train')
-        print(originals[0])
-        print(modifications[0])
+        self.originals = GlueDataset(this_args, tokenizer=tokenizer, mode='train')
+        self.modifications = GlueDataset(this_args, tokenizer=tokenizer, mode='train')
 
-    def fetch_loader(self, pool_fetch_percentage: float):
-        pass
+    def fetch_from_pool_with_uncertainty(self, pool_fetch_percentage: float):
+        originals_loader = DataLoader(
+            self.originals,
+            batch_size=4,
+            drop_last=False,
+            collate_fn=default_data_collator,
+            num_workers=0,
+        )
+        for batch in originals_loader:
+            batch = {key: val.to(device) for key, val in batch.items()}
+            outs = model(**batch)
+            print(outs)
 
 
 if __name__ == "__main__":
-    model = torch.nn.Linear(100, 10)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = transformers.AutoModelForSequenceClassification.from_pretrained('bert-base-uncased').to(device)
     tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-uncased', use_fast=False)
 
     # @formatter:off
@@ -58,3 +69,4 @@ if __name__ == "__main__":
         modifications_dir=modifications_dir,
         data_args=data_args,
     )
+    al.fetch_from_pool_with_uncertainty(pool_fetch_percentage=0.1)
