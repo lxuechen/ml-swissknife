@@ -128,12 +128,12 @@ def data_glue_format():
             f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-map/{split}.json"
         )
         utils.write_csv(
-            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/originals-{split}.csv",
+            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/originals/{split}.csv",
             fieldnames=["sentence", "label"],
             lines=originals,
         )
         utils.write_csv(
-            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/modifications-{split}.csv",
+            f"/Users/xuechenli/remote/swissknife/experiments/contrastive/data-glue-format/combined-ordered/modifications/{split}.csv",
             fieldnames=["sentence", "label"],
             lines=modifications,
         )
