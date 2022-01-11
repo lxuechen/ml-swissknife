@@ -36,8 +36,8 @@ def evaluate(x_test, y_test, beta, result, state, global_step, results, verbose=
 
 
 def compare_trajectory(
-    d, n_train, n_test=1000,
-    lr=5e-3, momentum=0.0, damping=0, T=int(1e5), eval_steps=10, verbose=False,
+    d, n_train, n_test=5000,
+    lr=1e-3, momentum=0.0, damping=0, T=int(1e5), eval_steps=10, verbose=False,
     img_path=None,
 ):
     """Optimize with gd (on whitened data) and ngd with infinitesimal learning rate."""
