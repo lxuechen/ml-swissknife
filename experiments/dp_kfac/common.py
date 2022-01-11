@@ -43,6 +43,10 @@ def squared_loss(x, y, w):
     return .5 * ((x @ w - y) ** 2).mean(dim=0)
 
 
+def predict(x, w):
+    return x @ w
+
+
 @torch.no_grad()
 def gd(
     state, x, y, lr,
@@ -70,7 +74,7 @@ def gd(
 
 
 @torch.no_grad()
-def pgd(
+def pg(
     state, x, y, P, lr,
     steps,  # The iteration counter before the update.
     **_,
