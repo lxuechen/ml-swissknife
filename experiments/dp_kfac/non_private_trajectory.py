@@ -54,17 +54,17 @@ def compare_trajectory(
     P_ng = torch.inverse(torch.eye(data["beta"].size(0)) * damping + data["sample_covariance"])
 
     for global_step in tqdm.tqdm(range(1, T + 1), desc="training"):
-        result_ng = common.pg(
-            x=data["x_train_whitened"], y=data["y_train"],
-            state=state_ng, P=P_ng, steps=global_step, **kwargs,
-        )
         result_gd = common.gd(
-            x=data["x_train"], y=data["y_train"],
+            x=data["x_train_whitened"], y=data["y_train"],
             state=state_gd, steps=global_step, **kwargs,
         )
+        result_ng = common.pg(
+            x=data["x_train"], y=data["y_train"],
+            state=state_ng, P=P_ng, steps=global_step, **kwargs,
+        )
 
-        state_ng = result_ng["state"]
         state_gd = result_gd["state"]
+        state_ng = result_ng["state"]
 
         if global_step % eval_steps == 0:
             evaluate(
@@ -78,7 +78,7 @@ def compare_trajectory(
 
             prediction_gd = common.predict(data['x_test_whitened'], w=state_gd["w"])
             prediction_ng = common.predict(data['x_test'], w=state_ng["w"])
-            prediction_diff = torch.norm(prediction_ng - prediction_gd).item()
+            prediction_diff = torch.norm(prediction_gd - prediction_ng).item()
             results_diff["prediction_diff"].append(prediction_diff)
             results_diff["global_step"].append(global_step)
 
