@@ -5,12 +5,14 @@ import torch
 def make_data(
     d,
     n_train, n_test, n_unlabeled,
-    offdiag_scale=2, diag_scale=10, noise_std=1e-3, beta_std=3, beta_mean=0.
+    offdiag_scale=2, diag_scale=10, noise_std=1e-3, beta_std=3, beta_mean=0.,
+    zero_mean=True,
 ):
+    torch.set_default_dtype(torch.float64)
     beta = beta_mean + torch.randn(d) * beta_std  # True coefficients.
 
     n = n_train + n_test
-    mean = torch.randn(d)
+    mean = torch.randn(d) if not zero_mean else torch.zeros(size=(d,))
     # Covariance is AA^t + diag_embed(1/i); highly anisotropic covariance.
     A = torch.randn(d, d) * offdiag_scale
     covariance = A @ A.t() + torch.diag_embed(torch.tensor([1 / i for i in range(1, d + 1)])) * diag_scale
@@ -24,6 +26,12 @@ def make_data(
     x_unlabeled = mean[None, :] + torch.randn(n_unlabeled, d) @ torch.cholesky(covariance).t()
     sample_covariance = torch.tensor(np.cov(x_unlabeled.t().numpy()), dtype=torch.get_default_dtype())
 
+    evals, evecs = torch.symeig(covariance, eigenvectors=True)
+    covariance_m1h = evecs @ torch.diag(evals ** (-0.5)) @ evecs.T
+
+    x_train_whitened = x_train @ covariance_m1h
+    x_test_whitened = x_test @ covariance_m1h
+
     return {
         'mean': mean,
         'covariance': covariance,
@@ -36,6 +44,9 @@ def make_data(
         'inverse_covariance': inverse_covariance,
         'n_train': n_train,
         'n_test': n_test,
+
+        'x_test_whitened': x_test_whitened,
+        'x_train_whitened': x_train_whitened,
     }
 
 

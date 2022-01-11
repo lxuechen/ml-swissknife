@@ -16,10 +16,10 @@ from swissknife import utils
 from . import common
 
 
-def evaluate(data, result, state, global_step, results, verbose=False):
-    train_loss = result["loss"]
-    test_loss = common.squared_loss(data["x_test"], data["y_test"], state["w"])
-    dist2opt = torch.norm(data["beta"] - state["w"])
+def evaluate(x_test, y_test, beta, result, state, global_step, results, verbose=False):
+    train_loss = result["loss"].item()
+    test_loss = common.squared_loss(x_test, y_test, state["w"]).item()
+    dist2opt = torch.norm(beta - state["w"]).item()
 
     results['global_step'].append(global_step)
     results['train_loss'].append(train_loss)
@@ -37,39 +37,48 @@ def evaluate(data, result, state, global_step, results, verbose=False):
 
 def compare_trajectory(
     d, n_train, n_test=1000,
-    lr=1e-2, momentum=0.9, damping=1e-5, T=int(1e6), eval_steps=10, verbose=False,
+    lr=5e-3, momentum=0.0, damping=0, T=int(1e5), eval_steps=10, verbose=False,
     img_path=None,
 ):
     """Optimize with gd (on whitened data) and ngd with infinitesimal learning rate."""
     data = common.make_data(n_train=n_train, n_test=n_test, d=d, n_unlabeled=5000)
 
-    results_diff = dict(global_step=[], prediction_diff=[])
+    results_diff = dict(global_step=[0], prediction_diff=[0.])
     results_ng = dict(global_step=[], train_loss=[], test_loss=[], dist2opt=[])
     results_gd = dict(global_step=[], train_loss=[], test_loss=[], dist2opt=[])
 
     state_gd = dict(w=torch.zeros_like(data["beta"]), v=torch.zeros_like(data["beta"]))
     state_ng = dict(w=torch.zeros_like(data["beta"]), v=torch.zeros_like(data["beta"]))
 
-    # Shared hparams for algos.
     kwargs = dict(lr=lr, momentum=momentum)
     P_ng = torch.inverse(torch.eye(data["beta"].size(0)) * damping + data["sample_covariance"])
-    for global_step in tqdm.tqdm(range(1, T + 1), desc="training"):
-        x_train, y_train = data["x_train"], data["y_train"]
 
-        # Run optimizer.
-        result_ng = common.pg(x=x_train, y=y_train, state=state_ng, P=P_ng, steps=global_step, **kwargs)
-        result_gd = common.gd(x=x_train, y=y_train, state=state_gd, steps=global_step, **kwargs)
+    for global_step in tqdm.tqdm(range(1, T + 1), desc="training"):
+        result_ng = common.pg(
+            x=data["x_train_whitened"], y=data["y_train"],
+            state=state_ng, P=P_ng, steps=global_step, **kwargs,
+        )
+        result_gd = common.gd(
+            x=data["x_train"], y=data["y_train"],
+            state=state_gd, steps=global_step, **kwargs,
+        )
 
         state_ng = result_ng["state"]
         state_gd = result_gd["state"]
 
         if global_step % eval_steps == 0:
-            evaluate(data=data, result=result_gd, state=state_gd, global_step=global_step, results=results_gd)
-            evaluate(data=data, result=result_ng, state=state_ng, global_step=global_step, results=results_ng)
+            evaluate(
+                x_test=data["x_test_whitened"], y_test=data["y_test"], beta=data["beta"],
+                result=result_gd, state=state_gd, global_step=global_step, results=results_gd
+            )
+            evaluate(
+                x_test=data["x_test"], y_test=data["y_test"], beta=data["beta"],
+                result=result_ng, state=state_ng, global_step=global_step, results=results_ng
+            )
 
-            prediction_gd = common.predict(data['x_test'], w=state_gd["w"])
+            prediction_gd = common.predict(data['x_test_whitened'], w=state_gd["w"])
             prediction_ng = common.predict(data['x_test'], w=state_ng["w"])
-            prediction_diff = torch.norm(prediction_ng - prediction_gd)
+            prediction_diff = torch.norm(prediction_ng - prediction_gd).item()
             results_diff["prediction_diff"].append(prediction_diff)
             results_diff["global_step"].append(global_step)
 
