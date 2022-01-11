@@ -51,7 +51,7 @@ def compare_trajectory(
     state_ng = dict(w=torch.zeros_like(data["beta"]), v=torch.zeros_like(data["beta"]))
 
     kwargs = dict(lr=lr, momentum=momentum)
-    P_ng = torch.inverse(torch.eye(data["beta"].size(0)) * damping + data["sample_covariance"])
+    P_ng = torch.inverse(torch.eye(data["beta"].size(0)) * damping + data["covariance"])  # Oracle.
 
     for global_step in tqdm.tqdm(range(1, T + 1), desc="training"):
         result_gd = common.gd(
