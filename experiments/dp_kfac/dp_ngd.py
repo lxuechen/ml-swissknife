@@ -2,50 +2,13 @@
 import os
 
 import fire
-import numpy as np
 from private_transformers.privacy_utils.accounting import rdp_accounting
 import torch
 
 from swissknife import utils
+from .common import make_data
 
 DEFAULT_ALPHAS = tuple(1 + x / 10.0 for x in range(1, 100)) + tuple(range(12, 64))
-
-
-def make_data(
-    d,
-    n_train, n_test, n_unlabeled,
-    offdiag_scale=2, diag_scale=10, noise_std=1e-3, beta_std=3, beta_mean=0.
-):
-    beta = beta_mean + torch.randn(d) * beta_std  # True coefficients.
-
-    n = n_train + n_test
-    mean = torch.randn(d)
-    # Covariance is AA^t + diag_embed(1/i); highly anisotropic covariance.
-    A = torch.randn(d, d) * offdiag_scale
-    covariance = A @ A.t() + torch.diag_embed(torch.tensor([1 / i for i in range(1, d + 1)])) * diag_scale
-    inverse_covariance = torch.inverse(covariance)
-    x = mean[None, :] + torch.randn(n, d) @ torch.cholesky(covariance).t()
-    y = x @ beta + torch.randn(size=(n,)) * noise_std
-
-    x_train, x_test = x.split((n_train, n_test), dim=0)
-    y_train, y_test = y.split((n_train, n_test), dim=0)
-
-    x_unlabeled = mean[None, :] + torch.randn(n_unlabeled, d) @ torch.cholesky(covariance).t()
-    sample_covariance = torch.tensor(np.cov(x_unlabeled.t().numpy()), dtype=torch.get_default_dtype())
-
-    return {
-        'mean': mean,
-        'covariance': covariance,
-        'sample_covariance': sample_covariance,
-        'x_train': x_train,
-        'y_train': y_train,
-        'x_test': x_test,
-        'y_test': y_test,
-        'beta': beta,
-        'inverse_covariance': inverse_covariance,
-        'n_train': n_train,
-        'n_test': n_test,
-    }
 
 
 def squared_loss(x, y, w):
