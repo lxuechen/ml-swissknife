@@ -4,23 +4,46 @@ Theory:
     Whitened GD and NGD has the ... prediction trajectory:
         - underparam different
         - overparam same
+
+python -m dp_kfac.non_private_trajectory
 """
 
 import fire
 import torch
+import tqdm
 
+from swissknife import utils
 from . import common
+
+
+def evaluate(data, result, state, global_step, results, verbose=False):
+    train_loss = result["loss"]
+    test_loss = common.squared_loss(data["x_test"], data["y_test"], state["w"])
+    dist2opt = torch.norm(data["beta"] - state["w"])
+
+    results['global_step'].append(global_step)
+    results['train_loss'].append(train_loss)
+    results['test_loss'].append(test_loss)
+    results['dist2opt'].append(dist2opt)
+
+    if verbose:
+        print(
+            f"global_step: {global_step}, "
+            f"train_loss: {train_loss:.4f}, "
+            f"test_loss: {test_loss:.4f}, "
+            f"distance to optimum: {dist2opt:.4f}"
+        )
 
 
 def compare_trajectory(
     d, n_train, n_test=1000,
-    lr=1e-2, momentum=0.9, damping=1e-5, T=int(1e6),
+    lr=1e-2, momentum=0.9, damping=1e-5, T=int(1e6), eval_steps=10, verbose=False,
+    img_path=None,
 ):
     """Optimize with gd (on whitened data) and ngd with infinitesimal learning rate."""
     data = common.make_data(n_train=n_train, n_test=n_test, d=d, n_unlabeled=5000)
-    lr = 1e-2  # Should be small.
 
-    # Plot difference in prediction vector against iteration count.
+    results_diff = dict(global_step=[], prediction_diff=[])
     results_ng = dict(global_step=[], train_loss=[], test_loss=[], dist2opt=[])
     results_gd = dict(global_step=[], train_loss=[], test_loss=[], dist2opt=[])
 
@@ -30,7 +53,7 @@ def compare_trajectory(
     # Shared hparams for algos.
     kwargs = dict(lr=lr, momentum=momentum)
     P_ng = torch.inverse(torch.eye(data["beta"].size(0)) * damping + data["sample_covariance"])
-    for global_step in range(1, T + 1):
+    for global_step in tqdm.tqdm(range(1, T + 1), desc="training"):
         x_train, y_train = data["x_train"], data["y_train"]
 
         # Run optimizer.
@@ -41,33 +64,38 @@ def compare_trajectory(
         state_gd = result_gd["state"]
 
         if global_step % eval_steps == 0:
-            pass
-            # train_loss = result["loss"]
-            # test_loss = common.squared_loss(data["x_test"], data["y_test"], state["w"])
-            # dist2opt = torch.norm(data["beta"] - state["w"])
-            # 
-            # results['global_step'].append(global_step)
-            # results['train_loss'].append(train_loss)
-            # results['test_loss'].append(test_loss)
-            # results['dist2opt'].append(dist2opt)
-            # 
-            # if verbose:
-            #     print(
-            #         f"global_step: {global_step}, "
-            #         f"train_loss: {train_loss:.4f}, "
-            #         f"test_loss: {test_loss:.4f}, "
-            #         f"distance to optimum: {dist2opt:.4f}"
-            #     )
+            evaluate(data=data, result=result_gd, state=state_gd, global_step=global_step, results=results_gd)
+            evaluate(data=data, result=result_ng, state=state_ng, global_step=global_step, results=results_ng)
+
+            prediction_gd = common.predict(data['x_test'], w=state_gd["w"])
+            prediction_ng = common.predict(data['x_test'], w=state_ng["w"])
+            prediction_diff = torch.norm(prediction_ng - prediction_gd)
+            results_diff["prediction_diff"].append(prediction_diff)
+            results_diff["global_step"].append(global_step)
+
+    if img_path is not None:
+        utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=(".png", '.pdf'),
+            plots=[
+                dict(x=results_diff['global_step'], y=results_diff['prediction_diff'])
+            ],
+            options=dict(xlabel="global step", ylabel='$ \| \hat{y}_{\mathrm{ng}} - \hat{y}_{\mathrm{gd}} \| $')
+        )
 
 
 def main():
-    # Underparam.
     n_train, d = 50, 10
-    compare_trajectory(n_train=n_train, d=d)
+    compare_trajectory(
+        n_train=n_train, d=d,
+        img_path="/Users/xuechenli/remote/swissknife/experiments/dp_kfac/plots/non_private_underparam"
+    )
 
-    # Overparam.
     n_train, d = 10, 50
-    compare_trajectory(n_train=n_train, d=d)
+    compare_trajectory(
+        n_train=n_train, d=d,
+        img_path="/Users/xuechenli/remote/swissknife/experiments/dp_kfac/plots/non_private_overparam",
+    )
 
 
 if __name__ == "__main__":
