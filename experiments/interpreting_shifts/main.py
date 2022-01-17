@@ -9,6 +9,8 @@ from typing import Optional, Callable, Tuple, Any
 
 import fire
 import numpy as np
+from torch import optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -107,6 +109,34 @@ def get_da_loaders(
     )
 
     return source_train_loader, target_train_loader, target_test_loader
+
+
+class OptimalTransportDomainAdaptation(object):
+    def __init__(self, model_g, model_f, n_class, eta1=0.001, eta2=0.0001, tau=1., epsilon=0.1):
+        self.model_g = model_g
+        self.model_f = model_f
+        self.n_class = n_class
+        self.eta1 = eta1  # Weight for feature cost.
+        self.eta2 = eta2  # Weight for label cost.
+        self.tau = tau
+        self.epsilon = epsilon
+
+    def fit_source(self, source_train_loader, epochs=10, criterion=F.cross_entropy, device=None):
+        optimizer = optim.Adam(
+            params=tuple(self.model_g.parameters()) + tuple(self.model_f.parameters()), lr=2e-4
+        )
+        for epoch in range(epochs):
+            self.model_g.train()
+            self.model_f.train()
+            for i, data in enumerate(source_train_loader):
+                optimizer.zero_grad()
+                x, y = tuple(t.to(device) for t in data)
+                loss = criterion(self.model_f(self.model_g(x)), y)
+                loss.backward()
+                optimizer.step()
+
+    def fit_joint(self):
+        pass
 
 
 def main():
