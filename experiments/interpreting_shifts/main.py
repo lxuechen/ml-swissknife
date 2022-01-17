@@ -31,8 +31,8 @@ class SVHN(datasets.SVHN):
             if y in classes:
                 new_data.append(x)
                 new_labels.append(y)
-        self.data = np.array(new_data)
-        self.labels = np.array(new_labels)
+        self.data = np.stack(new_data, axis=0)
+        self.labels = np.stack(new_labels, axis=0)
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         # Return index of example in addition to image and label. Helps accumulate OT mapping.
@@ -58,8 +58,8 @@ class MNIST(datasets.MNIST):
             if y in classes:
                 new_data.append(x)
                 new_labels.append(y)
-        self.data = np.array(new_data)
-        self.targets = np.array(new_labels)
+        self.data = np.stack(new_data, axis=0)
+        self.targets = np.stack(new_labels, axis=0)
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         img, target = super(MNIST, self).__getitem__(index=index)
@@ -110,7 +110,7 @@ def get_da_loaders(
 
 
 def main():
-    pass
+    l1, l2, l3 = get_da_loaders(train_batch_size=10, eval_batch_size=4)
 
 
 if __name__ == "__main__":
