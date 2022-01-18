@@ -114,11 +114,15 @@ def get_loaders(
     eval_batch_size=500,
 ):
     source_train = get_data(root=root, name=source_data_name, split='train', classes=source_classes)
+    source_test = get_data(root=root, name=source_data_name, split='test', classes=target_classes)
     target_train = get_data(root=root, name=target_data_name, split='train', classes=target_classes)
     target_test = get_data(root=root, name=target_data_name, split='test', classes=target_classes)
 
     source_train_loader = DataLoader(
         source_train, batch_size=train_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
+    )
+    source_test_loader = DataLoader(
+        source_test, batch_size=eval_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
     )
     target_train_loader = DataLoader(
         target_train, batch_size=train_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
@@ -137,7 +141,8 @@ def get_loaders(
     )
 
     return (
-        source_train_loader, target_train_loader, target_test_loader,
+        source_train_loader, source_test_loader,
+        target_train_loader, target_test_loader,
         target_train_loader_unshuffled, target_test_loader_unshuffled,
     )
 
@@ -158,8 +163,8 @@ class OptimalTransportDomainAdapter(object):
 
     def fit_source(
         self,
-        source_train_loader,
-        epochs=10, criterion=F.cross_entropy, learning_rate=2e-4, device=None
+        source_train_loader, source_test_loader=None,
+        epochs=10, criterion=F.cross_entropy, learning_rate=2e-4, device=None,
     ):
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
         optimizer = optim.Adam(params=params, lr=learning_rate)
@@ -174,6 +179,7 @@ class OptimalTransportDomainAdapter(object):
                 loss = criterion(self._model(x), y)
                 loss.backward()
                 optimizer.step()
+        self._evaluate(loader=source_test_loader, device=device, criterion=F.softmax)
 
     def fit_joint(
         self,
@@ -237,6 +243,9 @@ class OptimalTransportDomainAdapter(object):
 
     @torch.no_grad()
     def _evaluate(self, loader, device, criterion):
+        if loader is None:
+            return
+
         self.model_g.eval()
         self.model_f.eval()
 
@@ -321,7 +330,8 @@ def domain_adaptation(
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    (source_train_loader, target_train_loader, target_test_loader,
+    (source_train_loader, source_test_loader,
+     target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
         train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
@@ -338,7 +348,16 @@ def domain_adaptation(
     )
 
 
-def subpop_discovery(**kwargs):
+def subpop_discovery(
+    eta1=0.1,
+    eta2=0.1,
+    tau=1.0,
+    epsilon=0.1,
+
+    train_batch_size=500,
+    eval_batch_size=500,
+    **kwargs
+):
     pass
 
 
