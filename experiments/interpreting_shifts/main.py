@@ -7,7 +7,9 @@ To run:
 
 TODO: Try using pre-trained model as feature extractor.
 TODO: Ablate unbalanced OT vs balanced.
-TODO: Check w/o training
+
+w/ or w/o domain adapation:
+    MNIST (lost digits) -> MNIST: It seems randomly initialized network could already do pretty well.
 """
 
 import itertools
@@ -364,10 +366,11 @@ def subpop_discovery(
     train_batch_size=500,
     eval_batch_size=500,
     top_percentage=0.2,
-    source_classes=tuple(range(5)),
+    source_classes=(1, 2, 3, 9, 0,),
     target_classes=tuple(range(10)),
     train_epochs=3,
     match_epochs=5,
+    balanced_op=False,
     **kwargs,
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -392,11 +395,12 @@ def subpop_discovery(
     )
     domain_adapter.fit_joint(
         source_train_loader, target_train_loader, target_test_loader, device=device, epochs=train_epochs,
+        balanced_op=balanced_op,
     )
 
     marginal = domain_adapter.target_marginal(
         source_train_loader, target_train_loader_unshuffled,
-        epochs=match_epochs, balanced_op=False, device=device
+        epochs=match_epochs, balanced_op=balanced_op, device=device
     )
     marginal = torch.tensor(marginal)
     top_values, top_indices = (-marginal).topk(int(len(marginal) * top_percentage))
