@@ -310,11 +310,12 @@ class OptimalTransportDomainAdapter(object):
                     joint = ot.unbalanced.sinkhorn_knopp_unbalanced(a, b, cost_numpy, self.epsilon, self.tau)
                 marginal = np.sum(joint, axis=0)
                 target_indices = target_indices.cpu().numpy()
-                marginal = np.put(np.zeros_like(avg), target_indices, marginal)
+                marginal_full = np.zeros_like(avg)
+                np.put(marginal_full, target_indices, marginal)
 
                 # Online average.
                 global_step += 1
-                avg = avg * (global_step - 1) / global_step + marginal / global_step
+                avg = avg * (global_step - 1) / global_step + marginal_full / global_step
 
         return avg
 
