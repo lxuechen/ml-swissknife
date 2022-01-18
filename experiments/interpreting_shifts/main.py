@@ -6,6 +6,8 @@ To run:
     python -m interpreting_shifts.main --task subpop_discovery
 
 TODO: Try using pre-trained model as feature extractor.
+TODO: Ablate unbalanced OT vs balanced.
+TODO: Check w/o training
 """
 
 import itertools
@@ -364,7 +366,8 @@ def subpop_discovery(
     top_percentage=0.2,
     source_classes=tuple(range(5)),
     target_classes=tuple(range(10)),
-    epochs=3,
+    train_epochs=3,
+    match_epochs=5,
     **kwargs,
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -385,15 +388,15 @@ def subpop_discovery(
         model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
     )
     domain_adapter.fit_source(
-        source_train_loader, device=device, epochs=epochs,
+        source_train_loader, device=device, epochs=train_epochs,
     )
     domain_adapter.fit_joint(
-        source_train_loader, target_train_loader, target_test_loader, device=device, epochs=epochs,
+        source_train_loader, target_train_loader, target_test_loader, device=device, epochs=train_epochs,
     )
 
     marginal = domain_adapter.target_marginal(
         source_train_loader, target_train_loader_unshuffled,
-        epochs=epochs, balanced_op=False, device=device
+        epochs=match_epochs, balanced_op=False, device=device
     )
     marginal = torch.tensor(marginal)
     top_values, top_indices = (-marginal).topk(int(len(marginal) * top_percentage))
@@ -408,7 +411,6 @@ def subpop_discovery(
 
     counts = {k: v for k, v in sorted(counts.items(), key=lambda item: item[1])}
     print(counts)
-    # TODO: Ablate unbalanced OT vs balanced.
 
 
 def main(task="domain_adaptation", **kwargs):
