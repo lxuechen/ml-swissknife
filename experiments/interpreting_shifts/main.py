@@ -2,17 +2,22 @@
 First test run of learning mapping using mini-batch unbalanced OT.
 
 TODO:
-    2) function/method for accumulating matching
+    2) function/method for accumulating matching during test time
+    3) how does this work with a pre-trained feature extractor?
 """
 
+import itertools
 from typing import Optional, Callable, Tuple, Any
 
 import fire
 import numpy as np
-from torch import optim
+import ot
+import torch
+from torch import optim, nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+import tqdm
 
 
 class SVHN(datasets.SVHN):
@@ -113,30 +118,109 @@ def get_da_loaders(
 
 class OptimalTransportDomainAdaptation(object):
     def __init__(self, model_g, model_f, n_class, eta1=0.001, eta2=0.0001, tau=1., epsilon=0.1):
-        self.model_g = model_g
-        self.model_f = model_f
+        self.model_g: nn.Module = model_g
+        self.model_f: nn.Module = model_f
         self.n_class = n_class
         self.eta1 = eta1  # Weight for feature cost.
         self.eta2 = eta2  # Weight for label cost.
         self.tau = tau
         self.epsilon = epsilon
 
-    def fit_source(self, source_train_loader, epochs=10, criterion=F.cross_entropy, device=None):
-        optimizer = optim.Adam(
-            params=tuple(self.model_g.parameters()) + tuple(self.model_f.parameters()), lr=2e-4
-        )
+    def fit_source(
+        self,
+        source_train_loader,
+        epochs=10, criterion=F.cross_entropy, learning_rate=2e-4, device=None
+    ):
+        params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
+        optimizer = optim.Adam(params=params, lr=learning_rate)
         for epoch in range(epochs):
             self.model_g.train()
             self.model_f.train()
             for i, data in enumerate(source_train_loader):
                 optimizer.zero_grad()
-                x, y = tuple(t.to(device) for t in data)
+                data = tuple(t.to(device) for t in data)
+                x, y = data[:2]
                 loss = criterion(self.model_f(self.model_g(x)), y)
                 loss.backward()
                 optimizer.step()
 
-    def fit_joint(self):
-        pass
+    def fit_joint(
+        self,
+        source_train_loader, target_train_loader, target_test_loader,
+        epochs=100, criterion=F.cross_entropy, learning_rate=2e-4, device=None,
+        balanced_op=False,
+        eval_steps=100,
+    ):
+        target_train_loader_cycled = itertools.cycle(target_train_loader)
+        params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
+        optimizer = optim.Adam(params=params, lr=learning_rate)
+
+        global_step = 0
+        for epoch in tqdm.tqdm(epochs, desc=f"fit_joint"):
+            self.model_g.train()
+            self.model_f.train()
+
+            for i, source_train_data in enumerate(source_train_loader):
+                optimizer.zero_grad()
+
+                source_train_data = tuple(t.to(device) for t in source_train_data)
+                source_x, source_y = source_train_data[:2]
+
+                target_train_data = next(target_train_loader_cycled)
+                target_train_data = tuple(t.to(device) for t in target_train_data)
+                target_x = target_train_data[0]
+
+                source_gx, target_gx = tuple(self.model_g(t) for t in (source_x, target_x))
+                source_fgx, target_fgx = tuple(self.model_f(t) for t in (source_gx, target_gx))
+
+                # Source classification loss.
+                source_cls_loss = criterion(source_fgx, source_y)
+
+                # JDOT loss.
+                pairwise_diff = (source_gx[..., None] - target_gx.permute(0, 1)[None, ...])
+                feature_cost = torch.sum(pairwise_diff * pairwise_diff, dim=1)
+
+                source_y_oh = F.one_hot(source_y, num_classes=self.n_class).to(source_x.dtype)
+                label_cost = source_y_oh @ (- torch.log_softmax(target_fgx, dim=1).permute(0, 1))
+
+                cost = self.eta1 * feature_cost + self.eta2 * label_cost
+                cost_numpy = cost.detach().cpu().numpy()
+
+                # Compute alignment.
+                a, b = ot.unif(source_x.size(0)), ot.unif(target_x.size(0))
+                if balanced_op:
+                    pi = ot.emd(a, b, cost_numpy)
+                else:  # Unbalanced optimal transport.
+                    pi = ot.unbalanced.sinkhorn_knopp_unbalanced(a, b, cost_numpy, self.epsilon, self.tau)
+                pi = torch.tensor(pi, device=device)
+
+                da_loss = torch.sum(pi * cost)
+                loss = source_cls_loss + da_loss
+                loss.backward()
+
+                optimizer.step()
+
+                global_step += 1
+                if global_step % eval_steps == 0:
+                    avg_xent, avg_zeon = self._evaluate(target_test_loader, device, criterion)
+                    print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
+
+    def _evaluate(self, loader, device, criterion):
+        xents, zeons = [], []
+        for data in loader:
+            data = tuple(t.to(device) for t in data)
+            x, y = data[:2]
+            y_hat = self._model(x)
+
+            xent = criterion(y_hat, y)
+            zeon = torch.eq(y_hat.argmax(dim=1), y)
+
+            xents.extend(xent.cpu().tolist())
+            zeons.extend(zeon.cpu().tolist())
+        return tuple(np.mean(np.array(t)) for t in (xents, zeons))
+
+    def _model(self, x):
+        return self.model_g(self.model_f(x))
 
 
 def main():
