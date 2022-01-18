@@ -4,6 +4,8 @@ First test run of learning mapping using mini-batch unbalanced OT.
 TODO:
     2) function/method for accumulating matching during test time
     3) how does this work with a pre-trained feature extractor?
+
+python -m experiments.main
 """
 
 import itertools
@@ -19,6 +21,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import tqdm
+
+from . import models
 
 
 class SVHN(datasets.SVHN):
@@ -180,10 +184,9 @@ class OptimalTransportDomainAdaptation(object):
 
         global_step = 0
         for epoch in tqdm.tqdm(epochs, desc=f"fit_joint"):
-            self.model_g.train()
-            self.model_f.train()
-
             for i, source_train_data in enumerate(source_train_loader):
+                self.model_g.train()
+                self.model_f.train()
                 optimizer.zero_grad()
 
                 source_train_data = tuple(t.to(device) for t in source_train_data)
@@ -229,6 +232,9 @@ class OptimalTransportDomainAdaptation(object):
                     print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
 
     def _evaluate(self, loader, device, criterion):
+        self.model_g.eval()
+        self.model_f.eval()
+
         xents, zeons = [], []
         for data in loader:
             data = tuple(t.to(device) for t in data)
@@ -298,11 +304,21 @@ class OptimalTransportDomainAdaptation(object):
         return avg
 
 
-def main():
+def main(
+    eta1=0.1,
+    eta2=0.1,
+    tau=1.0,
+    epsilon=0.1,
+):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     (source_train_loader, target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
         train_batch_size=10, eval_batch_size=4
     )
+
+    model_g = models.Cnn_generator().to(device).apply(models.weights_init)
+    model_f = models.Classifier2().to(device).apply(models.weights_init)
 
 
 if __name__ == "__main__":
