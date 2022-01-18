@@ -361,7 +361,7 @@ def subpop_discovery(
 
     train_batch_size=500,
     eval_batch_size=500,
-    top_percentage=0.1,
+    top_percentage=0.2,
     source_classes=tuple(range(5)),
     target_classes=tuple(range(10)),
     epochs=3,
@@ -405,7 +405,10 @@ def subpop_discovery(
     labels = target_train_data.targets
     for label in labels[top_indices].tolist():
         counts[label] = counts[label] + 1
+
+    counts = {k: v for k, v in sorted(counts.items(), key=lambda item: item[1])}
     print(counts)
+    # TODO: Ablate unbalanced OT vs balanced.
 
 
 def main(task="domain_adaptation", **kwargs):
