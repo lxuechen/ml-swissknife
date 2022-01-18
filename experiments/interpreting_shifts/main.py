@@ -294,11 +294,11 @@ class OptimalTransportDomainAdapter(object):
                 source_gx = self.model_g(source_x)
 
                 # JDOT loss.
-                pairwise_diff = (source_gx[..., None] - target_gx.permute(0, 1)[None, ...])
+                pairwise_diff = (source_gx[..., None] - target_gx.permute(1, 0)[None, ...])
                 feature_cost = torch.sum(pairwise_diff * pairwise_diff, dim=1)  # (source bsz, target bsz).
 
                 source_y_oh = F.one_hot(source_y, num_classes=self.n_class).to(source_x.dtype)
-                label_cost = source_y_oh @ (- torch.log_softmax(target_fgx, dim=1).permute(0, 1))
+                label_cost = source_y_oh @ (- torch.log_softmax(target_fgx, dim=1).permute(1, 0))
 
                 cost = self.eta1 * feature_cost + self.eta2 * label_cost
                 cost_numpy = cost.detach().cpu().numpy()
