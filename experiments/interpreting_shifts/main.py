@@ -163,14 +163,15 @@ class OptimalTransportDomainAdapter(object):
     ):
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
         optimizer = optim.Adam(params=params, lr=learning_rate)
-        for epoch in range(epochs):
-            self.model_g.train()
-            self.model_f.train()
+        for epoch in tqdm.tqdm(range(epochs), desc="fit source"):
             for i, data in enumerate(source_train_loader):
+                self.model_g.train()
+                self.model_f.train()
                 optimizer.zero_grad()
+
                 data = tuple(t.to(device) for t in data)
                 x, y = data[:2]
-                loss = criterion(self.model_f(self.model_g(x)), y)
+                loss = criterion(self._model(x), y)
                 loss.backward()
                 optimizer.step()
 
@@ -186,7 +187,7 @@ class OptimalTransportDomainAdapter(object):
         optimizer = optim.Adam(params=params, lr=learning_rate)
 
         global_step = 0
-        for epoch in tqdm.tqdm(epochs, desc=f"fit_joint"):
+        for epoch in tqdm.tqdm(epochs, desc=f"fit joint"):
             for i, source_train_data in enumerate(source_train_loader):
                 self.model_g.train()
                 self.model_f.train()
@@ -253,7 +254,7 @@ class OptimalTransportDomainAdapter(object):
         return tuple(np.mean(np.array(t)) for t in (xents, zeons))
 
     def _model(self, x):
-        return self.model_g(self.model_f(x))
+        return self.model_f(self.model_g(x))
 
     @torch.no_grad()
     def target_marginal(
@@ -308,17 +309,21 @@ class OptimalTransportDomainAdapter(object):
         return avg
 
 
-def main(
+def domain_adaptation(
     eta1=0.1,
     eta2=0.1,
     tau=1.0,
     epsilon=0.1,
+
+    train_batch_size=500,
+    eval_batch_size=500,
+    **kwargs,
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     (source_train_loader, target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
-        train_batch_size=10, eval_batch_size=4
+        train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
 
     model_g = models.Cnn_generator().to(device).apply(models.weights_init)
@@ -331,6 +336,17 @@ def main(
     domain_adapter.fit_joint(
         source_train_loader, target_train_loader, target_test_loader,
     )
+
+
+def subpop_discovery(**kwargs):
+    pass
+
+
+def main(task="domain_adaptation", **kwargs):
+    if task == "domain_adaptation":
+        domain_adaptation(**kwargs)
+    elif task == "subpop_discovery":
+        subpop_discovery(**kwargs)
 
 
 if __name__ == "__main__":
