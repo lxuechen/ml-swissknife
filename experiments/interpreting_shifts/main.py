@@ -7,6 +7,7 @@ TODO:
 """
 
 import itertools
+import os
 from typing import Optional, Callable, Tuple, Any
 
 import fire
@@ -74,6 +75,7 @@ class MNIST(datasets.MNIST):
 
 
 def get_da_loaders(
+    root=os.path.join(os.path.expanduser('~'), 'data'),
     source_classes=tuple(range(10)),
     target_classes=tuple(range(10)),
     pin_memory=False,
@@ -94,13 +96,13 @@ def get_da_loaders(
     ])
 
     source_train = SVHN(
-        root='./data', split='train', download=True, transform=transform_svhn, classes=source_classes
+        root=root, split='train', download=True, transform=transform_svhn, classes=source_classes
     )
     target_train = MNIST(
-        root='./data', train=True, download=True, transform=transform_mnist, classes=target_classes
+        root=root, train=True, download=True, transform=transform_mnist, classes=target_classes
     )
     target_test = MNIST(
-        root='./data', train=False, download=True, transform=transform_mnist, classes=target_classes
+        root=root, train=False, download=True, transform=transform_mnist, classes=target_classes
     )
 
     source_train_loader = DataLoader(
