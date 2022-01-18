@@ -74,15 +74,7 @@ class MNIST(datasets.MNIST):
         return img, target, index
 
 
-def get_da_loaders(
-    root=os.path.join(os.path.expanduser('~'), 'data'),
-    source_classes=tuple(range(10)),
-    target_classes=tuple(range(10)),
-    pin_memory=False,
-    num_workers=0,
-    train_batch_size=500,
-    eval_batch_size=500,
-):
+def get_data(root, name, split, classes, download=True):
     transform_svhn = transforms.Compose([
         transforms.Resize(32),
         transforms.ToTensor(),
@@ -95,15 +87,32 @@ def get_da_loaders(
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    source_train = SVHN(
-        root=root, split='train', download=True, transform=transform_svhn, classes=source_classes
-    )
-    target_train = MNIST(
-        root=root, train=True, download=True, transform=transform_mnist, classes=target_classes
-    )
-    target_test = MNIST(
-        root=root, train=False, download=True, transform=transform_mnist, classes=target_classes
-    )
+    if name == "svhn":
+        return SVHN(
+            root=root, split=split, download=download, transform=transform_svhn, classes=classes
+        )
+    elif name == "mnist":
+        return MNIST(
+            root=root, train=(split == 'train'), download=download, transform=transform_mnist, classes=classes
+        )
+    else:
+        raise ValueError(f'Unknown name: {name}')
+
+
+def get_loaders(
+    root=os.path.join(os.path.expanduser('~'), 'data'),
+    source_classes=tuple(range(10)),
+    target_classes=tuple(range(10)),
+    source_data_name="svhn",
+    target_data_name="mnist",
+    pin_memory=False,
+    num_workers=0,
+    train_batch_size=500,
+    eval_batch_size=500,
+):
+    source_train = get_data(root=root, name=source_data_name, split='train', classes=source_classes)
+    target_train = get_data(root=root, name=target_data_name, split='train', classes=target_classes)
+    target_test = get_data(root=root, name=target_data_name, split='test', classes=target_classes)
 
     source_train_loader = DataLoader(
         source_train, batch_size=train_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
@@ -290,7 +299,10 @@ class OptimalTransportDomainAdaptation(object):
 
 
 def main():
-    l1, l2, l3, l4, l5 = get_da_loaders(train_batch_size=10, eval_batch_size=4)
+    (source_train_loader, target_train_loader, target_test_loader,
+     target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
+        train_batch_size=10, eval_batch_size=4
+    )
 
 
 if __name__ == "__main__":
