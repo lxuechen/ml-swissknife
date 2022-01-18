@@ -3,6 +3,7 @@ First test run of learning mapping using mini-batch unbalanced OT.
 
 To run:
     python -m interpreting_shifts.main
+    python -m interpreting_shifts.main --task subpop_discovery
 
 TODO: Try using pre-trained model as feature extractor.
 """
@@ -69,8 +70,8 @@ class MNIST(datasets.MNIST):
             if y in classes:
                 new_data.append(x)
                 new_labels.append(y)
-        self.data = np.stack(new_data, axis=0)
-        self.targets = np.stack(new_labels, axis=0)
+        self.data = torch.stack(new_data, dim=0)
+        self.targets = torch.stack(new_labels, dim=0)
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         img, target = super(MNIST, self).__getitem__(index=index)
@@ -358,7 +359,35 @@ def subpop_discovery(
     eval_batch_size=500,
     **kwargs
 ):
-    pass
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    (source_train_loader, source_test_loader,
+     target_train_loader, target_test_loader,
+     target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
+        train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
+        source_data_name="mnist", target_data_name="mnist",
+
+        source_classes=tuple(range(5)),
+        target_classes=tuple(range(10)),
+    )
+    model_g = models.Cnn_generator().to(device).apply(models.weights_init)
+    model_f = models.Classifier2().to(device).apply(models.weights_init)
+
+    domain_adapter = OptimalTransportDomainAdapter(
+        model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
+    )
+    domain_adapter.fit_source(
+        source_train_loader, device=device, epochs=1,
+    )
+    domain_adapter.fit_joint(
+        source_train_loader, target_train_loader, target_test_loader, epochs=1,
+    )
+
+    marginal = domain_adapter.target_marginal(
+        source_train_loader, target_train_loader_unshuffled,
+        epochs=2, balanced_op=False, device=device
+    )
+    # TODO: Get the smallest entries, check the labels.
 
 
 def main(task="domain_adaptation", **kwargs):
