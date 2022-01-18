@@ -1,11 +1,10 @@
 """
 First test run of learning mapping using mini-batch unbalanced OT.
 
-TODO:
-    2) function/method for accumulating matching during test time
-    3) how does this work with a pre-trained feature extractor?
+To run:
+    python -m interpreting_shifts.main
 
-python -m interpreting_shifts.main
+TODO: Try using pre-trained model as feature extractor.
 """
 
 import itertools
@@ -235,6 +234,7 @@ class OptimalTransportDomainAdapter(object):
                     avg_xent, avg_zeon = self._evaluate(target_test_loader, device, criterion)
                     print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
 
+    @torch.no_grad()
     def _evaluate(self, loader, device, criterion):
         self.model_g.eval()
         self.model_f.eval()
