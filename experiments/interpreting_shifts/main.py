@@ -281,7 +281,7 @@ class OptimalTransportDomainAdapter(object):
         global_step = 0
         target_train_size = sum(img.size(0) for img, _, _ in target_train_loader_unshuffled)
         avg = np.zeros((target_train_size,))
-        for epoch in tqdm.tdqm(range(epochs), desc="target marginal"):
+        for epoch in tqdm.tqdm(range(epochs), desc="target marginal"):
             for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
                 target_train_data = tuple(t.to(device) for t in target_train_data)
                 target_x, _, target_indices = target_train_data
