@@ -193,7 +193,7 @@ class OptimalTransportDomainAdapter(object):
         optimizer = optim.Adam(params=params, lr=learning_rate)
 
         global_step = 0
-        for epoch in tqdm.tqdm(epochs, desc=f"fit joint"):
+        for epoch in tqdm.tqdm(range(epochs), desc=f"fit joint"):
             for i, source_train_data in enumerate(source_train_loader):
                 self.model_g.train()
                 self.model_f.train()
@@ -280,7 +280,7 @@ class OptimalTransportDomainAdapter(object):
         global_step = 0
         target_train_size = sum(img.size(0) for img, _, _ in target_train_loader_unshuffled)
         avg = np.zeros((target_train_size,))
-        for epoch in range(epochs):
+        for epoch in tqdm.tdqm(range(epochs), desc="target marginal"):
             for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
                 target_train_data = tuple(t.to(device) for t in target_train_data)
                 target_x, _, target_indices = target_train_data
