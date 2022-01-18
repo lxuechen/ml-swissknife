@@ -5,7 +5,7 @@ TODO:
     2) function/method for accumulating matching during test time
     3) how does this work with a pre-trained feature extractor?
 
-python -m experiments.main
+python -m interpreting_shifts.main
 """
 
 import itertools
@@ -143,8 +143,12 @@ def get_loaders(
     )
 
 
-class OptimalTransportDomainAdaptation(object):
-    def __init__(self, model_g, model_f, n_class, eta1=0.001, eta2=0.0001, tau=1., epsilon=0.1):
+class OptimalTransportDomainAdapter(object):
+    def __init__(
+        self,
+        model_g, model_f,
+        n_class=10, eta1=0.001, eta2=0.0001, tau=1., epsilon=0.1
+    ):
         self.model_g: nn.Module = model_g
         self.model_f: nn.Module = model_f
         self.n_class = n_class
@@ -319,6 +323,14 @@ def main(
 
     model_g = models.Cnn_generator().to(device).apply(models.weights_init)
     model_f = models.Classifier2().to(device).apply(models.weights_init)
+
+    domain_adapter = OptimalTransportDomainAdapter(
+        model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
+    )
+    domain_adapter.fit_source(source_train_loader, device=device)
+    domain_adapter.fit_joint(
+        source_train_loader, target_train_loader, target_test_loader,
+    )
 
 
 if __name__ == "__main__":
