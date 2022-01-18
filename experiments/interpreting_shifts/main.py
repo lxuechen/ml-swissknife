@@ -402,7 +402,8 @@ def subpop_discovery(
 
     import collections
     counts = collections.defaultdict(int)
-    for label in target_train_data.labels[top_indices].tolist():
+    labels = target_train_data.targets
+    for label in labels[top_indices].tolist():
         counts[label] = counts[label] + 1
     print(counts)
 
