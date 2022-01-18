@@ -115,7 +115,19 @@ def get_da_loaders(
         target_test, batch_size=eval_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
     )
 
-    return source_train_loader, target_train_loader, target_test_loader
+    target_train_loader_unshuffled = DataLoader(
+        target_train, batch_size=train_batch_size, shuffle=False, pin_memory=pin_memory, num_workers=num_workers,
+        drop_last=False,
+    )
+    target_test_loader_unshuffled = DataLoader(
+        target_test, batch_size=eval_batch_size, shuffle=False, pin_memory=pin_memory, num_workers=num_workers,
+        drop_last=False,
+    )
+
+    return (
+        source_train_loader, target_train_loader, target_test_loader,
+        target_train_loader_unshuffled, target_test_loader_unshuffled,
+    )
 
 
 class OptimalTransportDomainAdaptation(object):
@@ -224,9 +236,61 @@ class OptimalTransportDomainAdaptation(object):
     def _model(self, x):
         return self.model_g(self.model_f(x))
 
+    @torch.no_grad()
+    def target_marginal(
+        self,
+        source_train_loader, target_train_loader_unshuffled,
+        epochs=1, balanced_op=False, device=None
+    ):
+        # Logic:
+        #   Sequentially loop over target data.
+        #   For each target batch, randomly fetch a source batch and compute approximate mapping.
+        #   "Broadcast" local mapping to be a global mapping, then do online averaging.
+        source_train_loader_cycled = itertools.cycle(source_train_loader)
+
+        global_step = 0
+        target_train_size = sum(img.size(0) for img, _, _ in target_train_loader_unshuffled)
+        avg = np.zeros((target_train_size,))
+        for epoch in range(epochs):
+            for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
+                target_train_data = tuple(t.to(device) for t in target_train_data)
+                target_x, _, target_indices = target_train_data
+                target_gx = self.model_g(target_x)
+                target_fgx = self.model_f(target_gx)
+
+                source_train_data = next(source_train_loader_cycled)
+                source_train_data = tuple(t.to(device) for t in source_train_data)
+                source_x, source_y = source_train_data[:2]
+                source_gx = self.model_g(source_x)
+
+                # JDOT loss.
+                pairwise_diff = (source_gx[..., None] - target_gx.permute(0, 1)[None, ...])
+                feature_cost = torch.sum(pairwise_diff * pairwise_diff, dim=1)  # (source bsz, target bsz).
+
+                source_y_oh = F.one_hot(source_y, num_classes=self.n_class).to(source_x.dtype)
+                label_cost = source_y_oh @ (- torch.log_softmax(target_fgx, dim=1).permute(0, 1))
+
+                cost = self.eta1 * feature_cost + self.eta2 * label_cost
+                cost_numpy = cost.detach().cpu().numpy()
+
+                a, b = ot.unif(source_x.size(0)), ot.unif(target_x.size(0))
+                if balanced_op:
+                    joint = ot.emd(a, b, cost_numpy)
+                else:  # Unbalanced optimal transport.
+                    joint = ot.unbalanced.sinkhorn_knopp_unbalanced(a, b, cost_numpy, self.epsilon, self.tau)
+                marginal = np.sum(joint, axis=0)
+                target_indices = target_indices.cpu().numpy()
+                marginal = np.put(np.zeros_like(avg), target_indices, marginal)
+
+                # Online average.
+                global_step += 1
+                avg = avg * (global_step - 1) / global_step + marginal / global_step
+
+        return avg
+
 
 def main():
-    l1, l2, l3 = get_da_loaders(train_batch_size=10, eval_batch_size=4)
+    l1, l2, l3, l4, l5 = get_da_loaders(train_batch_size=10, eval_batch_size=4)
 
 
 if __name__ == "__main__":
