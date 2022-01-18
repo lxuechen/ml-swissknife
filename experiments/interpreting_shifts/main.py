@@ -214,11 +214,11 @@ class OptimalTransportDomainAdapter(object):
                 source_cls_loss = criterion(source_fgx, source_y)
 
                 # JDOT loss.
-                pairwise_diff = (source_gx[..., None] - target_gx.permute(0, 1)[None, ...])
+                pairwise_diff = (source_gx[..., None] - target_gx.permute(1, 0)[None, ...])
                 feature_cost = torch.sum(pairwise_diff * pairwise_diff, dim=1)
 
                 source_y_oh = F.one_hot(source_y, num_classes=self.n_class).to(source_x.dtype)
-                label_cost = source_y_oh @ (- torch.log_softmax(target_fgx, dim=1).permute(0, 1))
+                label_cost = source_y_oh @ (- torch.log_softmax(target_fgx, dim=1).permute(1, 0))
 
                 cost = self.eta1 * feature_cost + self.eta2 * label_cost
                 cost_numpy = cost.detach().cpu().numpy()
@@ -380,13 +380,14 @@ def subpop_discovery(
         source_train_loader, device=device, epochs=1,
     )
     domain_adapter.fit_joint(
-        source_train_loader, target_train_loader, target_test_loader, epochs=1,
+        source_train_loader, target_train_loader, target_test_loader, device=device, epochs=1,
     )
 
     marginal = domain_adapter.target_marginal(
         source_train_loader, target_train_loader_unshuffled,
         epochs=2, balanced_op=False, device=device
     )
+    marginal = torch.tensor(marginal)
     # TODO: Get the smallest entries, check the labels.
 
 
