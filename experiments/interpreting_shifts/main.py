@@ -78,7 +78,10 @@ class MNIST(datasets.MNIST):
         return img, target, index
 
 
-def get_data(root, name, split, classes, download=True):
+def get_data(
+    name, split, classes, download=True,
+    root=os.path.join(os.path.expanduser('~'), 'data'),
+):
     transform_svhn = transforms.Compose([
         transforms.Resize(32),
         transforms.ToTensor(),
@@ -256,7 +259,7 @@ class OptimalTransportDomainAdapter(object):
             x, y = data[:2]
             y_hat = self._model(x)
 
-            xent = criterion(y_hat, y)
+            xent = criterion(y_hat, y, reduction="none")
             zeon = torch.eq(y_hat.argmax(dim=1), y)
 
             xents.extend(xent.cpu().tolist())
@@ -358,7 +361,11 @@ def subpop_discovery(
 
     train_batch_size=500,
     eval_batch_size=500,
-    **kwargs
+    top_percentage=0.1,
+    source_classes=tuple(range(5)),
+    target_classes=tuple(range(10)),
+    epochs=3,
+    **kwargs,
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -368,8 +375,8 @@ def subpop_discovery(
         train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
         source_data_name="mnist", target_data_name="mnist",
 
-        source_classes=tuple(range(5)),
-        target_classes=tuple(range(10)),
+        source_classes=source_classes,
+        target_classes=target_classes,
     )
     model_g = models.Cnn_generator().to(device).apply(models.weights_init)
     model_f = models.Classifier2().to(device).apply(models.weights_init)
@@ -378,18 +385,26 @@ def subpop_discovery(
         model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
     )
     domain_adapter.fit_source(
-        source_train_loader, device=device, epochs=1,
+        source_train_loader, device=device, epochs=epochs,
     )
     domain_adapter.fit_joint(
-        source_train_loader, target_train_loader, target_test_loader, device=device, epochs=1,
+        source_train_loader, target_train_loader, target_test_loader, device=device, epochs=epochs,
     )
 
     marginal = domain_adapter.target_marginal(
         source_train_loader, target_train_loader_unshuffled,
-        epochs=2, balanced_op=False, device=device
+        epochs=epochs, balanced_op=False, device=device
     )
     marginal = torch.tensor(marginal)
-    # TODO: Get the smallest entries, check the labels.
+    top_values, top_indices = (-marginal).topk(int(len(marginal) * top_percentage))
+
+    target_train_data = get_data(name="mnist", split='train', classes=target_classes)
+
+    import collections
+    counts = collections.defaultdict(int)
+    for label in target_train_data.labels[top_indices].tolist():
+        counts[label] = counts[label] + 1
+    print(counts)
 
 
 def main(task="domain_adaptation", **kwargs):
