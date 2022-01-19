@@ -433,7 +433,7 @@ def subpop_discovery(
     if img_path is not None:
         bar = dict(
             x=target_classes,
-            y=[class_marginals[target_class] for target_class in target_classes]
+            height=[class_marginals[target_class] for target_class in target_classes]
         )
         sum_prob = sum(class_marginals)
         utils.plot_wrapper(
@@ -441,8 +441,8 @@ def subpop_discovery(
             suffixes=('.png', '.pdf'),
             bars=(bar,),
             options=dict(
-                title=f"source_classes: {source_classes}, target_classes: {target_classes}, sum_prob: {sum_prob:.4f}",
-                ylabel="marginal probability of transport map",
+                title=f"S: {source_classes}, \nT: {target_classes}, \nsum_prob: {sum_prob:.4f}",
+                ylabel="transport map marginal prob.",
                 xlabel="class label",
             )
         )
