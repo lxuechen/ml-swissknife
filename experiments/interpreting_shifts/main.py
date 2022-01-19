@@ -5,13 +5,10 @@ To run:
     python -m interpreting_shifts.main
     python -m interpreting_shifts.main --task subpop_discovery
 
-TODO: Try using pre-trained model as feature extractor.
-TODO: Ablate unbalanced OT vs balanced.
-
 w/ or w/o domain adapation:
     MNIST (lost digits) -> MNIST: It seems randomly initialized network could already do pretty well.
 """
-
+import collections
 import itertools
 import os
 from typing import Optional, Callable, Tuple, Any
@@ -26,6 +23,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import tqdm
 
+from swissknife import utils
 from . import models
 
 
@@ -172,7 +170,7 @@ class OptimalTransportDomainAdapter(object):
     def fit_source(
         self,
         source_train_loader, source_test_loader=None,
-        epochs=10, criterion=F.cross_entropy, learning_rate=2e-4, device=None,
+        epochs=10, criterion=F.cross_entropy, learning_rate=2e-4,
     ):
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
         optimizer = optim.Adam(params=params, lr=learning_rate)
@@ -187,12 +185,12 @@ class OptimalTransportDomainAdapter(object):
                 loss = criterion(self._model(x), y)
                 loss.backward()
                 optimizer.step()
-        self._evaluate(loader=source_test_loader, device=device, criterion=F.softmax)
+        self._evaluate(loader=source_test_loader, criterion=F.softmax)
 
     def fit_joint(
         self,
         source_train_loader, target_train_loader, target_test_loader,
-        epochs=100, criterion=F.cross_entropy, learning_rate=2e-4, device=None,
+        epochs=100, criterion=F.cross_entropy, learning_rate=2e-4,
         balanced_op=False,
         eval_steps=100,
     ):
@@ -246,11 +244,11 @@ class OptimalTransportDomainAdapter(object):
 
                 global_step += 1
                 if global_step % eval_steps == 0:
-                    avg_xent, avg_zeon = self._evaluate(target_test_loader, device, criterion)
+                    avg_xent, avg_zeon = self._evaluate(target_test_loader, criterion)
                     print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
 
     @torch.no_grad()
-    def _evaluate(self, loader, device, criterion):
+    def _evaluate(self, loader, criterion):
         if loader is None:
             return
 
@@ -277,7 +275,7 @@ class OptimalTransportDomainAdapter(object):
     def target_marginal(
         self,
         source_train_loader, target_train_loader_unshuffled,
-        epochs=1, balanced_op=False, device=None
+        epochs=1, balanced_op=False,
     ):
         # Logic:
         #   Sequentially loop over target data.
@@ -335,26 +333,46 @@ def domain_adaptation(
 
     train_batch_size=500,
     eval_batch_size=500,
+    balanced_op=False,
+    feature_extractor="cnn",
+    classifier='linear',
     **kwargs,
 ):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
     (source_train_loader, source_test_loader,
      target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
         train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
 
-    model_g = models.Cnn_generator().to(device).apply(models.weights_init)
-    model_f = models.Classifier2().to(device).apply(models.weights_init)
+    model_g = _get_feature_extractor(feature_extractor)
+    model_f = _get_classifier(classifier)
 
     domain_adapter = OptimalTransportDomainAdapter(
-        model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
+        model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon
     )
-    domain_adapter.fit_source(source_train_loader, device=device)
+    domain_adapter.fit_source(source_train_loader)
     domain_adapter.fit_joint(
         source_train_loader, target_train_loader, target_test_loader,
+        balanced_op=balanced_op
     )
+
+
+def _get_feature_extractor(feature_extractor):
+    if feature_extractor == 'cnn':
+        model_g = models.Cnn_generator().to(device).apply(models.weights_init)
+    elif feature_extractor == 'id':
+        model_g = nn.Identity()
+    else:
+        raise ValueError(f"Unknown feature_extractor: {feature_extractor}")
+    return model_g
+
+
+def _get_classifier(classifier):
+    if classifier == "linear":
+        model_f = models.Classifier2().to(device).apply(models.weights_init)
+    else:
+        raise ValueError(f"Unknown classifier: {classifier}")
+    return model_f
 
 
 def subpop_discovery(
@@ -365,59 +383,75 @@ def subpop_discovery(
 
     train_batch_size=500,
     eval_batch_size=500,
-    top_percentage=0.2,
     source_classes=(1, 2, 3, 9, 0,),
     target_classes=tuple(range(10)),
     train_epochs=3,
     match_epochs=5,
     balanced_op=False,
+    feature_extractor="cnn",
+    classifier='linear',
+    img_path="/nlp/scr/lxuechen/interpreting_shifts/test",
     **kwargs,
 ):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
     (source_train_loader, source_test_loader,
      target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
         train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
         source_data_name="mnist", target_data_name="mnist",
-
         source_classes=source_classes,
         target_classes=target_classes,
     )
-    model_g = models.Cnn_generator().to(device).apply(models.weights_init)
-    model_f = models.Classifier2().to(device).apply(models.weights_init)
+
+    model_g = _get_feature_extractor(feature_extractor)
+    model_f = _get_classifier(classifier)
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
     )
     domain_adapter.fit_source(
-        source_train_loader, device=device, epochs=train_epochs,
+        source_train_loader, epochs=train_epochs,
     )
     domain_adapter.fit_joint(
-        source_train_loader, target_train_loader, target_test_loader, device=device, epochs=train_epochs,
+        source_train_loader, target_train_loader, target_test_loader, epochs=train_epochs,
         balanced_op=balanced_op,
     )
 
+    # Marginalize over source to get the target distribution.
     marginal = domain_adapter.target_marginal(
         source_train_loader, target_train_loader_unshuffled,
-        epochs=match_epochs, balanced_op=balanced_op, device=device
+        epochs=match_epochs, balanced_op=balanced_op,
     )
-    marginal = torch.tensor(marginal)
-    top_values, top_indices = (-marginal).topk(int(len(marginal) * top_percentage))
 
+    # Retrieve the ordered target dataset. Must match up with `target_train_loader_unshuffled`.
     target_train_data = get_data(name="mnist", split='train', classes=target_classes)
 
-    import collections
-    counts = collections.defaultdict(int)
-    labels = target_train_data.targets
-    for label in labels[top_indices].tolist():
-        counts[label] = counts[label] + 1
+    # Get class marginals.
+    class_marginals = collections.defaultdict(int)
+    for marginal_i, label_i in utils.zip_(marginal, target_train_data.targets):
+        class_marginals[int(label_i)] += marginal_i
 
-    counts = {k: v for k, v in sorted(counts.items(), key=lambda item: item[1])}
-    print(counts)
+    if img_path is not None:
+        scatter = dict(
+            x=target_classes,
+            y=[class_marginals[target_class] for target_class in target_classes],
+        )
+        utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=('.png', '.pdf'),
+            scatters=(scatter,),
+            options=dict(
+                title=f"source_classes: {source_classes}, target_classes: {target_classes}",
+            )
+        )
 
 
-def main(task="domain_adaptation", **kwargs):
+def main(
+    task="domain_adaptation",
+    seed=0,
+    **kwargs
+):
+    torch.manual_seed(seed)
+
     if task == "domain_adaptation":
         domain_adaptation(**kwargs)
     elif task == "subpop_discovery":
@@ -425,4 +459,6 @@ def main(task="domain_adaptation", **kwargs):
 
 
 if __name__ == "__main__":
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     fire.Fire(main)
