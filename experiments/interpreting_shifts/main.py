@@ -336,8 +336,10 @@ def domain_adaptation(
     balanced_op=False,
     feature_extractor="cnn",
     classifier='linear',
-    **kwargs,
+    **unused_kwargs,
 ):
+    utils.handle_unused_kwargs(unused_kwargs)
+
     (source_train_loader, source_test_loader,
      target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
@@ -391,8 +393,10 @@ def subpop_discovery(
     feature_extractor="cnn",
     classifier='linear',
     img_path="/nlp/scr/lxuechen/interpreting_shifts/test",
-    **kwargs,
+    **unused_kwargs,
 ):
+    utils.handle_unused_kwargs(unused_kwargs)
+
     (source_train_loader, source_test_loader,
      target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(

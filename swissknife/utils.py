@@ -31,6 +31,7 @@ import signal
 import sys
 import time
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+import warnings
 
 import numpy as np
 import requests
@@ -474,6 +475,14 @@ def mvdir(src: str, tgt: str, tmp: str):
     os.system(f'mkdir -p {tgt}')
     os.system(f'mv {tmp}/* {tgt}')
     os.system(f'rm -r {tmp}')
+
+
+def handle_unused_kwargs(unused_kwargs, msg=None):
+    if len(unused_kwargs) > 0:
+        if msg is not None:
+            warnings.warn(f"{msg}: Unexpected arguments {unused_kwargs}")
+        else:
+            warnings.warn(f"Unexpected arguments {unused_kwargs}")
 
 
 # Torch.
