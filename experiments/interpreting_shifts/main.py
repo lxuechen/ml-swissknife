@@ -439,7 +439,7 @@ def subpop_discovery(
             x=target_classes,
             height=[class_marginals[target_class] for target_class in target_classes]
         )
-        sum_prob = sum(class_marginals)
+        sum_prob = sum(class_marginals.values())
         utils.plot_wrapper(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
