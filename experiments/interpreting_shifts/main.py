@@ -431,16 +431,19 @@ def subpop_discovery(
         class_marginals[int(label_i)] += marginal_i
 
     if img_path is not None:
-        scatter = dict(
+        bar = dict(
             x=target_classes,
-            y=[class_marginals[target_class] for target_class in target_classes],
+            y=[class_marginals[target_class] for target_class in target_classes]
         )
+        sum_prob = sum(class_marginals)
         utils.plot_wrapper(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
-            scatters=(scatter,),
+            bars=(bar,),
             options=dict(
-                title=f"source_classes: {source_classes}, target_classes: {target_classes}",
+                title=f"source_classes: {source_classes}, target_classes: {target_classes}, sum_prob: {sum_prob:.4f}",
+                ylabel="marginal probability of transport map",
+                xlabel="class label",
             )
         )
 
