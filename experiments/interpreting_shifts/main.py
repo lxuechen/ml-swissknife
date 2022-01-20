@@ -348,8 +348,7 @@ def domain_adaptation(
         train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
 
-    model_g = _get_feature_extractor(feature_extractor)
-    model_f = _get_classifier(classifier)
+    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor)
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
@@ -365,22 +364,16 @@ def domain_adaptation(
     )
 
 
-def _get_feature_extractor(feature_extractor):
+def _get_feature_extractor_and_classifier(feature_extractor):
     if feature_extractor == 'cnn':
         model_g = models.Cnn_generator().to(device).apply(models.weights_init)
+        model_f = models.Classifier2().to(device).apply(models.weights_init)
     elif feature_extractor == 'id':
-        model_g = nn.Identity()
+        model_g = nn.Flatten()
+        model_f = nn.Linear(3072, 10)
     else:
         raise ValueError(f"Unknown feature_extractor: {feature_extractor}")
-    return model_g
-
-
-def _get_classifier(classifier):
-    if classifier == "linear":
-        model_f = models.Classifier2().to(device).apply(models.weights_init)
-    else:
-        raise ValueError(f"Unknown classifier: {classifier}")
-    return model_f
+    return model_g, model_f
 
 
 def subpop_discovery(
@@ -398,12 +391,12 @@ def subpop_discovery(
     match_epochs=5,
     balanced_op=False,
     feature_extractor="cnn",
-    classifier='linear',
     train_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
     bottom_percentages=(0.01, 0.1, 0.2, 0.3, 0.4, 0.5),
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)
+    print(f'source classes:{source_classes}, target_classes: {target_classes}')
 
     (source_train_loader, source_test_loader,
      target_train_loader, target_test_loader,
@@ -414,8 +407,7 @@ def subpop_discovery(
         target_classes=target_classes,
     )
 
-    model_g = _get_feature_extractor(feature_extractor)
-    model_f = _get_classifier(classifier)
+    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor)
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
