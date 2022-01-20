@@ -370,7 +370,7 @@ def _get_feature_extractor_and_classifier(feature_extractor):
         model_f = models.Classifier2().to(device).apply(models.weights_init)
     elif feature_extractor == 'id':
         model_g = nn.Flatten()
-        model_f = nn.Linear(3072, 10)
+        model_f = nn.Linear(3072, 10).to(device)
     else:
         raise ValueError(f"Unknown feature_extractor: {feature_extractor}")
     return model_g, model_f
