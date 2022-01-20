@@ -392,7 +392,8 @@ def subpop_discovery(
     balanced_op=False,
     feature_extractor="cnn",
     classifier='linear',
-    img_path="/nlp/scr/lxuechen/interpreting_shifts/test",
+    img_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
+    bottom_percentage=0.1,  # For extracting outliers.
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)
@@ -420,21 +421,21 @@ def subpop_discovery(
         balanced_op=balanced_op,
     )
 
-    # Marginalize over source to get the target distribution.
-    marginal = domain_adapter.target_marginal(
-        source_train_loader, target_train_loader_unshuffled,
-        epochs=match_epochs, balanced_op=balanced_op,
-    )
+    if img_dir is not None:
+        # Marginalize over source to get the target distribution.
+        marginal = domain_adapter.target_marginal(
+            source_train_loader, target_train_loader_unshuffled,
+            epochs=match_epochs, balanced_op=balanced_op,
+        )
 
-    # Retrieve the ordered target dataset. Must match up with `target_train_loader_unshuffled`.
-    target_train_data = get_data(name="mnist", split='train', classes=target_classes)
+        # Retrieve the ordered target dataset. Must match up with `target_train_loader_unshuffled`.
+        target_train_data = get_data(name="mnist", split='train', classes=target_classes)
 
-    # Get class marginals.
-    class_marginals = collections.defaultdict(int)
-    for marginal_i, label_i in utils.zip_(marginal, target_train_data.targets):
-        class_marginals[int(label_i)] += marginal_i
-
-    if img_path is not None:
+        # Bar plot full class marginals.
+        img_path = utils.join(img_dir, 'class_marginals')
+        class_marginals = collections.defaultdict(int)
+        for marginal_i, label_i in utils.zip_(marginal, target_train_data.targets):
+            class_marginals[int(label_i)] += marginal_i
         bar = dict(
             x=target_classes,
             height=[class_marginals[target_class] for target_class in target_classes]
@@ -447,6 +448,27 @@ def subpop_discovery(
             options=dict(
                 title=f"S: {source_classes}, \nT: {target_classes}, \nsum_prob: {sum_prob:.4f}",
                 ylabel="transport map marginal prob.",
+                xlabel="class label",
+            )
+        )
+
+        # Bar plot class counts of bottom of the marginal.
+        marginal = torch.tensor(marginal, dtype=torch.get_default_dtype())
+        marginal_len = len(marginal)
+        bot_values, bot_indices = (-marginal).topk(int(bottom_percentage * marginal_len))
+        bot_class_counts = collections.defaultdict(int)
+        for bot_index in bot_indices:
+            label = int(target_train_data.targets[bot_index])
+            bot_class_counts[label] = bot_class_counts[label] + 1
+
+        img_path = utils.join(img_dir, 'bottom_class_counts')
+        utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=('.png', '.pdf'),
+            bars=(bar,),
+            options=dict(
+                title=f"S: {source_classes}, \nT: {target_classes}",
+                ylabel=f"bottom {int(bottom_percentage * 100)}% class counts;",
                 xlabel="class label",
             )
         )
