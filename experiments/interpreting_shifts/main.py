@@ -399,7 +399,7 @@ def subpop_discovery(
     balanced_op=False,
     feature_extractor="cnn",
     classifier='linear',
-    img_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
+    train_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
     bottom_percentages=(0.01, 0.1, 0.2, 0.3, 0.4, 0.5),
     **unused_kwargs,
 ):
@@ -430,7 +430,7 @@ def subpop_discovery(
         epochs=train_joint_epochs, balanced_op=balanced_op,
     )
 
-    if img_dir is not None:
+    if train_dir is not None:
         # Marginalize over source to get the target distribution.
         marginal = domain_adapter.target_marginal(
             source_train_loader, target_train_loader_unshuffled,
@@ -441,7 +441,7 @@ def subpop_discovery(
         target_train_data = get_data(name="mnist", split='train', classes=target_classes)
 
         # Bar plot full class marginals.
-        img_path = utils.join(img_dir, 'class_marginals')
+        img_path = utils.join(train_dir, 'class_marginals')
         class_marginals = collections.defaultdict(int)
         for marginal_i, label_i in utils.zip_(marginal, target_train_data.targets):
             class_marginals[int(label_i)] += marginal_i
@@ -477,7 +477,7 @@ def subpop_discovery(
                 x=target_classes,
                 height=[bot_class_counts[target_class] for target_class in target_classes]
             )
-            img_path = utils.join(img_dir, f'bottom_class_counts_{bottom_percentage_int:03d}')
+            img_path = utils.join(train_dir, f'bottom_class_counts_{bottom_percentage_int:03d}')
             utils.plot_wrapper(
                 img_path=img_path,
                 suffixes=('.png', '.pdf'),
