@@ -7,7 +7,11 @@ many experiments.
 date:
     01/19/22
 purpose:
-    Does the feature extractor matter?
+    Ablation studies:
+        Feature extractor
+        DeepJDOT training
+        balanced vs unbalanced
+        matching epochs
 notes:
 run:
     python -m interpreting_shifts.launchers.jan1922
@@ -26,11 +30,13 @@ def _get_command(
     match_epochs=10,
     train_batch_size=2000,
     balanced_op=False,
+    feature_extractor="cnn",
     base_dir='/nlp/scr/lxuechen/interpreting_shifts'
 ):
     train_dir = utils.join(
         base_dir,
         date,
+        f'feature_extractor_{feature_extractor}_'
         f'balanced_op_{balanced_op}_'
         f'train_source_epochs_{train_source_epochs:06d}_'
         f'train_joint_epochs_{train_joint_epochs:06d}_'
@@ -40,6 +46,7 @@ def _get_command(
     )
     return f'''python -m interpreting_shifts.main \
         --task "subpop_discovery" \
+        --feature_extractor {feature_extractor} \
         --train_source_epochs {train_source_epochs} \
         --train_joint_epochs {train_joint_epochs} \
         --match_epochs {match_epochs} \
@@ -50,20 +57,28 @@ def _get_command(
 
 
 def main(
-    seeds=(0, 1, 2),  # Seeds over which to randomize.
-    wait_time_in_secs=30,
+    seeds=(0, 1,),  # Seeds over which to randomize.
+    wait_time_in_secs=15,
     date="jan1922",
 ):
     commands = []
     for seed in seeds:
         for balanced_op in (True, False):
-            commands.append(
-                _get_command(
-                    date=date,
-                    seed=seed,
-                    balanced_op=balanced_op,
-                )
-            )
+            for feature_extractor in ('cnn', 'id'):
+                for train_epochs in (0, 5, 20):
+                    for match_epochs in (1, 5, 10):
+                        commands.append(
+                            _get_command(
+                                date=date,
+                                seed=seed,
+
+                                balanced_op=balanced_op,
+                                feature_extractor=feature_extractor,
+                                train_source_epochs=train_epochs,
+                                train_joint_epochs=train_epochs,
+                                match_epochs=match_epochs,
+                            )
+                        )
     utils.gpu_scheduler(commands=commands, wait_time_in_secs=wait_time_in_secs)
 
 
