@@ -81,6 +81,7 @@ def main(
                         )
     utils.gpu_scheduler(
         commands=commands, wait_time_in_secs=wait_time_in_secs,
+        maxMemory=0.5, maxLoad=0.5,
     )
 
 
