@@ -28,7 +28,7 @@ def _get_command(
     train_source_epochs=10,
     train_joint_epochs=10,
     match_epochs=10,
-    train_batch_size=2000,
+    train_batch_size=500,
     balanced_op=False,
     feature_extractor="cnn",
     base_dir='/nlp/scr/lxuechen/interpreting_shifts'
