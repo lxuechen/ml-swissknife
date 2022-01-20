@@ -64,9 +64,9 @@ def main(
     commands = []
     for seed in seeds:
         for balanced_op in (True, False):
-            for feature_extractor in ('cnn', 'id'):
-                for train_epochs in (0, 5, 20):
-                    for match_epochs in (1, 5, 10):
+            for train_epochs in (0, 20):
+                for match_epochs in (1, 10):
+                    for feature_extractor in ('id', 'cnn'):
                         commands.append(
                             _get_command(
                                 date=date,
@@ -79,7 +79,9 @@ def main(
                                 match_epochs=match_epochs,
                             )
                         )
-    utils.gpu_scheduler(commands=commands, wait_time_in_secs=wait_time_in_secs)
+    utils.gpu_scheduler(
+        commands=commands, wait_time_in_secs=wait_time_in_secs,
+    )
 
 
 if __name__ == "__main__":
