@@ -451,6 +451,7 @@ def subpop_discovery(
                 xlabel="class label",
             )
         )
+        del bar
 
         # Bar plot class counts of bottom of the marginal.
         marginal = torch.tensor(marginal, dtype=torch.get_default_dtype())
@@ -460,7 +461,10 @@ def subpop_discovery(
         for bot_index in bot_indices:
             label = int(target_train_data.targets[bot_index])
             bot_class_counts[label] = bot_class_counts[label] + 1
-
+        bar = dict(
+            x=target_classes,
+            height=[bot_class_counts[target_class] for target_class in target_classes]
+        )
         img_path = utils.join(img_dir, 'bottom_class_counts')
         utils.plot_wrapper(
             img_path=img_path,
@@ -472,6 +476,7 @@ def subpop_discovery(
                 xlabel="class label",
             )
         )
+        del bar
 
 
 def main(
