@@ -333,6 +333,8 @@ def domain_adaptation(
 
     train_batch_size=500,
     eval_batch_size=500,
+    train_source_epochs=3,
+    train_joint_epochs=3,
     balanced_op=False,
     feature_extractor="cnn",
     classifier='linear',
@@ -350,12 +352,16 @@ def domain_adaptation(
     model_f = _get_classifier(classifier)
 
     domain_adapter = OptimalTransportDomainAdapter(
-        model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon
+        model_g, model_f,
+        eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon
     )
-    domain_adapter.fit_source(source_train_loader)
+    domain_adapter.fit_source(
+        source_train_loader,
+        epochs=train_source_epochs
+    )
     domain_adapter.fit_joint(
         source_train_loader, target_train_loader, target_test_loader,
-        balanced_op=balanced_op
+        epochs=train_joint_epochs, balanced_op=balanced_op,
     )
 
 
@@ -387,13 +393,14 @@ def subpop_discovery(
     eval_batch_size=500,
     source_classes=(1, 2, 3, 9, 0,),
     target_classes=tuple(range(10)),
-    train_epochs=3,
+    train_source_epochs=3,
+    train_joint_epochs=3,
     match_epochs=5,
     balanced_op=False,
     feature_extractor="cnn",
     classifier='linear',
     img_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
-    bottom_percentage=0.1,  # For extracting outliers.
+    bottom_percentages=(0.01, 0.1, 0.2, 0.3, 0.4, 0.5),
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)
@@ -411,14 +418,16 @@ def subpop_discovery(
     model_f = _get_classifier(classifier)
 
     domain_adapter = OptimalTransportDomainAdapter(
-        model_g, model_f, eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
+        model_g, model_f,
+        eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
     )
     domain_adapter.fit_source(
-        source_train_loader, epochs=train_epochs,
+        source_train_loader,
+        epochs=train_source_epochs,
     )
     domain_adapter.fit_joint(
-        source_train_loader, target_train_loader, target_test_loader, epochs=train_epochs,
-        balanced_op=balanced_op,
+        source_train_loader, target_train_loader, target_test_loader,
+        epochs=train_joint_epochs, balanced_op=balanced_op,
     )
 
     if img_dir is not None:
@@ -456,27 +465,30 @@ def subpop_discovery(
         # Bar plot class counts of bottom of the marginal.
         marginal = torch.tensor(marginal, dtype=torch.get_default_dtype())
         marginal_len = len(marginal)
-        bot_values, bot_indices = (-marginal).topk(int(bottom_percentage * marginal_len))
-        bot_class_counts = collections.defaultdict(int)
-        for bot_index in bot_indices:
-            label = int(target_train_data.targets[bot_index])
-            bot_class_counts[label] = bot_class_counts[label] + 1
-        bar = dict(
-            x=target_classes,
-            height=[bot_class_counts[target_class] for target_class in target_classes]
-        )
-        img_path = utils.join(img_dir, 'bottom_class_counts')
-        utils.plot_wrapper(
-            img_path=img_path,
-            suffixes=('.png', '.pdf'),
-            bars=(bar,),
-            options=dict(
-                title=f"S: {source_classes}, \nT: {target_classes}",
-                ylabel=f"bottom {int(bottom_percentage * 100)}% class counts;",
-                xlabel="class label",
+
+        for bottom_percentage in bottom_percentages:
+            bottom_percentage_int = int(bottom_percentage * 100)
+            bot_values, bot_indices = (-marginal).topk(int(bottom_percentage * marginal_len))
+            bot_class_counts = collections.defaultdict(int)
+            for bot_index in bot_indices:
+                label = int(target_train_data.targets[bot_index])
+                bot_class_counts[label] = bot_class_counts[label] + 1
+            bar = dict(
+                x=target_classes,
+                height=[bot_class_counts[target_class] for target_class in target_classes]
             )
-        )
-        del bar
+            img_path = utils.join(img_dir, f'bottom_class_counts_{bottom_percentage_int:03d}')
+            utils.plot_wrapper(
+                img_path=img_path,
+                suffixes=('.png', '.pdf'),
+                bars=(bar,),
+                options=dict(
+                    title=f"S: {source_classes}, \nT: {target_classes}",
+                    ylabel=f"bottom {bottom_percentage_int}% class counts",
+                    xlabel="class label",
+                )
+            )
+            del bar
 
 
 def main(
