@@ -404,7 +404,7 @@ def subpop_discovery(
     balanced_op=False,
     feature_extractor="cnn",
     train_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
-    bottom_percentages=(0.01, 0.1, 0.2, 0.3, 0.4, 0.5),
+    bottom_percentages=(0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5),
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)

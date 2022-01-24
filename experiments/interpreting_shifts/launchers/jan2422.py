@@ -7,7 +7,19 @@ many experiments.
 date:
     01/24/22
 purpose:
-    Use large source reg, small target reg, moderate entropy reg.
+    Working set (classes with smallest marginals == classes most at the tails)
+        reg_source=10,
+        reg_target=0.05,
+        reg_entropy=1,
+        train_batch_size=1000,
+        eval_batch_size=1000
+        no feature learning
+
+    Check sensitivity w.r.t.
+        eval_batch_size
+        reg_target
+        reg_entropy
+
 notes:
 run:
     python -m interpreting_shifts.launchers.jan2422
@@ -80,12 +92,9 @@ def _get_command(
 
 def main(
     seeds=(0, 1,),  # Seeds over which to randomize.
-    wait_time_in_secs=15,
+    wait_time_in_secs=10,
     train_batch_size=1000,
-    eval_batch_size=1000,
     reg_source=10,
-    reg_target=0.05,
-    reg_entropy=1,
     date="jan2422",
 ):
     commands = []
@@ -94,24 +103,27 @@ def main(
             for train_epochs in (0,):
                 for match_epochs in (10,):
                     for feature_extractor in ('id',):
-                        commands.append(
-                            _get_command(
-                                date=date,
-                                seed=seed,
+                        for reg_target in (0.01, 0.05, 0.1, 1):
+                            for reg_entropy in (0.1, 0.5, 1):
+                                for eval_batch_size in (250, 500, 1000,):
+                                    commands.append(
+                                        _get_command(
+                                            date=date,
+                                            seed=seed,
 
-                                balanced_op=balanced_op,
-                                feature_extractor=feature_extractor,
-                                train_source_epochs=train_epochs,
-                                train_joint_epochs=train_epochs,
-                                match_epochs=match_epochs,
-                                train_batch_size=train_batch_size,
-                                eval_batch_size=eval_batch_size,
+                                            balanced_op=balanced_op,
+                                            feature_extractor=feature_extractor,
+                                            train_source_epochs=train_epochs,
+                                            train_joint_epochs=train_epochs,
+                                            match_epochs=match_epochs,
+                                            train_batch_size=train_batch_size,
+                                            eval_batch_size=eval_batch_size,
 
-                                reg_source=reg_source,
-                                reg_target=reg_target,
-                                reg_entropy=reg_entropy,
-                            )
-                        )
+                                            reg_source=reg_source,
+                                            reg_target=reg_target,
+                                            reg_entropy=reg_entropy,
+                                        )
+                                    )
     utils.gpu_scheduler(
         commands=commands, wait_time_in_secs=wait_time_in_secs,
     )
