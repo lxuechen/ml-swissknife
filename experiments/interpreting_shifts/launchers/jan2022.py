@@ -14,7 +14,7 @@ purpose:
         matching epochs
 notes:
 run:
-    python -m interpreting_shifts.launchers.jan1922
+    python -m interpreting_shifts.launchers.jan2022
 """
 
 import fire

@@ -7,14 +7,10 @@ many experiments.
 date:
     01/24/22
 purpose:
-    Ablation studies:
-        Feature extractor
-        DeepJDOT training
-        balanced vs unbalanced
-        matching epochs
+    Use large source reg, small target reg, moderate entropy reg.
 notes:
 run:
-    python -m interpreting_shifts.launchers.jan1922
+    python -m interpreting_shifts.launchers.jan2422
 """
 
 import fire
