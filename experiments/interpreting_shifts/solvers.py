@@ -230,7 +230,7 @@ def test_unbalanced_solvers(
     reg_a=10.,
     reg_b=0.1,
     reg=0.1,
-    stable_version=True,
+    stable_version=False,
     seed=42,
     img_path=None,
 ):
@@ -239,8 +239,8 @@ def test_unbalanced_solvers(
     n = 10
     mu1, mu2, mu3 = -3, 0, 3
     std = 0.3
-    x1 = -np.ones(n)
-    x2 = -x1
+    x1 = -np.ones(n) * 0.3
+    x2 = -x1 * 0.3
     y1 = np.concatenate(
         [np.random.randn(n // 2) * std + mu1,
          np.random.randn(n // 2) * std + mu2],
@@ -309,29 +309,26 @@ def test_unbalanced_solvers(
         )
 
 
-def plot_4_cases(**kwargs):
+def plot_4_cases(
+    hi=10, lo=0.1, **kwargs
+):
     # Check if the different regularization parameters work
 
     # source marginal uniform, target marginal not uniform and first set matched
     test_unbalanced_solvers(
-        reg_a=10, reg_b=1, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'high_a_low_b')
+        reg_a=hi, reg_b=lo, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'high_a_low_b'),
     )
     # source and target marginal both uniform
     test_unbalanced_solvers(
-        reg_a=10, reg_b=10, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'high_a_high_b')
+        reg_a=hi, reg_b=hi, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'high_a_high_b')
     )
     # source marginal not uniform and second set matched, target marginal uniform
     test_unbalanced_solvers(
-        reg_a=1, reg_b=10, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_high_b')
+        reg_a=lo, reg_b=hi, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_high_b')
     )
     # source and target marginal both not uniform
     test_unbalanced_solvers(
-        reg_a=3, reg_b=3, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_low_b')
-    )
-
-    # Failure mode.
-    test_unbalanced_solvers(
-        reg_a=0.1, reg_b=0.1, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'xlow_a_xlow_b')
+        reg_a=lo, reg_b=lo, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_low_b')
     )
 
 
