@@ -281,8 +281,8 @@ def test_unbalanced_solvers(
 
     if img_path is not None:
         scatters = [
-            dict(x=x1, y=y1, color=utils.get_sns_colors()[0]),
-            dict(x=x2, y=y2, color=utils.get_sns_colors()[1])
+            dict(x=x1, y=y1, color=utils.get_sns_colors()[0], label='source'),
+            dict(x=x2, y=y2, color=utils.get_sns_colors()[1], label='target')
         ]
 
         alpha_scale = 10
@@ -304,7 +304,7 @@ def test_unbalanced_solvers(
             plots=plots,
             scatters=scatters,
             options=dict(
-                title=f'reg_source: {reg_a}, reg_target: {reg_b}, darker <=> higher joint mass'
+                title=f'$\epsilon_P$: {reg_a}, $\epsilon_Q$: {reg_b}; darker means higher joint mass'
             )
         )
 
