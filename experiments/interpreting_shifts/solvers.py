@@ -248,9 +248,10 @@ def main(
     np.random.seed(10)
 
     n = 10
-    mu1, mu2, mu3 = -1, 0, 1
-    std = 0.1
-    x1 = x2 = np.ones(n)
+    mu1, mu2, mu3 = -3, 0, 3
+    std = 0.3
+    x1 = -np.ones(n)
+    x2 = -x1
     y1 = np.concatenate(
         [np.random.randn(n // 2) * std + mu1,
          np.random.randn(n // 2) * std + mu2],
@@ -288,6 +289,32 @@ def main(
     print('---')
     print(f'target_marg: {target_marg}')
     print(f'tv_to_uniform: {tv_to_uniform(target_marg):.4f}, sum: {np.sum(target_marg):.4f}')
+
+    scatters = [
+        dict(x=x1, y=y1, c=utils.get_sns_colors()[0]),
+        dict(x=x2, y=y2, c=utils.get_sns_colors()[1])
+    ]
+
+    alpha_scale = 10
+    plots = []
+    for s in range(len(gamma)):
+        for t in range(len(gamma[0])):
+            plots.append(
+                dict(
+                    x=[x1[s], x2[t]],
+                    y=[y1[s], y2[t]],
+                    alpha=gamma[s, t] * alpha_scale,
+                    color=utils.get_sns_colors()[2],
+                )
+            )
+
+    utils.plot_wrapper(
+        plots=plots,
+        scatters=scatters,
+        options=dict(
+            title=f'reg_source: {reg_a}, reg_target: {reg_b}, darker <=> higher joint mass'
+        )
+    )
 
 
 if __name__ == '__main__':
