@@ -21,6 +21,11 @@ from swissknife import utils
 def _get_command(
     seed,
     date,
+
+    reg_source,
+    reg_target,
+    reg_entropy,
+
     train_source_epochs=10,
     train_joint_epochs=10,
     match_epochs=10,
@@ -31,9 +36,6 @@ def _get_command(
     base_dir='/nlp/scr/lxuechen/interpreting_shifts',
     source_classes=(0, 1, 5, 7, 9,),
     target_classes=tuple(range(10)),
-    reg_source=10,
-    reg_target=0.1,
-    reg_entropy=0.01,
 ):
     reg_source_str = utils.float2str(reg_source)
     reg_target_str = utils.float2str(reg_target)
@@ -81,14 +83,17 @@ def main(
     wait_time_in_secs=15,
     train_batch_size=1000,
     eval_batch_size=1000,
+    reg_source=10,
+    reg_target=0.05,
+    reg_entropy=1,
     date="jan2422",
 ):
     commands = []
     for seed in seeds:
         for balanced_op in (False,):
-            for train_epochs in (0, 20):
-                for match_epochs in (1, 10):
-                    for feature_extractor in ('id', 'cnn'):
+            for train_epochs in (0,):
+                for match_epochs in (10,):
+                    for feature_extractor in ('id',):
                         commands.append(
                             _get_command(
                                 date=date,
@@ -101,11 +106,14 @@ def main(
                                 match_epochs=match_epochs,
                                 train_batch_size=train_batch_size,
                                 eval_batch_size=eval_batch_size,
+
+                                reg_source=reg_source,
+                                reg_target=reg_target,
+                                reg_entropy=reg_entropy,
                             )
                         )
     utils.gpu_scheduler(
         commands=commands, wait_time_in_secs=wait_time_in_secs,
-        maxMemory=0.5, maxLoad=0.5,
     )
 
 

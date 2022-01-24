@@ -455,12 +455,16 @@ def subpop_discovery(
             height=[class_marginals[target_class] for target_class in target_classes]
         )
         sum_prob = sum(class_marginals.values())
+        top_marginal_classes = tuple(k for k, _ in sorted(class_marginals.items(), key=lambda item: item[1]))[:5]
         utils.plot_wrapper(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
             bars=(bar,),
             options=dict(
-                title=f"S: {source_classes}, \nT: {target_classes}, \nsum_prob: {sum_prob:.4f}",
+                title=f"S: {source_classes}, "
+                      f"\nT: {target_classes}, "
+                      f"\ntop marginal: {top_marginal_classes}, "
+                      f"\nsum_prob: {sum_prob:.4f}",
                 ylabel="transport map marginal prob.",
                 xlabel="class label",
             )
