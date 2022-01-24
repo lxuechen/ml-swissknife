@@ -226,26 +226,15 @@ def sinkhorn_stabilized_unbalanced(M, reg, reg_a, reg_b, tau=1e5, numItermax=100
             return ot_matrix
 
 
-def main(
-    reg_a=10,
+def test_unbalanced_solvers(
+    reg_a=10.,
     reg_b=0.1,
     reg=0.1,
     stable_version=True,
+    seed=42,
+    img_path=None,
 ):
-    # Check if the different regularization parameters work.
-    # python -m interpreting_shifts.solvers --reg_a 10 --reg_b 0.1
-    #   source marginal uniform, target marginal not uniform and first set matched
-
-    # python -m interpreting_shifts.solvers --reg_a 10 --reg_b 10
-    #   source and target marginal both uniform
-
-    # python -m interpreting_shifts.solvers --reg_a 0.1 --reg_b 10
-    #   source marginal not uniform and second set matched, target marginal uniform
-
-    # python -m interpreting_shifts.solvers --reg_a 0.1 --reg_b 0.1
-    #   source and target marginal both not uniform
-
-    np.random.seed(10)
+    np.random.seed(seed)
 
     n = 10
     mu1, mu2, mu3 = -3, 0, 3
@@ -290,32 +279,69 @@ def main(
     print(f'target_marg: {target_marg}')
     print(f'tv_to_uniform: {tv_to_uniform(target_marg):.4f}, sum: {np.sum(target_marg):.4f}')
 
-    scatters = [
-        dict(x=x1, y=y1, c=utils.get_sns_colors()[0]),
-        dict(x=x2, y=y2, c=utils.get_sns_colors()[1])
-    ]
+    if img_path is not None:
+        scatters = [
+            dict(x=x1, y=y1, color=utils.get_sns_colors()[0]),
+            dict(x=x2, y=y2, color=utils.get_sns_colors()[1])
+        ]
 
-    alpha_scale = 10
-    plots = []
-    for s in range(len(gamma)):
-        for t in range(len(gamma[0])):
-            plots.append(
-                dict(
-                    x=[x1[s], x2[t]],
-                    y=[y1[s], y2[t]],
-                    alpha=gamma[s, t] * alpha_scale,
-                    color=utils.get_sns_colors()[2],
+        alpha_scale = 10
+        plots = []
+        for s in range(len(gamma)):
+            for t in range(len(gamma[0])):
+                plots.append(
+                    dict(
+                        x=[x1[s], x2[t]],
+                        y=[y1[s], y2[t]],
+                        alpha=max(min(gamma[s, t] * alpha_scale, 1), 0),
+                        color=utils.get_sns_colors()[2],
+                    )
                 )
-            )
 
-    utils.plot_wrapper(
-        plots=plots,
-        scatters=scatters,
-        options=dict(
-            title=f'reg_source: {reg_a}, reg_target: {reg_b}, darker <=> higher joint mass'
+        utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=('.png', '.pdf'),
+            plots=plots,
+            scatters=scatters,
+            options=dict(
+                title=f'reg_source: {reg_a}, reg_target: {reg_b}, darker <=> higher joint mass'
+            )
         )
+
+
+def plot_4_cases(**kwargs):
+    # Check if the different regularization parameters work
+
+    # source marginal uniform, target marginal not uniform and first set matched
+    test_unbalanced_solvers(
+        reg_a=10, reg_b=1, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'high_a_low_b')
+    )
+    # source and target marginal both uniform
+    test_unbalanced_solvers(
+        reg_a=10, reg_b=10, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'high_a_high_b')
+    )
+    # source marginal not uniform and second set matched, target marginal uniform
+    test_unbalanced_solvers(
+        reg_a=1, reg_b=10, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_high_b')
+    )
+    # source and target marginal both not uniform
+    test_unbalanced_solvers(
+        reg_a=1, reg_b=1, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_low_b')
+    )
+
+    # Failure mode.
+    test_unbalanced_solvers(
+        reg_a=0.1, reg_b=0.1, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'xlow_a_xlow_b')
     )
 
 
+def main(task="plot_4_cases", **kwargs):
+    if task == "plot_4_cases":
+        plot_4_cases(**kwargs)
+    elif task == "test_unbalanced_solvers":
+        test_unbalanced_solvers(**kwargs)
+
+
 if __name__ == '__main__':
+    # python -m interpreting_shifts.solvers
     fire.Fire(main)
