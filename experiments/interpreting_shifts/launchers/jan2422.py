@@ -67,23 +67,23 @@ def main(
     date="jan2422",
 ):
     commands = []
-    balanced_op = False
-    train_epochs = 0
-    match_epochs = 10
-    feature_extractor = 'cnn'
     for seed in seeds:
-        commands.append(
-            _get_command(
-                date=date,
-                seed=seed,
+        for balanced_op in (True, False):
+            for train_epochs in (0, 20):
+                for match_epochs in (1, 10):
+                    for feature_extractor in ('id', 'cnn'):
+                        commands.append(
+                            _get_command(
+                                date=date,
+                                seed=seed,
 
-                balanced_op=balanced_op,
-                feature_extractor=feature_extractor,
-                train_source_epochs=train_epochs,
-                train_joint_epochs=train_epochs,
-                match_epochs=match_epochs,
-            )
-        )
+                                balanced_op=balanced_op,
+                                feature_extractor=feature_extractor,
+                                train_source_epochs=train_epochs,
+                                train_joint_epochs=train_epochs,
+                                match_epochs=match_epochs,
+                            )
+                        )
     utils.gpu_scheduler(
         commands=commands, wait_time_in_secs=wait_time_in_secs,
         maxMemory=0.5, maxLoad=0.5,
