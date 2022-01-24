@@ -326,7 +326,7 @@ def plot_4_cases(**kwargs):
     )
     # source and target marginal both not uniform
     test_unbalanced_solvers(
-        reg_a=1, reg_b=1, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_low_b')
+        reg_a=3, reg_b=3, img_path=utils.join('.', 'interpreting_shifts', 'plots', 'low_a_low_b')
     )
 
     # Failure mode.
