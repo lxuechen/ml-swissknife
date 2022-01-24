@@ -164,8 +164,8 @@ class OptimalTransportDomainAdapter(object):
         self.n_class = n_class
         self.eta1 = eta1  # Weight for feature cost.
         self.eta2 = eta2  # Weight for label cost.
-        self.tau = tau
-        self.epsilon = epsilon
+        self.tau = tau  # Marginal regularization weight.
+        self.epsilon = epsilon  # Entropy regularization weight.
 
     def fit_source(
         self,
@@ -489,6 +489,7 @@ def main(
     seed=0,
     **kwargs
 ):
+    # TODO: regularization may be too strong!
     torch.manual_seed(seed)
 
     if task == "domain_adaptation":
