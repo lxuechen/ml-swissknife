@@ -237,8 +237,9 @@ class OptimalTransportDomainAdapter(object):
                     pi = ot.emd(a, b, cost_numpy)
                 else:  # Unbalanced optimal transport.
                     pi = solvers.sinkhorn_knopp_unbalanced(
-                        a, b, cost_numpy,
-                        reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy
+                        cost_numpy,
+                        reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy,
+                        a=a, b=b,
                     )
                 pi = torch.tensor(pi, device=device)
 
@@ -319,8 +320,9 @@ class OptimalTransportDomainAdapter(object):
                     joint = ot.emd(a, b, cost_numpy)
                 else:  # Unbalanced optimal transport.
                     joint = solvers.sinkhorn_knopp_unbalanced(
-                        a, b, cost_numpy,
-                        reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy
+                        cost_numpy,
+                        reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy,
+                        a=a, b=b,
                     )
 
                 marginal = np.sum(joint, axis=0)
