@@ -386,6 +386,7 @@ def _get_feature_extractor_and_classifier(feature_extractor):
     return model_g, model_f
 
 
+# TODO: test!
 def subpop_discovery(
     eta1=0.1,
     eta2=0.1,
