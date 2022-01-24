@@ -2,6 +2,7 @@ import warnings
 
 import fire
 import numpy as np
+from scipy.special import logsumexp
 
 from swissknife import utils
 
@@ -100,12 +101,136 @@ def sinkhorn_knopp_unbalanced(M, reg, reg_a, reg_b, numItermax=1000,
             return u[:, None] * K * v[None, :]
 
 
-# TODO: Also hack the other solver!
+def sinkhorn_stabilized_unbalanced(M, reg, reg_a, reg_b, tau=1e5, numItermax=1000,
+                                   stopThr=1e-6, verbose=False, log=False,
+                                   a=np.array([]), b=np.array([]), **kwargs):
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    M = np.asarray(M, dtype=np.float64)
+
+    dim_a, dim_b = M.shape
+
+    if len(a) == 0:
+        a = np.ones(dim_a, dtype=np.float64) / dim_a
+    if len(b) == 0:
+        b = np.ones(dim_b, dtype=np.float64) / dim_b
+
+    if len(b.shape) > 1:
+        n_hists = b.shape[1]
+    else:
+        n_hists = 0
+
+    if log:
+        log = {'err': []}
+
+    # we assume that no distances are null except those of the diagonal of
+    # distances
+    if n_hists:
+        u = np.ones((dim_a, n_hists)) / dim_a
+        v = np.ones((dim_b, n_hists)) / dim_b
+        a = a.reshape(dim_a, 1)
+    else:
+        u = np.ones(dim_a) / dim_a
+        v = np.ones(dim_b) / dim_b
+
+    # print(reg)
+    # Next 3 lines equivalent to K= np.exp(-M/reg), but faster to compute
+    K = np.empty(M.shape, dtype=M.dtype)
+    np.divide(M, -reg, out=K)
+    np.exp(K, out=K)
+
+    f_a = reg_a / (reg_a + reg)
+    f_b = reg_b / (reg_b + reg)
+
+    cpt = 0
+    err = 1.
+    alpha = np.zeros(dim_a)
+    beta = np.zeros(dim_b)
+    while (err > stopThr and cpt < numItermax):
+        uprev = u
+        vprev = v
+
+        Kv = K.dot(v)
+        f_alpha = np.exp(- alpha / (reg + reg_a))
+        f_beta = np.exp(- beta / (reg + reg_b))
+
+        if n_hists:
+            f_alpha = f_alpha[:, None]
+            f_beta = f_beta[:, None]
+        u = ((a / (Kv + 1e-16)) ** f_a) * f_alpha
+        Ktu = K.T.dot(u)
+        v = ((b / (Ktu + 1e-16)) ** f_b) * f_beta
+        absorbing = False
+        if (u > tau).any() or (v > tau).any():
+            absorbing = True
+            if n_hists:
+                alpha = alpha + reg * np.log(np.max(u, 1))
+                beta = beta + reg * np.log(np.max(v, 1))
+            else:
+                alpha = alpha + reg * np.log(np.max(u))
+                beta = beta + reg * np.log(np.max(v))
+            K = np.exp((alpha[:, None] + beta[None, :] -
+                        M) / reg)
+            v = np.ones_like(v)
+
+        if (np.any(Ktu == 0.)
+            or np.any(np.isnan(u)) or np.any(np.isnan(v))
+            or np.any(np.isinf(u)) or np.any(np.isinf(v))):
+            # we have reached the machine precision
+            # come back to previous solution and quit loop
+            warnings.warn('Numerical errors at iteration %s' % cpt)
+            u = uprev
+            v = vprev
+            break
+        if (cpt % 10 == 0 and not absorbing) or cpt == 0:
+            # we can speed up the process by checking for the error only all
+            # the 10th iterations
+            err = abs(u - uprev).max() / max(abs(u).max(), abs(uprev).max(),
+                                             1.)
+            if log:
+                log['err'].append(err)
+            if verbose:
+                if cpt % 200 == 0:
+                    print(
+                        '{:5s}|{:12s}'.format('It.', 'Err') + '\n' + '-' * 19)
+                print('{:5d}|{:8e}|'.format(cpt, err))
+        cpt = cpt + 1
+
+    if err > stopThr:
+        warnings.warn("Stabilized Unbalanced Sinkhorn did not converge." +
+                      "Try a larger entropy `reg` or a lower mass `reg_m`." +
+                      "Or a larger absorption threshold `tau`.")
+    if n_hists:
+        logu = alpha[:, None] / reg + np.log(u)
+        logv = beta[:, None] / reg + np.log(v)
+    else:
+        logu = alpha / reg + np.log(u)
+        logv = beta / reg + np.log(v)
+    if log:
+        log['logu'] = logu
+        log['logv'] = logv
+    if n_hists:  # return only loss
+        res = logsumexp(np.log(M + 1e-100)[:, :, None] + logu[:, None, :] +
+                        logv[None, :, :] - M[:, :, None] / reg, axis=(0, 1))
+        res = np.exp(res)
+        if log:
+            return res, log
+        else:
+            return res
+
+    else:  # return OT matrix
+        ot_matrix = np.exp(logu[:, None] + logv[None, :] - M / reg)
+        if log:
+            return ot_matrix, log
+        else:
+            return ot_matrix
+
 
 def main(
     reg_a=10,
     reg_b=0.1,
-    reg=0.01,
+    reg=0.1,
+    stable_version=True,
 ):
     # Check if the different regularization parameters work.
     # python -m interpreting_shifts.solvers --reg_a 10 --reg_b 0.1
@@ -139,7 +264,11 @@ def main(
     target = np.stack([x2, y2], axis=1)
 
     M = np.sqrt(np.sum((source[..., None] - target.T[None, ...]) ** 2, axis=1))
-    gamma = sinkhorn_knopp_unbalanced(M, reg=reg, reg_a=reg_a, reg_b=reg_b, )
+    ot_solver = {
+        True: sinkhorn_stabilized_unbalanced,
+        False: sinkhorn_knopp_unbalanced,
+    }[stable_version]
+    gamma = ot_solver(M, reg=reg, reg_a=reg_a, reg_b=reg_b, tau=100)
 
     source_marg = gamma.sum(axis=1)
     target_marg = gamma.sum(axis=0)

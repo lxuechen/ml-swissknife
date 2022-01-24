@@ -25,6 +25,7 @@ import tqdm
 
 from swissknife import utils
 from . import models
+from . import solvers
 
 
 class SVHN(datasets.SVHN):
@@ -157,15 +158,17 @@ class OptimalTransportDomainAdapter(object):
     def __init__(
         self,
         model_g, model_f,
-        n_class=10, eta1=0.001, eta2=0.0001, tau=1., epsilon=0.1
+        n_class=10, eta1=0.001, eta2=0.0001,
+        reg_target=0.1, reg_source=10., reg_entropy=0.1
     ):
         self.model_g: nn.Module = model_g
         self.model_f: nn.Module = model_f
         self.n_class = n_class
         self.eta1 = eta1  # Weight for feature cost.
         self.eta2 = eta2  # Weight for label cost.
-        self.tau = tau  # Marginal regularization weight.
-        self.epsilon = epsilon  # Entropy regularization weight.
+        self.reg_target = reg_target
+        self.reg_source = reg_source
+        self.reg_entropy = reg_entropy
 
     def fit_source(
         self,
@@ -174,7 +177,7 @@ class OptimalTransportDomainAdapter(object):
     ):
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
         optimizer = optim.Adam(params=params, lr=learning_rate)
-        for epoch in tqdm.tqdm(range(epochs), desc="fit source"):
+        for _ in tqdm.tqdm(range(epochs), desc="fit source"):
             for i, data in enumerate(source_train_loader):
                 self.model_g.train()
                 self.model_f.train()
@@ -233,7 +236,10 @@ class OptimalTransportDomainAdapter(object):
                 if balanced_op:
                     pi = ot.emd(a, b, cost_numpy)
                 else:  # Unbalanced optimal transport.
-                    pi = ot.unbalanced.sinkhorn_knopp_unbalanced(a, b, cost_numpy, self.epsilon, self.tau)
+                    pi = solvers.sinkhorn_knopp_unbalanced(
+                        a, b, cost_numpy,
+                        reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy
+                    )
                 pi = torch.tensor(pi, device=device)
 
                 da_loss = torch.sum(pi * cost)
@@ -286,7 +292,7 @@ class OptimalTransportDomainAdapter(object):
         global_step = 0
         target_train_size = sum(img.size(0) for img, _, _ in target_train_loader_unshuffled)
         avg = np.zeros((target_train_size,))
-        for epoch in tqdm.tqdm(range(epochs), desc="target marginal"):
+        for _ in tqdm.tqdm(range(epochs), desc="target marginal"):
             for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
                 target_train_data = tuple(t.to(device) for t in target_train_data)
                 target_x, _, target_indices = target_train_data
@@ -312,7 +318,11 @@ class OptimalTransportDomainAdapter(object):
                 if balanced_op:
                     joint = ot.emd(a, b, cost_numpy)
                 else:  # Unbalanced optimal transport.
-                    joint = ot.unbalanced.sinkhorn_knopp_unbalanced(a, b, cost_numpy, self.epsilon, self.tau)
+                    joint = solvers.sinkhorn_knopp_unbalanced(
+                        a, b, cost_numpy,
+                        reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy
+                    )
+
                 marginal = np.sum(joint, axis=0)
                 target_indices = target_indices.cpu().numpy()
                 marginal_full = np.zeros_like(avg)
@@ -328,8 +338,8 @@ class OptimalTransportDomainAdapter(object):
 def domain_adaptation(
     eta1=0.1,
     eta2=0.1,
-    tau=1.0,
-    epsilon=0.1,
+
+    reg_target=0.1, reg_source=10., reg_entropy=0.1,
 
     train_batch_size=500,
     eval_batch_size=500,
@@ -337,7 +347,6 @@ def domain_adaptation(
     train_joint_epochs=3,
     balanced_op=False,
     feature_extractor="cnn",
-    classifier='linear',
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)
@@ -352,7 +361,8 @@ def domain_adaptation(
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
-        eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon
+        eta1=eta1, eta2=eta2,
+        reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
     )
     domain_adapter.fit_source(
         source_train_loader,
@@ -379,8 +389,8 @@ def _get_feature_extractor_and_classifier(feature_extractor):
 def subpop_discovery(
     eta1=0.1,
     eta2=0.1,
-    tau=1.0,
-    epsilon=0.1,
+
+    reg_target=0.1, reg_source=10., reg_entropy=0.1,
 
     train_batch_size=500,
     eval_batch_size=500,
@@ -411,7 +421,8 @@ def subpop_discovery(
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
-        eta1=eta1, eta2=eta2, tau=tau, epsilon=epsilon,
+        eta1=eta1, eta2=eta2,
+        reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
     )
     domain_adapter.fit_source(
         source_train_loader,
@@ -489,7 +500,6 @@ def main(
     seed=0,
     **kwargs
 ):
-    # TODO: regularization may be too strong!
     torch.manual_seed(seed)
 
     if task == "domain_adaptation":
