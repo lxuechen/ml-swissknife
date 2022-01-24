@@ -388,12 +388,11 @@ def _get_feature_extractor_and_classifier(feature_extractor):
     return model_g, model_f
 
 
-# TODO: test!
 def subpop_discovery(
     eta1=0.1,
     eta2=0.1,
 
-    reg_target=0.1, reg_source=10., reg_entropy=0.1,
+    reg_target=0.1, reg_source=10., reg_entropy=0.01,
 
     train_batch_size=500,
     eval_batch_size=500,

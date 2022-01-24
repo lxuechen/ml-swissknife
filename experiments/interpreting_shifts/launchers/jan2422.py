@@ -25,12 +25,19 @@ def _get_command(
     train_joint_epochs=10,
     match_epochs=10,
     train_batch_size=500,
+    eval_batch_size=500,
     balanced_op=False,
     feature_extractor="cnn",
     base_dir='/nlp/scr/lxuechen/interpreting_shifts',
     source_classes=(0, 1, 5, 7, 9,),
     target_classes=tuple(range(10)),
+    reg_source=10,
+    reg_target=0.1,
+    reg_entropy=0.01,
 ):
+    reg_source_str = utils.float2str(reg_source)
+    reg_target_str = utils.float2str(reg_target)
+    reg_entropy_str = utils.float2str(reg_entropy)
     train_dir = utils.join(
         base_dir,
         date,
@@ -40,6 +47,10 @@ def _get_command(
         f'train_joint_epochs_{train_joint_epochs:06d}_'
         f'match_epochs_{match_epochs:06d}_'
         f'train_batch_size_{train_batch_size:06d}_'
+        f'eval_batch_size_{eval_batch_size:06d}_'
+        f'reg_source_str_{reg_source_str}_'
+        f'reg_target_str_{reg_target_str}_'
+        f'reg_entropy_str_{reg_entropy_str}_'
         f'seed_{seed:06}'
     )
     command = f'''python -m interpreting_shifts.main \
@@ -50,7 +61,11 @@ def _get_command(
         --match_epochs {match_epochs} \
         --balanced_op {balanced_op} \
         --train_batch_size {train_batch_size} \
+        --eval_batch_size {eval_batch_size} \
         --seed {seed} \
+        --reg_source {reg_source} \
+        --reg_target {reg_target} \
+        --reg_entropy {reg_entropy} \
         --train_dir {train_dir} '''
     command += ' --source_classes '
     for source_class in source_classes:
@@ -64,11 +79,13 @@ def _get_command(
 def main(
     seeds=(0, 1,),  # Seeds over which to randomize.
     wait_time_in_secs=15,
+    train_batch_size=1000,
+    eval_batch_size=1000,
     date="jan2422",
 ):
     commands = []
     for seed in seeds:
-        for balanced_op in (True, False):
+        for balanced_op in (False,):
             for train_epochs in (0, 20):
                 for match_epochs in (1, 10):
                     for feature_extractor in ('id', 'cnn'):
@@ -82,6 +99,8 @@ def main(
                                 train_source_epochs=train_epochs,
                                 train_joint_epochs=train_epochs,
                                 match_epochs=match_epochs,
+                                train_batch_size=train_batch_size,
+                                eval_batch_size=eval_batch_size,
                             )
                         )
     utils.gpu_scheduler(
