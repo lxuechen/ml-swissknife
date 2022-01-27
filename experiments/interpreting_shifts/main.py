@@ -467,8 +467,8 @@ def subpop_discovery(
 
     if train_dir is not None:
         # Get embedding visualization.
-        embeddeds, labels = domain_adapter.tsne(target_train_loader)
-        class2embedded = dict(list)
+        embeddeds, labels = domain_adapter.tsne(target_train_loader)  # Shuffled!
+        class2embedded = collections.defaultdict(list)
         for embedded, label in utils.zip_(embeddeds, labels):
             class2embedded[int(label)].append(embedded)
 
