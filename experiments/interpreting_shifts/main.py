@@ -487,7 +487,7 @@ def subpop_discovery(
             scatters=scatters,
             options=dict(
                 title=f"S: {source_classes}, "
-                      f"\nT: {target_classes}, "
+                      f"\nT: {target_classes}"
             )
         )
 
