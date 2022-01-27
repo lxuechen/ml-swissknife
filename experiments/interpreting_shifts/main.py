@@ -477,7 +477,7 @@ def subpop_discovery(
             embedded = class2embedded[target_class]
             embedded = np.stack(embedded, axis=0)
             scatters.append(
-                dict(x=embedded[:, 0], y=embedded[:, 1])
+                dict(x=embedded[:, 0], y=embedded[:, 1], label=target_class)
             )
 
         img_path = utils.join(train_dir, 'tsne')
@@ -485,6 +485,10 @@ def subpop_discovery(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
             scatters=scatters,
+            options=dict(
+                title=f"S: {source_classes}, "
+                      f"\nT: {target_classes}, "
+            )
         )
 
         # Marginalize over source to get the target distribution.
