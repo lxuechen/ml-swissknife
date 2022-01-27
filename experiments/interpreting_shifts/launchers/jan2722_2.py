@@ -103,7 +103,7 @@ def main(
     wait_time_in_secs=10,
     train_batch_size=1000,
     reg_source=10,
-    date="jan2722",
+    date="jan2722_2",
 ):
     commands = []
     for seed in seeds:
