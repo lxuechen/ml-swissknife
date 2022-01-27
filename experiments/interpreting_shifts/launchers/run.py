@@ -106,7 +106,7 @@ def main(
                                     feature_extractor=kwargs.get('feature_extractor', 'fc'),
                                     train_source_epochs=kwargs.get('train_source_epochs', 0),
                                     train_joint_epochs=kwargs.get('train_joint_epochs', 3),
-                                    match_epochs=kwargs.get('match_epochs', 5),
+                                    match_epochs=kwargs.get('match_epochs', 10),
                                     train_batch_size=train_batch_size,
                                     eval_batch_size=eval_batch_size,
 
@@ -114,8 +114,8 @@ def main(
                                     reg_target=reg_target,
                                     reg_entropy=reg_entropy,
 
-                                    eta1=kwargs.get('eta1', 0.),
-                                    eta2=kwargs.get('eta2', 0.),
+                                    eta1=kwargs.get('eta1', 0.1),
+                                    eta2=kwargs.get('eta2', 0.1),
                                 )
                             )
 
