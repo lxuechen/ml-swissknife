@@ -158,12 +158,13 @@ class OptimalTransportDomainAdapter(object):
     def __init__(
         self,
         model_g, model_f,
-        n_class=10, eta1=0.001, eta2=0.0001,
+        n_class=10, eta1=0.001, eta2=0.0001, eta_src=1.,
         reg_target=0.1, reg_source=10., reg_entropy=0.1,
     ):
         self.model_g: nn.Module = model_g
         self.model_f: nn.Module = model_f
         self.n_class = n_class
+        self.eta_src = eta_src
         self.eta1 = eta1  # Weight for feature cost.
         self.eta2 = eta2  # Weight for label cost.
         self.reg_target = reg_target
@@ -244,7 +245,7 @@ class OptimalTransportDomainAdapter(object):
                 pi = torch.tensor(pi, device=device)
 
                 da_loss = torch.sum(pi * cost)
-                loss = source_cls_loss + da_loss
+                loss = self.eta_src * source_cls_loss + da_loss
                 loss.backward()
 
                 optimizer.step()
@@ -338,6 +339,7 @@ class OptimalTransportDomainAdapter(object):
 
 
 def domain_adaptation(
+    eta_src=1.,
     eta1=0.1,
     eta2=0.1,
 
@@ -363,7 +365,7 @@ def domain_adaptation(
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
-        eta1=eta1, eta2=eta2,
+        eta_src=eta_src, eta1=eta1, eta2=eta2,
         reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
     )
     domain_adapter.fit_source(
@@ -389,6 +391,7 @@ def _get_feature_extractor_and_classifier(feature_extractor):
 
 
 def subpop_discovery(
+    eta_src=1.,
     eta1=0.1,
     eta2=0.1,
 
@@ -423,7 +426,7 @@ def subpop_discovery(
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
-        eta1=eta1, eta2=eta2,
+        eta_src=eta_src, eta1=eta1, eta2=eta2,
         reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
     )
     domain_adapter.fit_source(
