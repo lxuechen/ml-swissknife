@@ -9,7 +9,8 @@ from swissknife import utils
 
 def sinkhorn_knopp_unbalanced(M, reg, reg_a, reg_b, numItermax=1000,
                               stopThr=1e-6, verbose=False, log=False,
-                              a=np.array([]), b=np.array([]), **unused_kwargs):
+                              a=np.array([]), b=np.array([]),
+                              eps_div=1e-7, **unused_kwargs):
     """Allows different regularization weights on source and target domains."""
     utils.handle_unused_kwargs(unused_kwargs)
 
@@ -55,8 +56,10 @@ def sinkhorn_knopp_unbalanced(M, reg, reg_a, reg_b, numItermax=1000,
         vprev = v
 
         Kv = K.dot(v)
+        # Kv = np.where(Kv == 0, eps_div, Kv)
         u = (a / Kv) ** f_a
         Ktu = K.T.dot(u)
+        # Ktu = np.where(Ktu == 0, eps_div, Ktu)
         v = (b / Ktu) ** f_b
 
         if (np.any(Ktu == 0.)

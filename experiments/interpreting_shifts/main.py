@@ -196,7 +196,7 @@ class OptimalTransportDomainAdapter(object):
         source_train_loader, target_train_loader, target_test_loader,
         epochs=100, criterion=F.cross_entropy, learning_rate=2e-4,
         balanced_op=False,
-        eval_steps=100,
+        eval_steps=10,
     ):
         target_train_loader_cycled = itertools.cycle(target_train_loader)
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
@@ -242,7 +242,7 @@ class OptimalTransportDomainAdapter(object):
                         reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy,
                         a=a, b=b,
                     )
-                pi = torch.tensor(pi, device=device)
+                pi = torch.tensor(pi, device=device, dtype=torch.get_default_dtype())
 
                 da_loss = torch.sum(pi * cost)
                 loss = self.eta_src * source_cls_loss + da_loss
@@ -385,6 +385,15 @@ def _get_feature_extractor_and_classifier(feature_extractor):
     elif feature_extractor == 'id':
         model_g = nn.Flatten()
         model_f = nn.Linear(3072, 10).to(device)
+    elif feature_extractor == "fc":
+        model_g = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(3072, 200),
+            nn.ReLU(inplace=True),
+            nn.Linear(200, 200),
+            nn.ReLU(inplace=True),
+        ).to(device)
+        model_f = nn.Linear(200, 10).to(device)
     else:
         raise ValueError(f"Unknown feature_extractor: {feature_extractor}")
     return model_g, model_f
