@@ -86,7 +86,6 @@ def _get_command(
 def main(
     seeds=(0,),  # Seeds over which to randomize.
     train_batch_size=1000,
-    reg_source=10,
     train_source_epochs=0,
     date="run",
 ):
@@ -94,12 +93,12 @@ def main(
     for seed in seeds:
         for balanced_op in (False,):
             for train_epochs in (10,):
-                for match_epochs in (10,):
-                    for feature_extractor in ('cnn',):
-                        for reg_target in (0.1,):
-                            for reg_entropy in (1,):
-                                for eval_batch_size in (500,):
-                                    for eta1 in (1,):
+                for match_epochs in (2,):
+                    for feature_extractor in ('fc',):
+                        for reg_source in (10,):
+                            for reg_target in (0.1,):
+                                for reg_entropy in (1,):
+                                    for eval_batch_size in (500,):
                                         commands.append(
                                             _get_command(
                                                 date=date,
@@ -117,7 +116,8 @@ def main(
                                                 reg_target=reg_target,
                                                 reg_entropy=reg_entropy,
 
-                                                eta1=eta1,
+                                                eta1=0.,
+                                                eta2=0.
                                             )
                                         )
 
