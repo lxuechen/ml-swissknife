@@ -159,7 +159,7 @@ class OptimalTransportDomainAdapter(object):
         self,
         model_g, model_f,
         n_class=10, eta1=0.001, eta2=0.0001,
-        reg_target=0.1, reg_source=10., reg_entropy=0.1
+        reg_target=0.1, reg_source=10., reg_entropy=0.1,
     ):
         self.model_g: nn.Module = model_g
         self.model_f: nn.Module = model_f
