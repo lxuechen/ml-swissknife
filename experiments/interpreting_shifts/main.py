@@ -189,7 +189,7 @@ class OptimalTransportDomainAdapter(object):
                 loss = criterion(self._model(x), y)
                 loss.backward()
                 optimizer.step()
-        self._evaluate(loader=source_test_loader, criterion=F.softmax)
+        self._evaluate(loader=source_test_loader, criterion=criterion)
 
     def fit_joint(
         self,
