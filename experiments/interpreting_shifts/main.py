@@ -255,6 +255,20 @@ class OptimalTransportDomainAdapter(object):
                     avg_xent, avg_zeon = self._evaluate(target_test_loader, criterion)
                     print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
 
+    def tsne(self, loader, maxsize=3000):
+        self.model_g.eval()
+        examples = []
+        for batch in loader:
+            features = self.model_g(batch[0].to(device))
+            features = features.cpu().numpy()
+            examples.append(features)
+            if sum(len(b) for b in examples) > maxsize:
+                break
+        examples = np.concatenate(examples)
+        from sklearn.manifold import TSNE
+        embedded = TSNE(n_components=2, learning_rate='auto', init='random').fit_transform(examples)
+        return embedded
+
     @torch.no_grad()
     def _evaluate(self, loader, criterion):
         if loader is None:
@@ -448,6 +462,15 @@ def subpop_discovery(
     )
 
     if train_dir is not None:
+        # Get embedding visualization.
+        embedded = domain_adapter.tsne(target_train_loader, )
+        img_path = utils.join(train_dir, 'tsne')
+        utils.plot_wrapper(
+            img_path=img_path,
+            suffixes=('.png', '.pdf'),
+            scatters=(dict(x=embedded[:, 0], y=embedded[:, 1]),)
+        )
+
         # Marginalize over source to get the target distribution.
         marginal = domain_adapter.target_marginal(
             source_train_loader, target_train_loader_unshuffled,
