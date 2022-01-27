@@ -196,7 +196,7 @@ class OptimalTransportDomainAdapter(object):
         source_train_loader, target_train_loader, target_test_loader,
         epochs=100, criterion=F.cross_entropy, learning_rate=2e-4,
         balanced_op=False,
-        eval_steps=10,
+        eval_steps=25,
     ):
         target_train_loader_cycled = itertools.cycle(target_train_loader)
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
@@ -255,6 +255,7 @@ class OptimalTransportDomainAdapter(object):
                     avg_xent, avg_zeon = self._evaluate(target_test_loader, criterion)
                     print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
 
+    @torch.no_grad()
     def tsne(self, loader, maxsize=3000):
         self.model_g.eval()
         examples = []

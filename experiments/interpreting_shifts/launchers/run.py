@@ -86,8 +86,8 @@ def _get_command(
 def main(
     seeds=(0,),  # Seeds over which to randomize.
     train_batch_size=1000,
-    train_source_epochs=0,
     date="run",
+    **kwargs,
 ):
     commands = []
     for seed in seeds:
@@ -106,8 +106,8 @@ def main(
 
                                                 balanced_op=balanced_op,
                                                 feature_extractor=feature_extractor,
-                                                train_source_epochs=train_source_epochs,
-                                                train_joint_epochs=train_epochs,
+                                                train_source_epochs=kwargs.get('train_source_epochs', 0),
+                                                train_joint_epochs=kwargs.get('train_joint_epochs', 3),
                                                 match_epochs=match_epochs,
                                                 train_batch_size=train_batch_size,
                                                 eval_batch_size=eval_batch_size,
@@ -116,8 +116,8 @@ def main(
                                                 reg_target=reg_target,
                                                 reg_entropy=reg_entropy,
 
-                                                eta1=0.,
-                                                eta2=0.
+                                                eta1=kwargs.get('eta1', 0.),
+                                                eta2=kwargs.get('eta2', 0.),
                                             )
                                         )
 
