@@ -99,7 +99,7 @@ def _get_command(
 
 
 def main(
-    seeds=(0, 1,),  # Seeds over which to randomize.
+    seeds=(0,),  # Seeds over which to randomize.
     wait_time_in_secs=10,
     train_batch_size=1000,
     reg_source=10,
