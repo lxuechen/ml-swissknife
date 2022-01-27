@@ -16,6 +16,7 @@ from typing import Optional, Callable, Tuple, Any
 import fire
 import numpy as np
 import ot
+from sklearn.manifold import TSNE
 import torch
 from torch import optim, nn
 import torch.nn.functional as F
@@ -258,17 +259,19 @@ class OptimalTransportDomainAdapter(object):
     @torch.no_grad()
     def tsne(self, loader, maxsize=3000):
         self.model_g.eval()
-        examples = []
+        features = []
+        labels = []
         for batch in loader:
-            features = self.model_g(batch[0].to(device))
-            features = features.cpu().numpy()
-            examples.append(features)
-            if sum(len(b) for b in examples) > maxsize:
+            batch_features = self.model_g(batch[0].to(device)).cpu().numpy()
+            batch_labels = batch[1].numpy()
+            features.append(batch_features)
+            labels.append(batch_labels)
+            if sum(len(b) for b in features) > maxsize:
                 break
-        examples = np.concatenate(examples)
-        from sklearn.manifold import TSNE
-        embedded = TSNE(n_components=2, learning_rate='auto', init='random').fit_transform(examples)
-        return embedded
+        features = np.concatenate(features)
+        labels = np.concatenate(labels)
+        embeddeds = TSNE(n_components=2, learning_rate='auto', init='random').fit_transform(features)
+        return embeddeds, labels
 
     @torch.no_grad()
     def _evaluate(self, loader, criterion):
@@ -464,12 +467,24 @@ def subpop_discovery(
 
     if train_dir is not None:
         # Get embedding visualization.
-        embedded = domain_adapter.tsne(target_train_loader, )
+        embeddeds, labels = domain_adapter.tsne(target_train_loader)
+        class2embedded = dict(list)
+        for embedded, label in utils.zip_(embeddeds, labels):
+            class2embedded[int(label)].append(embedded)
+
+        scatters = []
+        for target_class in target_classes:
+            embedded = class2embedded[target_class]
+            embedded = np.stack(embedded, axis=0)
+            scatters.append(
+                dict(x=embedded[:, 0], y=embedded[:, 1])
+            )
+
         img_path = utils.join(train_dir, 'tsne')
         utils.plot_wrapper(
             img_path=img_path,
             suffixes=('.png', '.pdf'),
-            scatters=(dict(x=embedded[:, 0], y=embedded[:, 1]),)
+            scatters=scatters,
         )
 
         # Marginalize over source to get the target distribution.
