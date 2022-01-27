@@ -87,39 +87,38 @@ def main(
     seeds=(0,),  # Seeds over which to randomize.
     train_batch_size=1000,
     date="run",
+    msg='',
     **kwargs,
 ):
     commands = []
     for seed in seeds:
         for balanced_op in (False,):
-            for train_epochs in (10,):
-                for match_epochs in (2,):
-                    for feature_extractor in ('fc',):
-                        for reg_source in (10,):
-                            for reg_target in (0.1,):
-                                for reg_entropy in (1,):
-                                    for eval_batch_size in (500,):
-                                        commands.append(
-                                            _get_command(
-                                                date=date,
-                                                seed=seed,
+            for feature_extractor in ('fc',):
+                for reg_source in (10,):
+                    for reg_target in (0.1,):
+                        for reg_entropy in (1,):
+                            for eval_batch_size in (500,):
+                                commands.append(
+                                    _get_command(
+                                        date=date + msg,
+                                        seed=seed,
 
-                                                balanced_op=balanced_op,
-                                                feature_extractor=feature_extractor,
-                                                train_source_epochs=kwargs.get('train_source_epochs', 0),
-                                                train_joint_epochs=kwargs.get('train_joint_epochs', 3),
-                                                match_epochs=match_epochs,
-                                                train_batch_size=train_batch_size,
-                                                eval_batch_size=eval_batch_size,
+                                        balanced_op=balanced_op,
+                                        feature_extractor=feature_extractor,
+                                        train_source_epochs=kwargs.get('train_source_epochs', 0),
+                                        train_joint_epochs=kwargs.get('train_joint_epochs', 3),
+                                        match_epochs=kwargs.get('match_epochs', 5),
+                                        train_batch_size=train_batch_size,
+                                        eval_batch_size=eval_batch_size,
 
-                                                reg_source=reg_source,
-                                                reg_target=reg_target,
-                                                reg_entropy=reg_entropy,
+                                        reg_source=reg_source,
+                                        reg_target=reg_target,
+                                        reg_entropy=reg_entropy,
 
-                                                eta1=kwargs.get('eta1', 0.),
-                                                eta2=kwargs.get('eta2', 0.),
-                                            )
-                                        )
+                                        eta1=kwargs.get('eta1', 0.),
+                                        eta2=kwargs.get('eta2', 0.),
+                                    )
+                                )
 
     for command in commands[:1]:
         os.system(command)

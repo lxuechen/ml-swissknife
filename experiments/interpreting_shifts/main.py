@@ -477,7 +477,7 @@ def subpop_discovery(
             embedded = class2embedded[target_class]
             embedded = np.stack(embedded, axis=0)
             scatters.append(
-                dict(x=embedded[:, 0], y=embedded[:, 1], label=target_class)
+                dict(x=embedded[:, 0], y=embedded[:, 1], label=target_class, s=10)  # s: marker size.
             )
 
         img_path = utils.join(train_dir, 'tsne')
