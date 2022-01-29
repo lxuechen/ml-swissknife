@@ -12,26 +12,26 @@ def run(Q, C, D, seed=1):
     np.random.seed(seed)
 
     T = 96
-    t = np.linspace(1, T, num=T)
+    t = np.linspace(1, T, num=T).reshape(T, 1)
     p = np.exp(-np.cos((t - 15) * 2 * np.pi / T) + 0.01 * np.random.randn(T, 1))
     u = 2 * np.exp(-0.6 * np.cos((t + 40) * np.pi / T) - 0.7 * np.cos(t * 4 * np.pi / T) + 0.01 * np.random.randn(T, 1))
+
+    t = t.squeeze()
+    p = p.squeeze()
+    u = u.squeeze()
 
     c = cp.Variable(shape=(T,))
     q = cp.Variable(shape=(T,))
 
-    objective = cp.Minimize(p @ (u + c))  #
+    objective = cp.Minimize(p @ (u + c))
     constraints = [
-        q >= 0.,
+        q >= 0.,  # qt non-negative.
+        q[1:T - 1] == q[0:T - 2] + c[0:T - 2],
+        q[0] == q[T - 1] + c[T - 1],
+        u + c >= 0,
         q <= Q,
         c <= C,
         c >= -D,
-        u + c >= 0,
-    ]
-    constraints += [
-        q[1:T - 1] == q[0:T - 2] + c[0:T - 2]
-    ]
-    constraints += [
-        q[0] == q[T - 1] + c[T - 1]
     ]
     prob = cp.Problem(objective, constraints)
     result = prob.solve()
@@ -50,17 +50,17 @@ def main():
     c = results.get('c')
     q = results.get('q')
 
-    quarter_t = t / 4
     plots = [
-        dict(x=quarter_t, y=p, label='p'),
-        dict(x=quarter_t, y=u, label='u'),
-        dict(x=quarter_t, y=c, label='c'),
-        dict(x=quarter_t, y=q, label='q'),
+        dict(x=t, y=p, label='p'),
+        dict(x=t, y=u, label='u'),
+        dict(x=t, y=c, label='c'),
+        dict(x=t, y=q, label='q'),
     ]
     utils.plot_wrapper(
         img_path=utils.join('.', 'plots', 'a20_9_b'),
         suffixes=('.png', '.pdf'),
         plots=plots,
+        options=dict(xlabel='t'),
     )
 
     # (c)
@@ -74,6 +74,7 @@ def main():
         plots.append(plot)
     utils.plot_wrapper(
         img_path=utils.join('.', 'plots', f'a20_9_c'),
+        suffixes=('.png', '.pdf'),
         plots=plots,
         options=dict(xlabel='Q', ylabel='Minimum total cost'),
     )
