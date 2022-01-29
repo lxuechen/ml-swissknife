@@ -22,7 +22,7 @@ def sum4(
         for _x2 in (0, 1):
             for _x3 in (0, 1):
                 for _x4 in (0, 1):
-                    # Has prescribed value, and is not equals.
+                    # Has prescribed value and is not equal to current index.
                     if x1 is not None and _x1 != x1:
                         continue
                     if x2 is not None and _x2 != x2:
