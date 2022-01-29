@@ -21,9 +21,10 @@ def run(Q, C, D, seed=1):
 
     objective = cp.Minimize(p @ (u + c))
     constraints = [
-        q <= np.full(shape=(T,), fill_value=float(Q)),
-        c <= np.full(shape=(T,), fill_value=float(C)),
-        c >= np.full(shape=(T,), fill_value=float(-D)),
+        q <= Q,
+        c <= C,
+        c >= -D,
+        q >= 0.,
     ]
     constraints += [
         q[1:T - 1] == q[0:T - 2] + u[0:T - 2]
@@ -61,11 +62,10 @@ def main():
     )
 
     # (c)
-    # TODO: Some bug here!
     plots = []
     for bound in (1,):
         plot = dict(x=[], y=[], label=f'C=D={bound}')
-        for Q in tqdm.tqdm(np.linspace(0, 1, 100)):
+        for Q in tqdm.tqdm(np.linspace(1, 100, 100)):
             results = run(Q=Q, C=bound, D=bound)
             plot['x'].append(Q)
             plot['y'].append(results['result'])
