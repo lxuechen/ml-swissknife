@@ -8,7 +8,7 @@ import tqdm
 from swissknife import utils
 
 
-def run(Q=35, C=3, D=3, seed=1):
+def run(Q, C, D, seed=1):
     np.random.seed(seed)
 
     T = 96
@@ -40,8 +40,8 @@ def run(Q=35, C=3, D=3, seed=1):
 def main():
     # (b)
     results = run(Q=35, C=3, D=3)
-    t = results.get('t')
 
+    t = results.get('t')
     p = results.get('p')
     u = results.get('u')
     c = results.get('c')
@@ -61,18 +61,20 @@ def main():
     )
 
     # (c)
-    for bound in (3, 1):
-        plot = dict(x=[], y=[])
-        for Q in tqdm.tqdm(np.linspace(1, 50, 100)):
+    # TODO: Some bug here!
+    plots = []
+    for bound in (1,):
+        plot = dict(x=[], y=[], label=f'C=D={bound}')
+        for Q in tqdm.tqdm(np.linspace(0, 1, 100)):
             results = run(Q=Q, C=bound, D=bound)
             plot['x'].append(Q)
             plot['y'].append(results['result'])
-
-        utils.plot_wrapper(
-            img_path=utils.join('.', 'plots', f'a20_9_c_{bound}'),
-            plots=(plot,),
-            options=dict(xlabel='Q', ylabel='Minimum total cost'),
-        )
+        plots.append(plot)
+    utils.plot_wrapper(
+        img_path=utils.join('.', 'plots', f'a20_9_c'),
+        plots=plots,
+        options=dict(xlabel='Q', ylabel='Minimum total cost'),
+    )
 
 
 if __name__ == "__main__":
