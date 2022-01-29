@@ -13,21 +13,22 @@ def run(Q, C, D, seed=1):
 
     T = 96
     t = np.linspace(1, T, num=T)
-    p = np.exp(-np.cos((t - 15) * 2 * np.pi / T) + 0.01 * np.random.randn(T))
-    u = 2 * np.exp(-0.6 * np.cos((t + 40) * np.pi / T) - 0.7 * np.cos(t * 4 * np.pi / T) + 0.01 * np.random.randn(T))
+    p = np.exp(-np.cos((t - 15) * 2 * np.pi / T) + 0.01 * np.random.randn(T, 1))
+    u = 2 * np.exp(-0.6 * np.cos((t + 40) * np.pi / T) - 0.7 * np.cos(t * 4 * np.pi / T) + 0.01 * np.random.randn(T, 1))
 
     c = cp.Variable(shape=(T,))
     q = cp.Variable(shape=(T,))
 
-    objective = cp.Minimize(p @ (u + c))
+    objective = cp.Minimize(p @ (u + c))  #
     constraints = [
+        q >= 0.,
         q <= Q,
         c <= C,
         c >= -D,
-        q >= 0.,
+        u + c >= 0,
     ]
     constraints += [
-        q[1:T - 1] == q[0:T - 2] + u[0:T - 2]
+        q[1:T - 1] == q[0:T - 2] + c[0:T - 2]
     ]
     constraints += [
         q[0] == q[T - 1] + c[T - 1]
@@ -41,6 +42,7 @@ def run(Q, C, D, seed=1):
 def main():
     # (b)
     results = run(Q=35, C=3, D=3)
+    print(results['result'])
 
     t = results.get('t')
     p = results.get('p')
@@ -63,9 +65,9 @@ def main():
 
     # (c)
     plots = []
-    for bound in (1,):
+    for bound in (3, 1,):
         plot = dict(x=[], y=[], label=f'C=D={bound}')
-        for Q in tqdm.tqdm(np.linspace(1, 100, 100)):
+        for Q in tqdm.tqdm(np.linspace(1, 300, 300)):
             results = run(Q=Q, C=bound, D=bound)
             plot['x'].append(Q)
             plot['y'].append(results['result'])
