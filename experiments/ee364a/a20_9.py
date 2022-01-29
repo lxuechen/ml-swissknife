@@ -24,19 +24,23 @@ def run(Q, C, D, seed=1):
     q = cp.Variable(shape=(T,))
 
     objective = cp.Minimize(p @ (u + c))
+
     constraints = [
-        q >= 0.,  # qt non-negative.
-        q[1:T - 1] == q[0:T - 2] + c[0:T - 2],
+        q >= 0,
         q[0] == q[T - 1] + c[T - 1],
         u + c >= 0,
         q <= Q,
         c <= C,
         c >= -D,
     ]
+    # TODO: There's likely a bug in the library???
+    # Using `q[1:T - 1] == q[0:T - 2] + c[0:T - 2]` doesn't seem to work!?
+    constraints += [q[i + 1] == q[i] + c[i] for i in range(T - 1)]
     prob = cp.Problem(objective, constraints)
     result = prob.solve()
 
-    return dict(result=result, c=c.value, q=q.value, p=p, u=u, t=t)
+    return dict(result=result, c=c.value, q=q.value, p=p, u=u, t=t,
+                probval=prob.value)
 
 
 def main():
