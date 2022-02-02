@@ -5,34 +5,42 @@ Fixes:
     - replace `_DOWNLOAD_URL` in `bookcorpusopen.py` with https://t.co/J3EaSEgwW0
         - you may need to change the source code in the cache file
     - disable the checksum via `ignore_verifications=False`
-
-# TODO: Package the results in a .json file.
 """
 import abc
 import math
 from typing import Tuple, List
 
 import fire
+import nltk
+
+from swissknife import utils
+
+nltk.download('punkt')
+
 from nltk.tokenize import sent_tokenize
 from nltk.tokenize.treebank import TreebankWordDetokenizer, TreebankWordTokenizer
 import numpy as np
 import tqdm
-
 from datasets import load_dataset
 
 
 class BookSampler(abc.ABC):
+    def __init__(self, **unused_kwargs):
+        super(BookSampler, self).__init__()
+
     @abc.abstractmethod
     def sample(self, n_samples, n_books):
         raise NotImplementedError
 
 
 class RandomBookSampler(BookSampler):
-    def __init__(self, **unused_kwargs):
-        super(RandomBookSampler, self).__init__()
-
     def sample(self, n_samples, n_total):
         return np.random.permutation(n_total)[:n_samples]
+
+
+class SequentialBookSampler(BookSampler):
+    def sample(self, n_samples, n_total):
+        return tuple(range(n_total))[:n_samples]
 
 
 class PrefixSampler(abc.ABC):
@@ -59,6 +67,9 @@ class RandomSentenceSampler(PrefixSampler):
         self.front_sent_offset = front_sent_offset
         self.tail_sent_offset = tail_sent_offset
 
+        self.tokenizer = TreebankWordTokenizer()
+        self.detokenizer = TreebankWordDetokenizer()
+
     def sample(self, book: str) -> Tuple[str, str]:
         """Sample prefix based on random sentence from a book.
 
@@ -78,11 +89,11 @@ class RandomSentenceSampler(PrefixSampler):
         )
         completion = ' '.join(sents[start_index:])
 
-        print('before tokenize')
-        tokens = TreebankWordTokenizer().tokenize(completion)
-        print(tokens)
+        # Save time by only peaking few sents as opposed to tokenizing whole str.
+        peak_str = ' '.join(sents[start_index:])
+        tokens = self.tokenizer.tokenize(peak_str)
         prefix_tokens = tokens[:self.prefix_length]
-        prefix = TreebankWordDetokenizer().detokenize(prefix_tokens)
+        prefix = self.detokenizer.detokenize(prefix_tokens)
         return prefix, completion
 
 
@@ -124,13 +135,14 @@ class Retriever(object):
         n_books = math.ceil(n / extractions_per_book)
         book_indices = self.book_sampler.sample(n_samples=n_books, n_total=len(self.dataset))
 
+        books: dict = self.dataset[book_indices]
+        books = books.get("text")
         pairs = []
-        for book_index in tqdm.tqdm(book_indices, desc="books"):
+        for book in tqdm.tqdm(books, desc="books"):
             for _ in range(extractions_per_book):
                 if len(pairs) >= n:
                     break
 
-                book = self.dataset['text'][book_index]
                 pair = self.prefix_sampler.sample(book=book)
                 pairs.append(pair)
         return pairs
@@ -152,24 +164,41 @@ def test_book_heads():
         pdb.set_trace()
 
 
-def test_retriever():
+def test_retriever(n=17868):
+    """Test by sequentially getting 1 prefix per book for all books."""
     retriever = Retriever(
         prefix_sampler_kwargs=dict(
             prefix_length=10,
             front_sent_offset=200,
-            tail_sent_offset=200
-        )
+            tail_sent_offset=200,
+        ),
+        book_sampler=SequentialBookSampler()
     )
-    pairs = retriever.retrieve(n=10, extractions_per_book=1)
-    for pair in pairs:
-        print(pair[0], pair[1])
-        assert pair[1].startswith(pair[0])
-        import pdb;
-        pdb.set_trace()
+    pairs = retriever.retrieve(n=n, extractions_per_book=1)
+    sanitized_pairs = [
+        pair for pair in pairs
+        if pair[1].startswith(pair[0])
+    ]
+
+    out = {pair[0]: pair[1] for pair in sanitized_pairs}
+    out_path = utils.join(
+        '/home/lxuechen_stanford_edu/software/swissknife/experiments/copyright',
+        'seq-full-1.json'
+    )
+    utils.jdump(out, out_path)
+
+    # Store meta-data.
+    out_path = utils.join(
+        '/home/lxuechen_stanford_edu/software/swissknife/experiments/copyright',
+        'seq-full-1-metadata.json'
+    )
+    utils.jdump(
+        dict(pairs_size=len(pairs), sanitized_pairs_size=len(sanitized_pairs)), out_path
+    )
 
 
-def main():
-    test_retriever()
+def main(**kwargs):
+    test_retriever(**kwargs)
 
 
 if __name__ == "__main__":
