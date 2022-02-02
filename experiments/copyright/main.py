@@ -10,12 +10,13 @@ Fixes:
 """
 import abc
 import math
-from typing import Tuple
+from typing import Tuple, List
 
 import fire
 from nltk.tokenize import sent_tokenize
 from nltk.tokenize.treebank import TreebankWordDetokenizer, TreebankWordTokenizer
 import numpy as np
+import tqdm
 
 from datasets import load_dataset
 
@@ -43,8 +44,8 @@ class PrefixSampler(abc.ABC):
 class RandomSentenceSampler(PrefixSampler):
     def __init__(
         self,
-        prefix_length: int, front_sent_offset=200, tail_sent_offset=200,
-        **unused_kwargs
+        prefix_length: int, front_sent_offset: int, tail_sent_offset: int,
+        **unused_kwargs,
     ):
         """Initialize sampler.
 
@@ -75,9 +76,11 @@ class RandomSentenceSampler(PrefixSampler):
         start_index = np.random.randint(
             low=self.front_sent_offset, high=n_sents - self.tail_sent_offset
         )
-
         completion = ' '.join(sents[start_index:])
+
+        print('before tokenize')
         tokens = TreebankWordTokenizer().tokenize(completion)
+        print(tokens)
         prefix_tokens = tokens[:self.prefix_length]
         prefix = TreebankWordDetokenizer().detokenize(prefix_tokens)
         return prefix, completion
@@ -88,7 +91,6 @@ class Retriever(object):
 
     def __init__(
         self,
-        prefix_length,
         dataset=None, prefix_sampler=None, book_sampler=None,
         extractions_per_book=1,
         ignore_verifications=True,  # Ignore annoying checksum.
@@ -112,11 +114,10 @@ class Retriever(object):
 
         self.dataset = dataset
         self.prefix_sampler = prefix_sampler
-        self.prefix_length = prefix_length
         self.book_sampler = book_sampler
         self.extractions_per_book = extractions_per_book
 
-    def retrieve(self, n, extractions_per_book=None):
+    def retrieve(self, n, extractions_per_book=None) -> List[Tuple[str, str]]:
         if extractions_per_book is None:
             extractions_per_book = self.extractions_per_book
 
@@ -124,7 +125,7 @@ class Retriever(object):
         book_indices = self.book_sampler.sample(n_samples=n_books, n_total=len(self.dataset))
 
         pairs = []
-        for book_index in book_indices:
+        for book_index in tqdm.tqdm(book_indices, desc="books"):
             for _ in range(extractions_per_book):
                 if len(pairs) >= n:
                     break
@@ -151,8 +152,24 @@ def test_book_heads():
         pdb.set_trace()
 
 
+def test_retriever():
+    retriever = Retriever(
+        prefix_sampler_kwargs=dict(
+            prefix_length=10,
+            front_sent_offset=200,
+            tail_sent_offset=200
+        )
+    )
+    pairs = retriever.retrieve(n=10, extractions_per_book=1)
+    for pair in pairs:
+        print(pair[0], pair[1])
+        assert pair[1].startswith(pair[0])
+        import pdb;
+        pdb.set_trace()
+
+
 def main():
-    pass
+    test_retriever()
 
 
 if __name__ == "__main__":
