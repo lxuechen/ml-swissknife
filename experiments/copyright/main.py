@@ -168,7 +168,7 @@ def test_book_heads():
         pdb.set_trace()
 
 
-def test_retriever(n=17868):
+def test_retriever(n=17868, extractions_per_book=1):
     """Test by sequentially getting 1 prefix per book for all books."""
     retriever = Retriever(
         prefix_sampler_kwargs=dict(
@@ -178,7 +178,7 @@ def test_retriever(n=17868):
         ),
         book_sampler=SequentialBookSampler()
     )
-    pairs = retriever.retrieve(n=n, extractions_per_book=1)
+    pairs = retriever.retrieve(n=n, extractions_per_book=extractions_per_book)
     sanitized_pairs = [
         pair for pair in pairs
         if (
@@ -188,20 +188,20 @@ def test_retriever(n=17868):
         )
     ]
 
-    out = {pair[0]: pair[1] for pair in sanitized_pairs}
+    data = {pair[0]: pair[1] for pair in sanitized_pairs}
     out_path = utils.join(
         '/home/lxuechen_stanford_edu/software/swissknife/experiments/copyright',
-        'seq-full-1.json'
-    )
-    utils.jdump(out, out_path)
-
-    # Store meta-data.
-    out_path = utils.join(
-        '/home/lxuechen_stanford_edu/software/swissknife/experiments/copyright',
-        'seq-full-1-metadata.json'
+        f'seq-full-{n}-total-{extractions_per_book}-per-book.json'
     )
     utils.jdump(
-        dict(pairs_size=len(pairs), sanitized_pairs_size=len(sanitized_pairs)), out_path
+        {
+            "metadata": {
+                "pairs_size": len(pairs),
+                "sanitized_pairs_size": len(sanitized_pairs),
+            },
+            "data": data
+        },
+        out_path
     )
 
 
