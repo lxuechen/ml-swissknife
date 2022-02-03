@@ -24,7 +24,7 @@ purpose:
 
 notes:
 run:
-    python -m interpreting_shifts.launchers.feb_0322
+    python -m interpreting_shifts.launchers.feb0322
 """
 
 import fire
