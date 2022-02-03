@@ -8,7 +8,7 @@ Fixes:
 """
 import abc
 import math
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 import fire
 import nltk
@@ -70,7 +70,7 @@ class RandomSentenceSampler(PrefixSampler):
         self.tokenizer = TreebankWordTokenizer()
         self.detokenizer = TreebankWordDetokenizer()
 
-    def sample(self, book: str) -> Tuple[str, str]:
+    def sample(self, book: str) -> Union[Tuple[str, str], Tuple[None, None]]:
         """Sample prefix based on random sentence from a book.
 
         ntlk is used for word and sentence tokenization.
@@ -84,9 +84,13 @@ class RandomSentenceSampler(PrefixSampler):
         """
         sents = sent_tokenize(book, language='english')
         n_sents = len(sents)
-        start_index = np.random.randint(
-            low=self.front_sent_offset, high=n_sents - self.tail_sent_offset
-        )
+
+        low = self.front_sent_offset
+        high = n_sents - self.tail_sent_offset
+        if high <= low:
+            return None, None
+
+        start_index = np.random.randint(low=low, high=high)
         completion = ' '.join(sents[start_index:])
 
         # Save time by only peaking few sents as opposed to tokenizing whole str.
@@ -169,7 +173,7 @@ def test_retriever(n=17868):
     retriever = Retriever(
         prefix_sampler_kwargs=dict(
             prefix_length=10,
-            front_sent_offset=200,
+            front_sent_offset=100,
             tail_sent_offset=200,
         ),
         book_sampler=SequentialBookSampler()
@@ -177,7 +181,11 @@ def test_retriever(n=17868):
     pairs = retriever.retrieve(n=n, extractions_per_book=1)
     sanitized_pairs = [
         pair for pair in pairs
-        if pair[1].startswith(pair[0])
+        if (
+            pair[0] is not None and
+            pair[1] is not None and
+            pair[1].startswith(pair[0])
+        )
     ]
 
     out = {pair[0]: pair[1] for pair in sanitized_pairs}
