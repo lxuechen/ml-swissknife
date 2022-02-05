@@ -1,17 +1,13 @@
-"""
-"""
-
+import cvxpy as cp
 import fire
-import torch
-import os
-import sys
 import numpy as np
-import transformers
-from swissknife import utils
 
 
 def main():
-    pass
+    Sigma = cp.Variable(shape=(4, 4))
+    x = np.array(
+        [[0.1], [0.2], [-0.05], [0.1]],
+    )
 
 
 if __name__ == "__main__":
