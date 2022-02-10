@@ -294,6 +294,7 @@ def subpop_discovery(
     reg_target=0.1, reg_source=10., reg_entropy=0.01,
     # --------------------
 
+    data_name="mnist",
     train_batch_size=500,
     eval_batch_size=500,
     source_classes=(1, 2, 3, 9, 0,),
@@ -314,7 +315,7 @@ def subpop_discovery(
      target_train_loader, target_test_loader,
      target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
         train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
-        source_data_name="mnist", target_data_name="mnist",
+        source_data_name=data_name, target_data_name=data_name,
         source_classes=source_classes,
         target_classes=target_classes,
     )

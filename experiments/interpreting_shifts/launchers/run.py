@@ -38,10 +38,9 @@ def _get_command(
     base_dir='/nlp/scr/lxuechen/interpreting_shifts',
     source_classes=(0, 1, 5, 7, 9,),
     target_classes=tuple(range(10)),
+
+    data_name="mnist",
 ):
-    reg_source_str = utils.float2str(reg_source)
-    reg_target_str = utils.float2str(reg_target)
-    reg_entropy_str = utils.float2str(reg_entropy)
     eta1_str = utils.float2str(eta1)
     eta2_str = utils.float2str(eta2)
     train_dir = utils.join(
@@ -73,7 +72,8 @@ def _get_command(
         --reg_entropy {reg_entropy} \
         --train_dir {train_dir} \
         --eta1 {eta1} \
-        --eta2 {eta2} '''
+        --eta2 {eta2} \
+        --data_name {data_name} '''
     command += ' --source_classes '
     for source_class in source_classes:
         command += f'{source_class},'
@@ -84,6 +84,7 @@ def _get_command(
 
 
 def main(
+    data_name="mnist",
     seeds=(0,),  # Seeds over which to randomize.
     train_batch_size=1000,
     date="run",
@@ -116,6 +117,8 @@ def main(
 
                                     eta1=kwargs.get('eta1', 0.1),
                                     eta2=kwargs.get('eta2', 0.1),
+
+                                    data_name=data_name,
                                 )
                             )
 
