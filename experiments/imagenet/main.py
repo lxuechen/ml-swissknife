@@ -36,6 +36,9 @@ def main(
             os.system(f'mkdir -p {target_dir}')
             os.system(f'cp -r {this_source_dir} {this_target_dir}')
 
+    metadata_path = utils.join(target_dir, 'metadata.json')
+    utils.jdump(dog_classes, metadata_path)
+
 
 if __name__ == "__main__":
     fire.Fire(main)
