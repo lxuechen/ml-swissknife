@@ -71,25 +71,31 @@ def get_data(
     name, split, classes, download=True,
     root=os.path.join(os.path.expanduser('~'), 'data'),
 ):
-    transform_svhn = transforms.Compose([
-        transforms.Resize(32),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    transform_mnist = transforms.Compose([
-        transforms.Resize(32),
-        transforms.Lambda(lambda x: x.convert("RGB")),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-
     if name == "svhn":
+        transform_svhn = transforms.Compose([
+            transforms.Resize(32),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
         return SVHN(
             root=root, split=split, download=download, transform=transform_svhn, classes=classes
         )
     elif name == "mnist":
+        transform_mnist = transforms.Compose([
+            transforms.Resize(32),
+            transforms.Lambda(lambda x: x.convert("RGB")),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
         return MNIST(
             root=root, train=(split == 'train'), download=download, transform=transform_mnist, classes=classes
+        )
+    elif name == "imagenet-dogs":
+        return _get_imagenet_data(
+            split=split,
+            classes=classes,
+            imagenet_path=utils.join(root, 'imagenet-dogs'),
+            enable_data_aug=False,  # TODO: Make this changeable!!!
         )
     else:
         raise ValueError(f'Unknown name: {name}')
