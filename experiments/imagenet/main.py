@@ -1,6 +1,6 @@
 """Preprocess imagenet.
 
-Create the dogs dataset.
+Create the dogs dataset (~21 gigs).
 
 Run command in the imagenet folder:
     python main.py
