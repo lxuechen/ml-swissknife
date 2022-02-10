@@ -28,12 +28,16 @@ def main(
             dog_classes.append((class_id, folder_id, class_label))
 
     for split in tqdm.tqdm(('train', 'val'), desc="split"):
+        this_target_dir = utils.join(target_dir, split)
+
         for dog_class in tqdm.tqdm(dog_classes, desc="classes"):
             dog_class_folder = dog_class[1]
             this_source_dir = utils.join(IMAGENET_SOURCE_DIR, split, dog_class_folder)
-            this_target_dir = utils.join(target_dir, split)
 
-            os.system(f'mkdir -p {target_dir}')
+            print(f'this_source_dir: {this_source_dir}')
+            print(f'this_target_dir: {this_target_dir}')
+
+            os.system(f'mkdir -p {this_target_dir}')
             os.system(f'cp -r {this_source_dir} {this_target_dir}')
 
     metadata_path = utils.join(target_dir, 'metadata.json')
