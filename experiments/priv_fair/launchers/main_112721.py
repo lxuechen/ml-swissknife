@@ -8,7 +8,7 @@ import os
 import fire
 
 from swissknife import utils
-from ...simclrv2.download import available_simclr_models
+from ...simclrv2_florian.download import available_simclr_models
 
 
 def _get_command(feature_path, seed, train_dir, task, alpha, imba):

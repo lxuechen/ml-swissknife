@@ -34,7 +34,7 @@ import torchvision as tv
 import tqdm
 
 from swissknife import utils
-from ..simclrv2.resnet import get_resnet, name_to_params
+from ..simclrv2_florian.resnet import get_resnet, name_to_params
 
 base_dir = "/nlp/scr/lxuechen/simclr-ckpts"
 

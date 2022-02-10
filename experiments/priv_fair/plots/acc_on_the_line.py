@@ -8,7 +8,7 @@ import fire
 import numpy as np
 
 from swissknife import utils
-from ...simclrv2.download import available_simclr_models
+from ...simclrv2_florian.download import available_simclr_models
 
 dataset2name = {
     "cinic-10": "CINIC-10",
