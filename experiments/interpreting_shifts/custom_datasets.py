@@ -104,25 +104,31 @@ def get_data(
         raise ValueError(f'Unknown name: {name}')
 
 
-def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, enable_data_aug: bool):
+def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, enable_data_aug: bool, normalize=False):
     if split not in ('train', 'val'):
         raise ValueError(f"Unknown split for imagenet: {split}")
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # SimCLR pre-trained models don't need normalization!
+    # TODO: Check normalized to 0, 1
+    normalization_ops = []
+    if normalize:
+        normalization_ops.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
     if enable_data_aug:
-        transform = transforms.Compose([
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ])
+        transform = transforms.Compose(
+            [
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ] + normalization_ops
+        )
     else:
-        transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ])
+        transform = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+            ] + normalization_ops
+        )
 
     split_path = utils.join(imagenet_path, split)
     metadata_path = utils.join(imagenet_path, 'metadata.json')  # Maps class id in int to folder id.
