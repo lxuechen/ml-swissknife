@@ -253,8 +253,8 @@ def _get_feature_extractor_and_classifier(feature_extractor, n_class):
         model.load_state_dict(torch.load(simclr_ckpt)['resnet'])
 
         n_channel = width * 2048
-        model_g = model
-        model_f = nn.Linear(n_channel, n_class)
+        model_g = model.to(device)
+        model_f = nn.Linear(n_channel, n_class).to(device)
     else:
         raise ValueError(f"Unknown feature_extractor: {feature_extractor}")
     return model_g, model_f

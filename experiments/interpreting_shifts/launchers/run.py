@@ -12,7 +12,8 @@ run:
 
 imagenet-dogs:
     python -m interpreting_shifts.launchers.run --feature_extractor resnet --data_name "imagenet-dogs" \
-        --source_classes 151,152,153,154,155 --target_classes 151,152,153,154,155,156,157,158,159,160
+        --source_classes 151,152,153,154,155 --target_classes 151,152,153,154,155,156,157,158,159,160 \
+        --train_batch_size 128
 """
 import os
 

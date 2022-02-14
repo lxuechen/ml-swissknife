@@ -5,13 +5,13 @@ Custom datasets and loaders which could exclude certain classes.
 import os
 from typing import Optional, Callable, Tuple, Any, Sequence
 
-import fire
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from swissknife import utils
+from . import folder
 
 
 class SVHN(datasets.SVHN):
@@ -127,7 +127,6 @@ def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, e
     if isinstance(meta_data, list):
         # Folder ids, not int class ids! E.g., n02113978.
         classes_set = set(classes)
-        print(classes_set)
         folder_ids = [
             class_triplet[1] for class_triplet in meta_data
             if class_triplet[0] in classes_set
@@ -139,7 +138,7 @@ def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, e
                 return True
         return False
 
-    return datasets.ImageFolder(
+    return folder.ImageFolder(
         root=split_path, transform=transform, is_valid_file=is_valid_file,
     )
 
@@ -155,10 +154,11 @@ def get_loaders(
     train_batch_size=500,
     eval_batch_size=500,
 ):
+    held_out_split_name = 'val' if 'imagenet' in source_data_name else 'test'
     source_train = get_data(root=root, name=source_data_name, split='train', classes=source_classes)
-    source_test = get_data(root=root, name=source_data_name, split='test', classes=target_classes)
+    source_test = get_data(root=root, name=source_data_name, split=held_out_split_name, classes=target_classes)
     target_train = get_data(root=root, name=target_data_name, split='train', classes=target_classes)
-    target_test = get_data(root=root, name=target_data_name, split='test', classes=target_classes)
+    target_test = get_data(root=root, name=target_data_name, split=held_out_split_name, classes=target_classes)
 
     source_train_loader = DataLoader(
         source_train, batch_size=train_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
