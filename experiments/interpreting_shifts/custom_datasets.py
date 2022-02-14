@@ -123,10 +123,11 @@ def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, e
 
     split_path = utils.join(imagenet_path, split)
     metadata_path = utils.join(imagenet_path, 'metadata.json')  # Maps class id in int to folder id.
-    meta_data = utils.join(metadata_path)
+    meta_data = utils.jload(metadata_path)
     if isinstance(meta_data, list):
         # Folder ids, not int class ids! E.g., n02113978.
         classes_set = set(classes)
+        print(classes_set)
         folder_ids = [
             class_triplet[1] for class_triplet in meta_data
             if class_triplet[0] in classes_set
@@ -186,11 +187,3 @@ def get_loaders(
         target_train_loader, target_test_loader,
         target_train_loader_unshuffled, target_test_loader_unshuffled,
     )
-
-
-def main():
-    pass
-
-
-if __name__ == "__main__":
-    fire.Fire(main)

@@ -227,53 +227,13 @@ class OptimalTransportDomainAdapter(object):
         return avg
 
 
-def domain_adaptation(
-    eta_src=1.,
-    eta1=0.1,
-    eta2=0.1,
-
-    reg_target=0.1, reg_source=10., reg_entropy=0.1,
-
-    train_batch_size=500,
-    eval_batch_size=500,
-    train_source_epochs=3,
-    train_joint_epochs=3,
-    balanced_op=False,
-    feature_extractor="cnn",
-    **unused_kwargs,
-):
-    utils.handle_unused_kwargs(unused_kwargs)
-
-    (source_train_loader, source_test_loader,
-     target_train_loader, target_test_loader,
-     target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
-        train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
-    )
-
-    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor)
-
-    domain_adapter = OptimalTransportDomainAdapter(
-        model_g, model_f,
-        eta_src=eta_src, eta1=eta1, eta2=eta2,
-        reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
-    )
-    domain_adapter.fit_source(
-        source_train_loader,
-        epochs=train_source_epochs
-    )
-    domain_adapter.fit_joint(
-        source_train_loader, target_train_loader, target_test_loader,
-        epochs=train_joint_epochs, balanced_op=balanced_op,
-    )
-
-
-def _get_feature_extractor_and_classifier(feature_extractor):
+def _get_feature_extractor_and_classifier(feature_extractor, n_class):
     if feature_extractor == 'cnn':
         model_g = models.Cnn_generator().to(device).apply(models.weights_init)
         model_f = models.Classifier2().to(device).apply(models.weights_init)
     elif feature_extractor == 'id':
         model_g = nn.Flatten()
-        model_f = nn.Linear(3072, 10).to(device)
+        model_f = nn.Linear(3072, n_class).to(device)
     elif feature_extractor == "fc":
         model_g = nn.Sequential(
             nn.Flatten(),
@@ -282,7 +242,19 @@ def _get_feature_extractor_and_classifier(feature_extractor):
             nn.Linear(200, 200),
             nn.ReLU(inplace=True),
         ).to(device)
-        model_f = nn.Linear(200, 10).to(device)
+        model_f = nn.Linear(200, n_class).to(device)
+    elif feature_extractor == "resnet":
+        # PyCharm gives a stupid syntax error highlight.
+        from simclrv2 import resnet  # noqa
+
+        simclr_ckpt = "/nlp/scr/lxuechen/simclr-ckpts/r50_1x_sk0_ema.pth"
+        depth, width, sk_ratio = resnet.name_to_params(simclr_ckpt)
+        model, _ = resnet.get_resnet(depth, width, sk_ratio)
+        model.load_state_dict(torch.load(simclr_ckpt)['resnet'])
+
+        n_channel = width * 2048
+        model_g = model
+        model_f = nn.Linear(n_channel, n_class)
     else:
         raise ValueError(f"Unknown feature_extractor: {feature_extractor}")
     return model_g, model_f
@@ -320,12 +292,20 @@ def subpop_discovery(
         target_classes=target_classes,
     )
 
-    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor)
+    # TODO: Expand imagenet-dogs later.
+    n_class = {
+        'mnist': 10,
+        'cifar-10': 10,
+        'imagenet-dogs': 10,
+    }[data_name]
+
+    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor, n_class)
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
         eta_src=eta_src, eta1=eta1, eta2=eta2,
         reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
+        n_class=n_class,
     )
     domain_adapter.fit_source(
         source_train_loader,
@@ -337,7 +317,7 @@ def subpop_discovery(
     )
 
     if train_dir is not None:
-        # Get embedding visualization.
+        # Plot1: t-SNE.
         embeddeds, labels = domain_adapter.tsne(target_train_loader)  # Shuffled!
         class2embedded = collections.defaultdict(list)
         for embedded, label in utils.zip_(embeddeds, labels):
@@ -362,7 +342,7 @@ def subpop_discovery(
             )
         )
 
-        # Marginalize over source to get the target distribution.
+        # Plot2: Marginalize over source to get the target distribution.
         marginal = domain_adapter.target_marginal(
             source_train_loader, target_train_loader_unshuffled,
             epochs=match_epochs, balanced_op=balanced_op,
@@ -397,7 +377,7 @@ def subpop_discovery(
         )
         del bar
 
-        # Bar plot class counts of bottom of the marginal.
+        # Plot3: Bar plot class counts of bottom of the marginal.
         marginal = torch.tensor(marginal, dtype=torch.get_default_dtype())
         marginal_len = len(marginal)
 
@@ -434,9 +414,7 @@ def main(
 ):
     torch.manual_seed(seed)
 
-    if task == "domain_adaptation":
-        domain_adaptation(**kwargs)
-    elif task == "subpop_discovery":
+    if task == "subpop_discovery":
         subpop_discovery(**kwargs)
 
 
