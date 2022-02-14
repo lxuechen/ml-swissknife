@@ -247,6 +247,7 @@ def _get_feature_extractor_and_classifier(feature_extractor, n_class):
         # PyCharm gives a stupid syntax error highlight.
         from simclrv2 import resnet  # noqa
 
+        # TODO: Write a separate script to validate this checkpoint!
         simclr_ckpt = "/nlp/scr/lxuechen/simclr-ckpts/r50_1x_sk0_ema.pth"
         depth, width, sk_ratio = resnet.name_to_params(simclr_ckpt)
         model, _ = resnet.get_resnet(depth, width, sk_ratio)

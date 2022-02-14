@@ -1,7 +1,7 @@
 """
 torchvision's ImageFolder can't exclude folders/classes.
 
-Rewrite `torchvision.datasets.folder.py` to handle this.
+Rewrite `torchvision.datasets.folder` to handle this.
 """
 
 import os

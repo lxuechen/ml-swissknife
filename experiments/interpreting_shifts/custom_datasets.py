@@ -91,12 +91,15 @@ def get_data(
             root=root, train=(split == 'train'), download=download, transform=transform_mnist, classes=classes
         )
     elif name == "imagenet-dogs":
-        return _get_imagenet_data(
+        ImageNet = _get_imagenet_data(
             split=split,
             classes=classes,
             imagenet_path=utils.join(root, 'imagenet-dogs'),
             enable_data_aug=False,  # TODO: Make this changeable!!!
         )
+        print(f'spilt: {split}, classes: {classes}')
+        print(ImageNet.class_to_idx)
+        return ImageNet
     else:
         raise ValueError(f'Unknown name: {name}')
 
