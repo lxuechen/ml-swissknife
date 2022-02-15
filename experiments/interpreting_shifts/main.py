@@ -335,14 +335,15 @@ def subpop_discovery(
                 class2embedded[int(label)].append(embedded)
 
             for target_class in target_classes:
-                embedded = class2embedded[target_class]
-                embedded = np.stack(embedded, axis=0)
-                scatters.append(
-                    dict(
-                        x=embedded[:, 0], y=embedded[:, 1],
-                        label=f"{target_class} ({tag})", s=5, marker=marker,
+                embedded = class2embedded.get(target_class - class_offset, None)
+                if embedded is not None:
+                    embedded = np.stack(embedded, axis=0)
+                    scatters.append(
+                        dict(
+                            x=embedded[:, 0], y=embedded[:, 1],
+                            label=f"{target_class} ({tag})", s=5, marker=marker,
+                        )
                     )
-                )
 
         img_path = utils.join(train_dir, 'tsne')
         utils.plot_wrapper(
