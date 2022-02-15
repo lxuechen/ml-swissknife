@@ -337,19 +337,24 @@ def subpop_discovery(
     )
 
     if train_dir is not None:
-        # Get embedding visualization.
-        embeddeds, labels = domain_adapter.tsne(target_train_loader)  # Shuffled!
-        class2embedded = collections.defaultdict(list)
-        for embedded, label in utils.zip_(embeddeds, labels):
-            class2embedded[int(label)].append(embedded)
 
         scatters = []
-        for target_class in target_classes:
-            embedded = class2embedded[target_class]
-            embedded = np.stack(embedded, axis=0)
-            scatters.append(
-                dict(x=embedded[:, 0], y=embedded[:, 1], label=target_class, s=10)  # s: marker size.
-            )
+        for loader, tag, marker in utils.zip_((target_train_loader, source_train_loader), ('tgt', 'src'), ('x', 'o')):
+            # Get embedding visualization.
+            embeddeds, labels = domain_adapter.tsne(loader)  # Doesn't matter if loader is shuffled or not.
+            class2embedded = collections.defaultdict(list)
+            for embedded, label in utils.zip_(embeddeds, labels):
+                class2embedded[int(label)].append(embedded)
+
+            for target_class in target_classes:
+                embedded = class2embedded[target_class]
+                embedded = np.stack(embedded, axis=0)
+                scatters.append(
+                    dict(
+                        x=embedded[:, 0], y=embedded[:, 1],
+                        label=f"{target_class} ({tag})", s=5, marker=marker,
+                    )
+                )
 
         img_path = utils.join(train_dir, 'tsne')
         utils.plot_wrapper(
