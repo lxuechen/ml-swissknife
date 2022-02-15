@@ -110,7 +110,7 @@ def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, e
     if split not in ('train', 'val'):
         raise ValueError(f"Unknown split for imagenet: {split}")
 
-    # SimCLR pre-trained models don't need normalization!
+    # SimCLR pre-trained models don't normalize to z-score; just / 255.!
     normalization_ops = []
     if normalize:
         normalization_ops.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))

@@ -104,7 +104,9 @@ def make_dataset(
         msg = f"Found no valid file for the classes {', '.join(sorted(empty_classes))}. "
         if extensions is not None:
             msg += f"Supported extensions are: {', '.join(extensions)}"
+        # --- lxuechen ---
         warnings.warn(msg)
+        # ------
 
     return instances
 
@@ -318,6 +320,8 @@ class ImageFolder(DatasetFolder):
                                           is_valid_file=is_valid_file)
         self.imgs = self.samples
 
+    # --- lxuechen ---
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         img, target = super(ImageFolder, self).__getitem__(index=index)
         return img, target, index
+    # ------
