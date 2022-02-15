@@ -166,9 +166,14 @@ def get_loaders(
 ):
     held_out_split_name = 'val' if 'imagenet' in source_data_name else 'test'
     source_train = get_data(root=root, name=source_data_name, split='train', classes=source_classes)
-    source_test = get_data(root=root, name=source_data_name, split=held_out_split_name, classes=target_classes)
+    source_test = get_data(root=root, name=source_data_name, split=held_out_split_name, classes=source_classes)
     target_train = get_data(root=root, name=target_data_name, split='train', classes=target_classes)
     target_test = get_data(root=root, name=target_data_name, split=held_out_split_name, classes=target_classes)
+    print(
+        f"example counts: \n"
+        f"\tsource_train: {len(source_train)}, source_test: {len(source_test)}, "
+        f"\ttarget_train: {len(target_train)}, target_test: {len(target_test)}"
+    )
 
     source_train_loader = DataLoader(
         source_train, batch_size=train_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
