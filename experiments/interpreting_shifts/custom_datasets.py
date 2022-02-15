@@ -171,7 +171,7 @@ def get_loaders(
     target_test = get_data(root=root, name=target_data_name, split=held_out_split_name, classes=target_classes)
     print(
         f"example counts: \n"
-        f"\tsource_train: {len(source_train)}, source_test: {len(source_test)}, "
+        f"\tsource_train: {len(source_train)}, source_test: {len(source_test)}, \n"
         f"\ttarget_train: {len(target_train)}, target_test: {len(target_test)}"
     )
 
