@@ -9,6 +9,13 @@ purpose:
 notes:
 run:
     python -m interpreting_shifts.launchers.run
+
+imagenet-dogs:
+    python -m interpreting_shifts.launchers.run --feature_extractor resnet --data_name "imagenet-dogs" \
+        --source_classes 151,152,153,154,155 --target_classes 151,152,153,154,155,156,157,158,159,160 \
+        --train_batch_size 128 --train_joint_epochs 0 --match_epochs 3
+
+    TODO: There will be a bug when target_classes are the first 0 ... target_class-1 classes!
 """
 import os
 
@@ -25,6 +32,9 @@ def _get_command(
     reg_target,
     reg_entropy,
 
+    source_classes,
+    target_classes,
+
     eta1=0.1,
     eta2=0.1,
 
@@ -36,8 +46,6 @@ def _get_command(
     balanced_op=False,
     feature_extractor="cnn",
     base_dir='/nlp/scr/lxuechen/interpreting_shifts',
-    source_classes=(0, 1, 5, 7, 9,),
-    target_classes=tuple(range(10)),
 
     data_name="mnist",
 ):
@@ -117,6 +125,9 @@ def main(
 
                                     eta1=kwargs.get('eta1', 0.1),
                                     eta2=kwargs.get('eta2', 0.1),
+
+                                    source_classes=kwargs.get("source_classes", (0, 1, 5, 7, 9,)),
+                                    target_classes=kwargs.get("target_classes", tuple(range(10))),
 
                                     data_name=data_name,
                                 )

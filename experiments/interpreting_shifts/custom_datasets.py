@@ -1,17 +1,19 @@
 """
 Custom datasets and loaders which could exclude certain classes.
+
+Also enables returning the indices of selected instances.
 """
 
 import os
 from typing import Optional, Callable, Tuple, Any, Sequence
 
-import fire
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from swissknife import utils
+from . import folder
 
 
 class SVHN(datasets.SVHN):
@@ -91,39 +93,47 @@ def get_data(
             root=root, train=(split == 'train'), download=download, transform=transform_mnist, classes=classes
         )
     elif name == "imagenet-dogs":
-        return _get_imagenet_data(
+        ImageNet = _get_imagenet_data(
             split=split,
             classes=classes,
             imagenet_path=utils.join(root, 'imagenet-dogs'),
             enable_data_aug=False,  # TODO: Make this changeable!!!
         )
+        print(f'spilt: {split}, classes: {classes}')
+        print(ImageNet.class_to_idx)
+        return ImageNet
     else:
         raise ValueError(f'Unknown name: {name}')
 
 
-def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, enable_data_aug: bool):
+def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, enable_data_aug: bool, normalize=False):
     if split not in ('train', 'val'):
         raise ValueError(f"Unknown split for imagenet: {split}")
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # SimCLR pre-trained models don't normalize to z-score; just / 255.!
+    normalization_ops = []
+    if normalize:
+        normalization_ops.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
     if enable_data_aug:
-        transform = transforms.Compose([
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ])
+        transform = transforms.Compose(
+            [
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ] + normalization_ops
+        )
     else:
-        transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ])
+        transform = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+            ] + normalization_ops
+        )
 
     split_path = utils.join(imagenet_path, split)
     metadata_path = utils.join(imagenet_path, 'metadata.json')  # Maps class id in int to folder id.
-    meta_data = utils.join(metadata_path)
+    meta_data = utils.jload(metadata_path)
     if isinstance(meta_data, list):
         # Folder ids, not int class ids! E.g., n02113978.
         classes_set = set(classes)
@@ -138,7 +148,7 @@ def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, e
                 return True
         return False
 
-    return datasets.ImageFolder(
+    return folder.ImageFolder(
         root=split_path, transform=transform, is_valid_file=is_valid_file,
     )
 
@@ -154,10 +164,16 @@ def get_loaders(
     train_batch_size=500,
     eval_batch_size=500,
 ):
+    held_out_split_name = 'val' if 'imagenet' in source_data_name else 'test'
     source_train = get_data(root=root, name=source_data_name, split='train', classes=source_classes)
-    source_test = get_data(root=root, name=source_data_name, split='test', classes=target_classes)
+    source_test = get_data(root=root, name=source_data_name, split=held_out_split_name, classes=source_classes)
     target_train = get_data(root=root, name=target_data_name, split='train', classes=target_classes)
-    target_test = get_data(root=root, name=target_data_name, split='test', classes=target_classes)
+    target_test = get_data(root=root, name=target_data_name, split=held_out_split_name, classes=target_classes)
+    print(
+        f"example counts: \n"
+        f"\tsource_train: {len(source_train)}, source_test: {len(source_test)}, \n"
+        f"\ttarget_train: {len(target_train)}, target_test: {len(target_test)}"
+    )
 
     source_train_loader = DataLoader(
         source_train, batch_size=train_batch_size, shuffle=True, pin_memory=pin_memory, num_workers=num_workers,
@@ -186,11 +202,3 @@ def get_loaders(
         target_train_loader, target_test_loader,
         target_train_loader_unshuffled, target_test_loader_unshuffled,
     )
-
-
-def main():
-    pass
-
-
-if __name__ == "__main__":
-    fire.Fire(main)
