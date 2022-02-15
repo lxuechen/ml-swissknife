@@ -267,6 +267,10 @@ def subpop_discovery(
     reg_target=0.1, reg_source=10., reg_entropy=0.01,
     # --------------------
 
+    # --- imagenet-dogs starts with class 151, but labels start with 0 ---
+    class_offset=151,
+    # ------
+
     data_name="mnist",
     train_batch_size=500,
     eval_batch_size=500,
@@ -326,7 +330,7 @@ def subpop_discovery(
 
         scatters = []
         for target_class in target_classes:
-            embedded = class2embedded[target_class]
+            embedded = class2embedded[target_class - class_offset]
             embedded = np.stack(embedded, axis=0)
             scatters.append(
                 dict(x=embedded[:, 0], y=embedded[:, 1], label=target_class, s=10)  # s: marker size.
