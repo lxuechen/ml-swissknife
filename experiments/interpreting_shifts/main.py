@@ -356,7 +356,7 @@ def subpop_discovery(
         )
 
         # Retrieve the ordered target dataset. Must match up with `target_train_loader_unshuffled`.
-        target_train_data = get_data(name="mnist", split='train', classes=target_classes)
+        target_train_data = get_data(name=data_name, split='train', classes=target_classes)
 
         # Bar plot full class marginals.
         img_path = utils.join(train_dir, 'class_marginals')
