@@ -317,3 +317,7 @@ class ImageFolder(DatasetFolder):
                                           target_transform=target_transform,
                                           is_valid_file=is_valid_file)
         self.imgs = self.samples
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
+        img, target = super(ImageFolder, self).__getitem__(index=index)
+        return img, target, index

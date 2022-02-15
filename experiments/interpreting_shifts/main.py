@@ -1,5 +1,7 @@
 """
-First test run of learning mapping using mini-batch unbalanced OT.
+First test run of learning to map using mini-batch unbalanced OT.
+
+The tricky bit of marginalization is tracking indices of examples!
 
 To run:
     python -m interpreting_shifts.main

@@ -1,5 +1,7 @@
 """
 Custom datasets and loaders which could exclude certain classes.
+
+Also enables returning the indices of selected instances.
 """
 
 import os
@@ -109,7 +111,6 @@ def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, e
         raise ValueError(f"Unknown split for imagenet: {split}")
 
     # SimCLR pre-trained models don't need normalization!
-    # TODO: Check normalized to 0, 1
     normalization_ops = []
     if normalize:
         normalization_ops.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
