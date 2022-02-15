@@ -1,5 +1,7 @@
 """
-First test run of learning mapping using mini-batch unbalanced OT.
+First test run of learning to map using mini-batch unbalanced OT.
+
+The tricky bit of marginalization is tracking indices of examples!
 
 To run:
     python -m interpreting_shifts.main
@@ -181,7 +183,7 @@ class OptimalTransportDomainAdapter(object):
         source_train_loader_cycled = itertools.cycle(source_train_loader)
 
         global_step = 0
-        target_train_size = sum(img.size(0) for img, _, _ in target_train_loader_unshuffled)
+        target_train_size = sum(packed[0].size(0) for packed in target_train_loader_unshuffled)
         avg = np.zeros((target_train_size,))
         for _ in tqdm.tqdm(range(epochs), desc="target marginal"):
             for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
@@ -227,53 +229,13 @@ class OptimalTransportDomainAdapter(object):
         return avg
 
 
-def domain_adaptation(
-    eta_src=1.,
-    eta1=0.1,
-    eta2=0.1,
-
-    reg_target=0.1, reg_source=10., reg_entropy=0.1,
-
-    train_batch_size=500,
-    eval_batch_size=500,
-    train_source_epochs=3,
-    train_joint_epochs=3,
-    balanced_op=False,
-    feature_extractor="cnn",
-    **unused_kwargs,
-):
-    utils.handle_unused_kwargs(unused_kwargs)
-
-    (source_train_loader, source_test_loader,
-     target_train_loader, target_test_loader,
-     target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
-        train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
-    )
-
-    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor)
-
-    domain_adapter = OptimalTransportDomainAdapter(
-        model_g, model_f,
-        eta_src=eta_src, eta1=eta1, eta2=eta2,
-        reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
-    )
-    domain_adapter.fit_source(
-        source_train_loader,
-        epochs=train_source_epochs
-    )
-    domain_adapter.fit_joint(
-        source_train_loader, target_train_loader, target_test_loader,
-        epochs=train_joint_epochs, balanced_op=balanced_op,
-    )
-
-
-def _get_feature_extractor_and_classifier(feature_extractor):
+def _get_feature_extractor_and_classifier(feature_extractor, n_class):
     if feature_extractor == 'cnn':
         model_g = models.Cnn_generator().to(device).apply(models.weights_init)
         model_f = models.Classifier2().to(device).apply(models.weights_init)
     elif feature_extractor == 'id':
         model_g = nn.Flatten()
-        model_f = nn.Linear(3072, 10).to(device)
+        model_f = nn.Linear(3072, n_class).to(device)
     elif feature_extractor == "fc":
         model_g = nn.Sequential(
             nn.Flatten(),
@@ -282,7 +244,20 @@ def _get_feature_extractor_and_classifier(feature_extractor):
             nn.Linear(200, 200),
             nn.ReLU(inplace=True),
         ).to(device)
-        model_f = nn.Linear(200, 10).to(device)
+        model_f = nn.Linear(200, n_class).to(device)
+    elif feature_extractor == "resnet":
+        # PyCharm gives a stupid syntax error highlight.
+        from simclrv2 import resnet  # noqa
+
+        # TODO: Write a separate script to validate this checkpoint!
+        simclr_ckpt = "/nlp/scr/lxuechen/simclr-ckpts/r50_1x_sk0_ema.pth"
+        depth, width, sk_ratio = resnet.name_to_params(simclr_ckpt)
+        model, _ = resnet.get_resnet(depth, width, sk_ratio)
+        model.load_state_dict(torch.load(simclr_ckpt)['resnet'])
+
+        n_channel = width * 2048
+        model_g = model.to(device)
+        model_f = nn.Linear(n_channel, n_class).to(device)
     else:
         raise ValueError(f"Unknown feature_extractor: {feature_extractor}")
     return model_g, model_f
@@ -293,6 +268,10 @@ def subpop_discovery(
     eta_src=1., eta1=0.1, eta2=0.1,
     reg_target=0.1, reg_source=10., reg_entropy=0.01,
     # --------------------
+
+    # --- imagenet-dogs starts with class 151, but labels start with 0 ---
+    class_offset=151,
+    # ------
 
     data_name="mnist",
     train_batch_size=500,
@@ -320,12 +299,20 @@ def subpop_discovery(
         target_classes=target_classes,
     )
 
-    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor)
+    # TODO: Expand imagenet-dogs later.
+    n_class = {
+        'mnist': 10,
+        'cifar-10': 10,
+        'imagenet-dogs': 10,
+    }[data_name]
+
+    model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor, n_class)
 
     domain_adapter = OptimalTransportDomainAdapter(
         model_g, model_f,
         eta_src=eta_src, eta1=eta1, eta2=eta2,
         reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
+        n_class=n_class,
     )
     domain_adapter.fit_source(
         source_train_loader,
@@ -337,7 +324,7 @@ def subpop_discovery(
     )
 
     if train_dir is not None:
-        # Get embedding visualization.
+        # Plot1: t-SNE.
         embeddeds, labels = domain_adapter.tsne(target_train_loader)  # Shuffled!
         class2embedded = collections.defaultdict(list)
         for embedded, label in utils.zip_(embeddeds, labels):
@@ -345,7 +332,7 @@ def subpop_discovery(
 
         scatters = []
         for target_class in target_classes:
-            embedded = class2embedded[target_class]
+            embedded = class2embedded[target_class - class_offset]
             embedded = np.stack(embedded, axis=0)
             scatters.append(
                 dict(x=embedded[:, 0], y=embedded[:, 1], label=target_class, s=10)  # s: marker size.
@@ -362,14 +349,14 @@ def subpop_discovery(
             )
         )
 
-        # Marginalize over source to get the target distribution.
+        # Plot2: Marginalize over source to get the target distribution.
         marginal = domain_adapter.target_marginal(
             source_train_loader, target_train_loader_unshuffled,
             epochs=match_epochs, balanced_op=balanced_op,
         )
 
         # Retrieve the ordered target dataset. Must match up with `target_train_loader_unshuffled`.
-        target_train_data = get_data(name="mnist", split='train', classes=target_classes)
+        target_train_data = get_data(name=data_name, split='train', classes=target_classes)
 
         # Bar plot full class marginals.
         img_path = utils.join(train_dir, 'class_marginals')
@@ -397,7 +384,7 @@ def subpop_discovery(
         )
         del bar
 
-        # Bar plot class counts of bottom of the marginal.
+        # Plot3: Bar plot class counts of bottom of the marginal.
         marginal = torch.tensor(marginal, dtype=torch.get_default_dtype())
         marginal_len = len(marginal)
 
@@ -434,9 +421,7 @@ def main(
 ):
     torch.manual_seed(seed)
 
-    if task == "domain_adaptation":
-        domain_adaptation(**kwargs)
-    elif task == "subpop_discovery":
+    if task == "subpop_discovery":
         subpop_discovery(**kwargs)
 
 
