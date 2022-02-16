@@ -90,8 +90,8 @@ def _get_command(
 
 def main(
     data_name="imagenet-dogs",
+    train_batch_size=128,
     seeds=(0,),  # Seeds over which to randomize.
-    train_batch_size=1000,
     date="feb1622",
     **kwargs,
 ):
