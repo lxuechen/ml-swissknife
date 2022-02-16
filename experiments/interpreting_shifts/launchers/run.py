@@ -8,12 +8,16 @@ date:
 purpose:
 notes:
 run:
-    python -m interpreting_shifts.launchers.run
+
+mnist:
+    python -m interpreting_shifts.launchers.run --feature_extractor cnn --data_name "mnist" --train_joint_epochs 0
 
 imagenet-dogs:
     python -m interpreting_shifts.launchers.run --feature_extractor resnet --data_name "imagenet-dogs" \
         --source_classes 151,152,153,154,155 --target_classes 151,152,153,154,155,156,157,158,159,160 \
-        --train_batch_size 128 --train_joint_epochs 0 --match_epochs 3
+        --train_batch_size 128 --train_joint_epochs 0 --match_epochs 3 \
+        --reg_entropy 0.1 --reg_source 10 --reg_target 0.1 \
+        --eta1 0.001 --eta2 0.001 --balanced_op True
 
     TODO: There will be a bug when target_classes are the first 0 ... target_class-1 classes!
 """
@@ -101,37 +105,36 @@ def main(
 ):
     commands = []
     for seed in seeds:
-        for balanced_op in (False,):
-            for reg_source in (10,):
-                for reg_target in (0.1,):
-                    for reg_entropy in (1,):
-                        for eval_batch_size in (500,):
-                            commands.append(
-                                _get_command(
-                                    date=date + msg,
-                                    seed=seed,
+        for reg_source in (10,):
+            for reg_target in (0.1,):
+                for reg_entropy in (1,):
+                    for eval_batch_size in (500,):
+                        commands.append(
+                            _get_command(
+                                date=date + msg,
+                                seed=seed,
 
-                                    balanced_op=balanced_op,
-                                    feature_extractor=kwargs.get('feature_extractor', 'fc'),
-                                    train_source_epochs=kwargs.get('train_source_epochs', 0),
-                                    train_joint_epochs=kwargs.get('train_joint_epochs', 3),
-                                    match_epochs=kwargs.get('match_epochs', 10),
-                                    train_batch_size=train_batch_size,
-                                    eval_batch_size=eval_batch_size,
+                                balanced_op=kwargs.get('balanced_op', False),
+                                feature_extractor=kwargs.get('feature_extractor', 'fc'),
+                                train_source_epochs=kwargs.get('train_source_epochs', 0),
+                                train_joint_epochs=kwargs.get('train_joint_epochs', 3),
+                                match_epochs=kwargs.get('match_epochs', 10),
+                                train_batch_size=train_batch_size,
+                                eval_batch_size=eval_batch_size,
 
-                                    reg_source=reg_source,
-                                    reg_target=reg_target,
-                                    reg_entropy=reg_entropy,
+                                reg_source=reg_source,
+                                reg_target=reg_target,
+                                reg_entropy=reg_entropy,
 
-                                    eta1=kwargs.get('eta1', 0.1),
-                                    eta2=kwargs.get('eta2', 0.1),
+                                eta1=kwargs.get('eta1', 0.1),
+                                eta2=kwargs.get('eta2', 0.1),
 
-                                    source_classes=kwargs.get("source_classes", (0, 1, 5, 7, 9,)),
-                                    target_classes=kwargs.get("target_classes", tuple(range(10))),
+                                source_classes=kwargs.get("source_classes", (0, 1, 5, 7, 9,)),
+                                target_classes=kwargs.get("target_classes", tuple(range(10))),
 
-                                    data_name=data_name,
-                                )
+                                data_name=data_name,
                             )
+                        )
 
     for command in commands[:1]:
         os.system(command)
