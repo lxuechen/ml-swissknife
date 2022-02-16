@@ -414,7 +414,7 @@ def subpop_discovery(
             for bot_index in bot_indices:
                 label = int(target_train_data.targets[bot_index]) + class_offset  # Labels always start from 0.
                 bot_class_counts[label] = bot_class_counts[label] + 1
-            top_count_classes = tuple(k for k, _ in sorted(bot_class_counts.items(), key=lambda item: item[1]))[:5]
+            top_count_classes = tuple(k for k, _ in sorted(bot_class_counts.items(), key=lambda item: item[1]))[5:]
             bar = dict(
                 x=target_classes,
                 height=[bot_class_counts[target_class] for target_class in target_classes]
@@ -425,7 +425,9 @@ def subpop_discovery(
                 suffixes=('.png', '.pdf'),
                 bars=(bar,),
                 options=dict(
-                    title=f"S: {source_classes}, \nT: {target_classes}, \ntop count classes: {top_count_classes}",
+                    title=f"S: {source_classes}, "
+                          f"\nT: {target_classes}, "
+                          f"\ntop classes in tail: {top_count_classes} (expect target)",
                     ylabel=f"bottom {bottom_percentage_int}% class counts",
                     xlabel="class label",
                 )

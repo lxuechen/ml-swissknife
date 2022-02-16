@@ -102,8 +102,8 @@ def main(
                 for reg_entropy in (1,):
                     for eval_batch_size in (500,):
                         # --- start
-                        for train_source_epochs in (0, 10):
-                            for train_joint_epochs in (0, 10):
+                        for train_source_epochs in (10, 0):
+                            for train_joint_epochs in (10, 0):
                                 for match_epochs in (5,):
                                     for eta in (0.1, 1, 10):
                                         # --- end
