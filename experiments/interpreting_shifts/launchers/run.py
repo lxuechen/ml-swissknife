@@ -99,8 +99,6 @@ def main(
     data_name="mnist",
     seeds=(0,),  # Seeds over which to randomize.
     train_batch_size=1000,
-    date="run",
-    msg='',
     **kwargs,
 ):
     commands = []
@@ -111,7 +109,7 @@ def main(
                     for eval_batch_size in (500,):
                         commands.append(
                             _get_command(
-                                date=date + msg,
+                                date=kwargs.get('date', 'run'),  # Defaults to the test folder `run`.
                                 seed=seed,
 
                                 balanced_op=kwargs.get('balanced_op', False),

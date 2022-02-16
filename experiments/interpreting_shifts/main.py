@@ -34,6 +34,7 @@ class OptimalTransportDomainAdapter(object):
         model_g, model_f,
         n_class=10, eta1=0.001, eta2=0.0001, eta_src=1.,
         reg_target=0.1, reg_source=10., reg_entropy=0.1,
+        normalize_embeddings=False,
     ):
         self.model_g: nn.Module = model_g
         self.model_f: nn.Module = model_f
@@ -44,6 +45,7 @@ class OptimalTransportDomainAdapter(object):
         self.reg_target = reg_target
         self.reg_source = reg_source
         self.reg_entropy = reg_entropy
+        self.normalize_embeddings = normalize_embeddings
 
     def fit_source(
         self,
@@ -93,6 +95,10 @@ class OptimalTransportDomainAdapter(object):
                 source_gx, target_gx = tuple(self.model_g(t) for t in (source_x, target_x))
                 source_fgx, target_fgx = tuple(self.model_f(t) for t in (source_gx, target_gx))
 
+                if self.normalize_embeddings:
+                    target_gx = target_gx / target_gx.norm(2, dim=1, keepdim=True)
+                    source_gx = source_gx / source_gx.norm(2, dim=1, keepdim=True)
+
                 # Source classification loss.
                 source_cls_loss = criterion(source_fgx, source_y)
 
@@ -130,13 +136,13 @@ class OptimalTransportDomainAdapter(object):
                     print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
 
     @torch.no_grad()
-    def tsne(self, loader, maxsize=3000):
+    def tsne(self, loader, maxsize=3000, class_offset=0):
         self.model_g.eval()
         features = []
         labels = []
         for batch in loader:
             batch_features = self.model_g(batch[0].to(device)).cpu().numpy()
-            batch_labels = batch[1].numpy()
+            batch_labels = batch[1].numpy() + class_offset
             features.append(batch_features)
             labels.append(batch_labels)
             if sum(len(b) for b in features) > maxsize:
@@ -197,6 +203,10 @@ class OptimalTransportDomainAdapter(object):
                 source_x, source_y = source_train_data[:2]
                 source_gx = self.model_g(source_x)
 
+                if self.normalize_embeddings:
+                    target_gx = target_gx / target_gx.norm(2, dim=1, keepdim=True)
+                    source_gx = source_gx / source_gx.norm(2, dim=1, keepdim=True)
+
                 # JDOT loss.
                 pairwise_diff = (source_gx[..., None] - target_gx.permute(1, 0)[None, ...])
                 feature_cost = torch.sum(pairwise_diff * pairwise_diff, dim=1)  # (source bsz, target bsz).
@@ -209,12 +219,12 @@ class OptimalTransportDomainAdapter(object):
 
                 a, b = ot.unif(source_x.size(0)), ot.unif(target_x.size(0))
                 if balanced_op:
-                    joint = ot.emd(a, b, cost_numpy)
+                    joint, log = ot.emd(a, b, cost_numpy, log=True)
                 else:  # Unbalanced optimal transport.
-                    joint = solvers.sinkhorn_knopp_unbalanced(
+                    joint, log = solvers.sinkhorn_knopp_unbalanced(
                         cost_numpy,
                         reg_a=self.reg_source, reg_b=self.reg_target, reg=self.reg_entropy,
-                        a=a, b=b,
+                        a=a, b=b, log=True
                     )
 
                 marginal = np.sum(joint, axis=0)
@@ -285,6 +295,7 @@ def subpop_discovery(
     feature_extractor="cnn",
     train_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
     bottom_percentages=(0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5),
+    normalize_embeddings=True,
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)
@@ -313,6 +324,7 @@ def subpop_discovery(
         eta_src=eta_src, eta1=eta1, eta2=eta2,
         reg_target=reg_target, reg_source=reg_source, reg_entropy=reg_entropy,
         n_class=n_class,
+        normalize_embeddings=normalize_embeddings
     )
     domain_adapter.fit_source(
         source_train_loader,
@@ -328,14 +340,13 @@ def subpop_discovery(
 
         scatters = []
         for loader, tag, marker in utils.zip_((target_train_loader, source_train_loader), ('tgt', 'src'), ('x', 'o')):
-            # Get embedding visualization.
-            embeddeds, labels = domain_adapter.tsne(loader)  # Doesn't matter if loader is shuffled or not.
+            embeddeds, labels = domain_adapter.tsne(loader, class_offset=class_offset)  # Must include offset here!
             class2embedded = collections.defaultdict(list)
             for embedded, label in utils.zip_(embeddeds, labels):
                 class2embedded[int(label)].append(embedded)
 
             for target_class in target_classes:
-                embedded = class2embedded.get(target_class - class_offset, None)
+                embedded = class2embedded.get(target_class, None)
                 if embedded is not None:
                     embedded = np.stack(embedded, axis=0)
                     scatters.append(
@@ -369,7 +380,8 @@ def subpop_discovery(
         img_path = utils.join(train_dir, 'class_marginals')
         class_marginals = collections.defaultdict(int)
         for marginal_i, label_i in utils.zip_(marginal, target_train_data.targets):
-            class_marginals[int(label_i)] += marginal_i
+            label_i = int(label_i) + class_offset  # Labels always start from 0.
+            class_marginals[label_i] = class_marginals[label_i] + marginal_i
         bar = dict(
             x=target_classes,
             height=[class_marginals[target_class] for target_class in target_classes]
@@ -400,7 +412,7 @@ def subpop_discovery(
             bot_values, bot_indices = (-marginal).topk(int(bottom_percentage * marginal_len))
             bot_class_counts = collections.defaultdict(int)
             for bot_index in bot_indices:
-                label = int(target_train_data.targets[bot_index])
+                label = int(target_train_data.targets[bot_index]) + class_offset  # Labels always start from 0.
                 bot_class_counts[label] = bot_class_counts[label] + 1
             top_count_classes = tuple(k for k, _ in sorted(bot_class_counts.items(), key=lambda item: item[1]))[:5]
             bar = dict(
