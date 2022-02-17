@@ -10,10 +10,11 @@ To run:
 w/ or w/o domain adapation:
     MNIST (lost digits) -> MNIST: It seems randomly initialized network could already do pretty well.
 """
+import argparse
 import collections
 import itertools
+import logging
 
-import fire
 import numpy as np
 import ot
 from sklearn.manifold import TSNE
@@ -34,7 +35,7 @@ class OptimalTransportDomainAdapter(object):
         model_g, model_f,
         n_class=10, eta1=0.001, eta2=0.0001, eta_src=1.,
         reg_target=0.1, reg_source=10., reg_entropy=0.1,
-        normalize_embeddings=False,
+        normalize_embeddings=True,
     ):
         self.model_g: nn.Module = model_g
         self.model_f: nn.Module = model_f
@@ -51,7 +52,12 @@ class OptimalTransportDomainAdapter(object):
         self,
         source_train_loader, source_test_loader=None,
         epochs=10, criterion=F.cross_entropy, learning_rate=2e-4,
+        eval_steps=25,
     ):
+        global_step = 0
+        record = []
+        global_steps = []
+
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
         optimizer = optim.Adam(params=params, lr=learning_rate)
         for _ in tqdm.tqdm(range(epochs), desc="fit source"):
@@ -65,7 +71,14 @@ class OptimalTransportDomainAdapter(object):
                 loss = criterion(self._model(x), y)
                 loss.backward()
                 optimizer.step()
-        self._evaluate(loader=source_test_loader, criterion=criterion)
+
+                global_step += 1
+                if global_step % eval_steps == 0:
+                    results = self._evaluate(loader=source_test_loader, criterion=criterion)
+                    record.append(results)
+                    global_steps.append(global_step)
+
+        return {'global_steps': global_steps, 'record': record}
 
     def fit_joint(
         self,
@@ -74,11 +87,14 @@ class OptimalTransportDomainAdapter(object):
         balanced_op=False,
         eval_steps=25,
     ):
+        global_step = 0
+        record = []
+        global_steps = []
+
         target_train_loader_cycled = itertools.cycle(target_train_loader)
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
         optimizer = optim.Adam(params=params, lr=learning_rate)
 
-        global_step = 0
         for epoch in tqdm.tqdm(range(epochs), desc=f"fit joint"):
             for i, source_train_data in enumerate(source_train_loader):
                 self.model_g.train()
@@ -132,8 +148,16 @@ class OptimalTransportDomainAdapter(object):
 
                 global_step += 1
                 if global_step % eval_steps == 0:
-                    avg_xent, avg_zeon = self._evaluate(target_test_loader, criterion)
-                    print(f"epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}")
+                    result = self._evaluate(target_test_loader, criterion)
+                    avg_xent, avg_zeon = result['xent'], result['zeon']
+                    logging.warning(
+                        f'fit_joint -- '
+                        f'epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}'
+                    )
+                    global_steps.append(global_step)
+                    record.append(result)
+
+        return {"global_steps": global_steps, "record": record}
 
     @torch.no_grad()
     def tsne(self, loader, maxsize=3000, class_offset=0):
@@ -171,7 +195,8 @@ class OptimalTransportDomainAdapter(object):
 
             xents.extend(xent.cpu().tolist())
             zeons.extend(zeon.cpu().tolist())
-        return tuple(np.mean(np.array(t)) for t in (xents, zeons))
+
+        return {"xents": np.mean(np.array(xents)), "zeons": np.mean(np.array(zeons))}
 
     def _model(self, x):
         return self.model_f(self.model_g(x))
@@ -279,10 +304,6 @@ def subpop_discovery(
     reg_target=0.1, reg_source=10., reg_entropy=0.01,
     # --------------------
 
-    # --- imagenet-dogs starts with class 151, but labels start with 0 ---
-    class_offset=151,
-    # ------
-
     data_name="mnist",
     train_batch_size=500,
     eval_batch_size=500,
@@ -316,6 +337,11 @@ def subpop_discovery(
         'cifar-10': 10,
         'imagenet-dogs': 10,
     }[data_name]
+    class_offset = {
+        'mnist': 0,
+        'cifar-10': 0,
+        'imagenet-dogs': 151
+    }[data_name]
 
     model_g, model_f = _get_feature_extractor_and_classifier(feature_extractor, n_class)
 
@@ -326,14 +352,16 @@ def subpop_discovery(
         n_class=n_class,
         normalize_embeddings=normalize_embeddings
     )
-    domain_adapter.fit_source(
+    source_results = domain_adapter.fit_source(
         source_train_loader,
         epochs=train_source_epochs,
     )
-    domain_adapter.fit_joint(
+    joint_results = domain_adapter.fit_joint(
         source_train_loader, target_train_loader, target_test_loader,
         epochs=train_joint_epochs, balanced_op=balanced_op,
     )
+    utils.jdump(source_results, utils.join(train_dir, 'source_results.json'))
+    utils.jdump(joint_results, utils.join(train_dir, 'joint_results.json'))
 
     if train_dir is not None:
         # Plot1: t-SNE.
@@ -437,18 +465,44 @@ def subpop_discovery(
             del bar
 
 
-def main(
-    task="domain_adaptation",
-    seed=0,
-    **kwargs
-):
-    torch.manual_seed(seed)
-
-    if task == "subpop_discovery":
-        subpop_discovery(**kwargs)
-
-
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    fire.Fire(main)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--task', type=str, default="subpop_discovery", choices=('subpop_discovery',))
+    parser.add_argument('--seed', type=int, default=42)
+
+    # --- core hparams ---
+    parser.add_argument('--eta_src', type=float, default=1., help="In fit_joint, trades source cls loss.")
+    parser.add_argument('--eta1', type=float, default=0.1, help="In fit_joint/target_marginal, trades feature cost.")
+    parser.add_argument('--eta2', type=float, default=0.1, help="In fit_joint/target_marginal, trades label cost.")
+
+    parser.add_argument('--reg_target', type=float, default=0.1, help="OT target marginal penalty strength.")
+    parser.add_argument('--reg_source', type=float, default=10., help="OT source marginal penalty strength.")
+    parser.add_argument('--reg_entropy', type=float, default=0.01, help="OT joint entropy penalty.")
+    # ---
+
+    # --- training hparams ---
+    parser.add_argument('--train_batch_size', type=int, default=500)
+    parser.add_argument('--eval_batch_size', type=int, default=500, help="In target_marginal; larger better for OT.")
+    parser.add_argument('--train_source_epochs', type=int, default=3)
+    parser.add_argument('--train_joint_epochs', type=int, default=3)
+    parser.add_argument('--match_epochs', type=int, default=3)
+    parser.add_argument('--balanced_op', type=utils.str2bool, default=False)
+    parser.add_argument('--feature_extractor', type=str, default='cnn', choices=('cnn', 'id', 'fc', 'resnet'))
+
+    # ---
+    parser.add_argument('--data_name', type=str, default='mnist')
+    parser.add_argument('--source_classes', type=int, nargs="+", default=(1, 2, 3, 9, 0))
+    parser.add_argument('--target_classes', type=int, nargs="+", default=tuple(range(10)))
+    parser.add_argument('--train_dir', type=str, required=True)
+    parser.add_argument('--bottom_percentages', type=float, nargs="+", default=(0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5))
+    parser.add_argument('--normalize_embeddings', type=utils.str2bool, default=True)
+
+    args = parser.parse_args()
+
+    utils.manual_seed(args)
+    utils.write_argparse(args)
+
+    if args.task == "subpop_discovery":
+        subpop_discovery(**args.__dict__)

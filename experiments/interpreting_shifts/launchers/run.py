@@ -88,10 +88,10 @@ def _get_command(
         --data_name {data_name} '''
     command += ' --source_classes '
     for source_class in source_classes:
-        command += f'{source_class},'
+        command += f'{source_class} '
     command += ' --target_classes '
     for target_class in target_classes:
-        command += f'{target_class},'
+        command += f'{target_class} '
     return command
 
 
