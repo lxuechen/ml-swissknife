@@ -196,7 +196,7 @@ class OptimalTransportDomainAdapter(object):
             xents.extend(xent.cpu().tolist())
             zeons.extend(zeon.cpu().tolist())
 
-        return {"xents": np.mean(np.array(xents)), "zeons": np.mean(np.array(zeons))}
+        return {"xent": np.mean(np.array(xents)), "zeon": np.mean(np.array(zeons))}
 
     def _model(self, x):
         return self.model_f(self.model_g(x))
@@ -317,6 +317,7 @@ def subpop_discovery(
     train_dir="/nlp/scr/lxuechen/interpreting_shifts/test",
     bottom_percentages=(0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5),
     normalize_embeddings=True,
+    eval_steps=50,
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)
@@ -355,10 +356,12 @@ def subpop_discovery(
     source_results = domain_adapter.fit_source(
         source_train_loader,
         epochs=train_source_epochs,
+        eval_steps=eval_steps,
     )
     joint_results = domain_adapter.fit_joint(
         source_train_loader, target_train_loader, target_test_loader,
         epochs=train_joint_epochs, balanced_op=balanced_op,
+        eval_steps=eval_steps,
     )
     utils.jdump(source_results, utils.join(train_dir, 'source_results.json'))
     utils.jdump(joint_results, utils.join(train_dir, 'joint_results.json'))
@@ -490,6 +493,7 @@ if __name__ == "__main__":
     parser.add_argument('--match_epochs', type=int, default=3)
     parser.add_argument('--balanced_op', type=utils.str2bool, default=False)
     parser.add_argument('--feature_extractor', type=str, default='cnn', choices=('cnn', 'id', 'fc', 'resnet'))
+    parser.add_argument('--eval_steps', type=int, default=50, help="Steps between evaluation.")
 
     # ---
     parser.add_argument('--data_name', type=str, default='mnist')
