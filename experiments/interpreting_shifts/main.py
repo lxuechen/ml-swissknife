@@ -60,7 +60,7 @@ class OptimalTransportDomainAdapter(object):
 
         params = tuple(self.model_g.parameters()) + tuple(self.model_f.parameters())
         optimizer = optim.Adam(params=params, lr=learning_rate)
-        for _ in tqdm.tqdm(range(epochs), desc="fit source"):
+        for epoch in tqdm.tqdm(range(epochs), desc="fit source"):
             for i, data in enumerate(source_train_loader):
                 self.model_g.train()
                 self.model_f.train()
@@ -74,8 +74,13 @@ class OptimalTransportDomainAdapter(object):
 
                 global_step += 1
                 if global_step % eval_steps == 0:
-                    results = self._evaluate(loader=source_test_loader, criterion=criterion)
-                    record.append(results)
+                    result = self._evaluate(loader=source_test_loader, criterion=criterion)
+                    avg_xent, avg_zeon = result['xent'], result['zeon']
+                    logging.warning(
+                        f'fit_source -- source test -- '
+                        f'epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}'
+                    )
+                    record.append(result)
                     global_steps.append(global_step)
 
         return {'global_steps': global_steps, 'record': record}
@@ -151,7 +156,7 @@ class OptimalTransportDomainAdapter(object):
                     result = self._evaluate(target_test_loader, criterion)
                     avg_xent, avg_zeon = result['xent'], result['zeon']
                     logging.warning(
-                        f'fit_joint -- '
+                        f'fit_joint -- target test -- '
                         f'epoch: {epoch}, global_step: {global_step}, avg_xent: {avg_xent}, avg_zeon: {avg_zeon}'
                     )
                     global_steps.append(global_step)
@@ -321,7 +326,7 @@ def subpop_discovery(
     **unused_kwargs,
 ):
     utils.handle_unused_kwargs(unused_kwargs)
-    print(f'source classes:{source_classes}, target_classes: {target_classes}')
+    logging.warning(f'source classes:{source_classes}, target_classes: {target_classes}')
 
     (source_train_loader, source_test_loader,
      target_train_loader, target_test_loader,
