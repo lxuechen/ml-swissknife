@@ -14,7 +14,6 @@ mnist:
 
     TODO: There will be a bug when target_classes are the first 0 ... target_class-1 classes!
 """
-import os
 
 import fire
 
@@ -135,9 +134,7 @@ def main(
                                                 train_joint_epochs=train_joint_epochs,
                                             )
                                         )
-
-    for command in commands[:1]:
-        os.system(command)
+    utils.gpu_scheduler(commands)
 
 
 if __name__ == "__main__":
