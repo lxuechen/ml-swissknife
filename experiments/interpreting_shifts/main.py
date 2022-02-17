@@ -399,7 +399,8 @@ def subpop_discovery(
                       f"\nsum_prob: {sum_prob:.4f}",
                 ylabel="transport map marginal prob.",
                 xlabel="class label",
-            )
+            ),
+            legend_options=dict(fontsize=8, framealpha=0.6),
         )
         del bar
 
@@ -430,7 +431,8 @@ def subpop_discovery(
                           f"\ntop classes in tail: {top_count_classes} (expect target)",
                     ylabel=f"bottom {bottom_percentage_int}% class counts",
                     xlabel="class label",
-                )
+                ),
+                legend_options=dict(fontsize=8, framealpha=0.6),
             )
             del bar
 
