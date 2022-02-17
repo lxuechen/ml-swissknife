@@ -52,6 +52,8 @@ def _get_command(
     base_dir='/nlp/scr/lxuechen/interpreting_shifts',
 
     data_name="mnist",
+
+    eval_steps=25,
 ):
     eta1_str = utils.float2str(eta1)
     eta2_str = utils.float2str(eta2)
@@ -85,7 +87,8 @@ def _get_command(
         --train_dir {train_dir} \
         --eta1 {eta1} \
         --eta2 {eta2} \
-        --data_name {data_name} '''
+        --data_name {data_name} \
+        --eval_steps {eval_steps} '''
     command += ' --source_classes '
     for source_class in source_classes:
         command += f'{source_class} '
@@ -131,6 +134,7 @@ def main(
                                 target_classes=kwargs.get("target_classes", tuple(range(10))),
 
                                 data_name=data_name,
+                                eval_steps=kwargs.get("eval_steps", 25),
                             )
                         )
 
