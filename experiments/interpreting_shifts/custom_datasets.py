@@ -72,7 +72,9 @@ class MNIST(datasets.MNIST):
 def get_data(
     name, split, classes, download=True,
     root=os.path.join(os.path.expanduser('~'), 'data'),
+    enable_data_aug=False,
 ):
+    # TODO: data aug for svhn and mnist!
     if name == "svhn":
         transform_svhn = transforms.Compose([
             transforms.Resize(32),
@@ -97,7 +99,7 @@ def get_data(
             split=split,
             classes=classes,
             imagenet_path=utils.join(root, 'imagenet-dogs'),
-            enable_data_aug=False,  # TODO: Make this changeable!!!
+            enable_data_aug=enable_data_aug,
         )
         print(f'spilt: {split}, classes: {classes}')
         print(ImageNet.class_to_idx)

@@ -15,7 +15,7 @@ mnist:
 imagenet-dogs:
     python -m interpreting_shifts.launchers.run --feature_extractor resnet --data_name "imagenet-dogs" \
         --source_classes 151,152,153,154,155 --target_classes 151,152,153,154,155,156,157,158,159,160 \
-        --train_batch_size 128 --train_joint_epochs 0 --match_epochs 3 \
+        --train_batch_size 128 --train_source_epochs 1 --train_joint_epochs 1 --match_epochs 3 \
         --reg_entropy 0.1 --reg_source 10 --reg_target 0.1 \
         --eta1 0.001 --eta2 0.001 --balanced_op True
 
