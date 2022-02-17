@@ -14,6 +14,7 @@ import argparse
 import collections
 import itertools
 import logging
+from typing import Dict
 
 import numpy as np
 import ot
@@ -182,14 +183,14 @@ class OptimalTransportDomainAdapter(object):
         return embeddeds, labels
 
     @torch.no_grad()
-    def _evaluate(self, loader, criterion):
+    def _evaluate(self, loader, criterion) -> Dict[str, float]:
         if loader is None:
-            return
+            return {"xent": 0.0, "zeon": 0.0}
 
+        xents, zeons = [], []
         self.model_g.eval()
         self.model_f.eval()
 
-        xents, zeons = [], []
         for data in loader:
             data = tuple(t.to(device) for t in data)
             x, y = data[:2]
@@ -201,7 +202,10 @@ class OptimalTransportDomainAdapter(object):
             xents.extend(xent.cpu().tolist())
             zeons.extend(zeon.cpu().tolist())
 
-        return {"xent": np.mean(np.array(xents)), "zeon": np.mean(np.array(zeons))}
+        return {
+            "xent": float(np.mean(np.array(xents))),
+            "zeon": float(np.mean(np.array(zeons))),
+        }
 
     def _model(self, x):
         return self.model_f(self.model_g(x))
@@ -359,7 +363,7 @@ def subpop_discovery(
         normalize_embeddings=normalize_embeddings
     )
     source_results = domain_adapter.fit_source(
-        source_train_loader,
+        source_train_loader, source_test_loader=source_test_loader,
         epochs=train_source_epochs,
         eval_steps=eval_steps,
     )
