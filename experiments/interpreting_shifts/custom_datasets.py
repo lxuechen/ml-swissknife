@@ -165,6 +165,7 @@ def get_loaders(
     num_workers=0,
     train_batch_size=500,
     eval_batch_size=500,
+    return_data=False,
 ):
     held_out_split_name = 'val' if 'imagenet' in source_data_name else 'test'
     source_train = get_data(root=root, name=source_data_name, split='train', classes=source_classes)
@@ -199,8 +200,21 @@ def get_loaders(
         drop_last=False,
     )
 
-    return (
-        source_train_loader, source_test_loader,
-        target_train_loader, target_test_loader,
-        target_train_loader_unshuffled, target_test_loader_unshuffled,
-    )
+    if return_data:
+        return {
+            "loaders": (
+                source_train_loader, source_test_loader,
+                target_train_loader, target_test_loader,
+                target_train_loader_unshuffled, target_test_loader_unshuffled,
+            ),
+            "data": (
+                source_train, source_test,
+                target_train, target_test,
+            )
+        }
+    else:
+        return (
+            source_train_loader, source_test_loader,
+            target_train_loader, target_test_loader,
+            target_train_loader_unshuffled, target_test_loader_unshuffled,
+        )

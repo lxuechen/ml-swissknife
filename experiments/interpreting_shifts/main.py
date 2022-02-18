@@ -216,23 +216,22 @@ class OptimalTransportDomainAdapter(object):
     def target_marginal(
         self,
         source_train_loader, target_train_loader_unshuffled,
-        # TODO: Input the right things!
-        source_train_data, target_train_data,
+        source_size, target_size,
         epochs=1, balanced_op=False,
+        return_joint=False,
     ):
+        assert sum(pack[0].size(0) for pack in target_train_loader_unshuffled) == target_size
+
         # Logic:
         #   Sequentially loop over target data.
         #   For each target batch, randomly fetch a source batch and compute approximate mapping.
         #   "Broadcast" local mapping to be a global mapping, then do online averaging.
+        global_step = 0
+
+        avg_marginal = np.zeros((target_size,))
+        avg_joint = np.zeros((source_size, target_size))
         source_train_loader_cycled = itertools.cycle(source_train_loader)
 
-        global_step = 0
-        # Don't use loader here to avoid off-by-index errors!
-        target_train_size = len(target_train_data)
-        source_train_size = len(source_train_data)
-
-        avg_marginal = np.zeros((target_train_size,))
-        avg_joint = np.zeros((source_train_size, target_train_size))
         for _ in tqdm.tqdm(range(epochs), desc="target marginal"):
             for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
                 target_train_data = tuple(t.to(device) for t in target_train_data)
@@ -286,7 +285,10 @@ class OptimalTransportDomainAdapter(object):
                 avg_marginal = avg_marginal * (global_step - 1) / global_step + marginal_full / global_step
                 avg_joint = avg_joint * (global_step - 1) / global_step + joint_full / global_step
 
-        return avg_marginal
+        if return_joint:
+            return avg_marginal, avg_joint
+        else:
+            return avg_marginal
 
 
 def _broadcast_joint(end_shape: Sequence[int], joint: np.ndarray, source_ids: Sequence[int], target_ids: Sequence[int]):
@@ -373,14 +375,19 @@ def subpop_discovery(
     utils.handle_unused_kwargs(unused_kwargs)
     logging.warning(f'source classes:{source_classes}, target_classes: {target_classes}')
 
-    (source_train_loader, source_test_loader,
-     target_train_loader, target_test_loader,
-     target_train_loader_unshuffled, target_test_loader_unshuffled,) = get_loaders(
+    pile = get_loaders(
         train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
         source_data_name=data_name, target_data_name=data_name,
         source_classes=source_classes,
         target_classes=target_classes,
+        return_data=True
     )
+    (
+        source_train_loader, source_test_loader,
+        target_train_loader, target_test_loader,
+        target_train_loader_unshuffled, target_test_loader_unshuffled,
+    ) = pile["loaders"]
+    (source_train_data, source_test_data, target_train_data, target_test_data) = pile["data"]
 
     # TODO: Expand imagenet-dogs later.
     n_class = {
@@ -452,9 +459,11 @@ def subpop_discovery(
         )
 
         # Plot2: Marginalize over source to get the target distribution.
-        marginal = domain_adapter.target_marginal(
+        marginal, joint = domain_adapter.target_marginal(
             source_train_loader, target_train_loader_unshuffled,
+            source_size=len(source_train_data), target_size=len(target_train_data),
             epochs=match_epochs, balanced_op=balanced_op,
+            return_joint=True
         )
 
         # Retrieve the ordered target dataset. Must match up with `target_train_loader_unshuffled`.
@@ -519,6 +528,10 @@ def subpop_discovery(
                 legend_options=dict(fontsize=8, framealpha=0.6),
             )
             del bar
+
+        # TODO: Plot 4: connections!
+        #   High target marginal => source images
+        #   Low target marginal => source images
 
 
 if __name__ == "__main__":
