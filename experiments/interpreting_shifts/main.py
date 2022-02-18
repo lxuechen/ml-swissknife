@@ -233,7 +233,7 @@ class OptimalTransportDomainAdapter(object):
         source_train_loader_cycled = itertools.cycle(source_train_loader)
 
         for _ in tqdm.tqdm(range(epochs), desc="target marginal"):
-            for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
+            for target_train_data in tqdm.tqdm(target_train_loader_unshuffled):  # Sequential to avoid some examples not assigned.
                 target_train_data = tuple(t.to(device) for t in target_train_data)
                 target_x, _, target_indices = target_train_data
                 target_gx = self.model_g(target_x)
@@ -465,9 +465,6 @@ def subpop_discovery(
             epochs=match_epochs, balanced_op=balanced_op,
             return_joint=True
         )
-
-        # Retrieve the ordered target dataset. Must match up with `target_train_loader_unshuffled`.
-        target_train_data = get_data(name=data_name, split='train', classes=target_classes)
 
         # Bar plot full class marginals.
         img_path = utils.join(train_dir, 'class_marginals')
