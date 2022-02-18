@@ -52,7 +52,7 @@ class OptimalTransportDomainAdapter(object):
     def fit_source(
         self,
         source_train_loader, source_test_loader=None,
-        epochs=10, criterion=F.cross_entropy, learning_rate=2e-4,
+        epochs=10, criterion=F.cross_entropy, learning_rate=1e-4,
         eval_steps=25,
     ):
         global_step = 0
@@ -89,7 +89,7 @@ class OptimalTransportDomainAdapter(object):
     def fit_joint(
         self,
         source_train_loader, target_train_loader, target_test_loader,
-        epochs=100, criterion=F.cross_entropy, learning_rate=2e-4,
+        epochs=100, criterion=F.cross_entropy, learning_rate=1e-4,
         balanced_op=False,
         eval_steps=25,
     ):
@@ -311,6 +311,8 @@ def subpop_discovery(
     # --- core hparams ---
     eta_src=1., eta1=0.1, eta2=0.1,
     reg_target=0.1, reg_source=10., reg_entropy=0.01,
+    fit_source_lr=1e-4,
+    fit_joint_lr=1e-4,
     # --------------------
 
     data_name="mnist",
@@ -366,11 +368,13 @@ def subpop_discovery(
         source_train_loader, source_test_loader=source_test_loader,
         epochs=train_source_epochs,
         eval_steps=eval_steps,
+        learning_rate=fit_source_lr,
     )
     joint_results = domain_adapter.fit_joint(
         source_train_loader, target_train_loader, target_test_loader,
         epochs=train_joint_epochs, balanced_op=balanced_op,
         eval_steps=eval_steps,
+        learning_rate=fit_joint_lr,
     )
     utils.jdump(source_results, utils.join(train_dir, 'source_results.json'))
     utils.jdump(joint_results, utils.join(train_dir, 'joint_results.json'))
@@ -404,7 +408,8 @@ def subpop_discovery(
             options=dict(
                 title=f"S: {source_classes}, "
                       f"\nT: {target_classes}"
-            )
+            ),
+            legend_options=dict(fontsize=8, framealpha=0.6),
         )
 
         # Plot2: Marginalize over source to get the target distribution.
