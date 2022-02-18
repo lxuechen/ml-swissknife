@@ -9,7 +9,7 @@ purpose:
 notes:
     Run after bug fix.
 run:
-    python -m interpreting_shifts.launchers.feb1822_v2
+    python -m interpreting_shifts.launchers.feb1822_v3
 
     TODO: There will be a bug when target_classes are the first 0 ... target_class-1 classes!
 """
@@ -91,7 +91,7 @@ def main(
     data_name="imagenet-dogs",
     train_batch_size=128,
     seeds=(0,),  # Seeds over which to randomize.
-    date="feb1822_v2",
+    date="feb1822_v3",
     **kwargs,
 ):
     commands = []
