@@ -104,7 +104,7 @@ def main(
                         for train_source_epochs in (25, 10, 0):
                             for train_joint_epochs in (25, 10, 0):
                                 for match_epochs in (10,):
-                                    for eta in (10,):
+                                    for (eta1, eta2) in ((10., 10.,), (10., 0.)):
                                         # --- end
                                         commands.append(
                                             _get_command(
@@ -122,8 +122,8 @@ def main(
                                                 reg_target=reg_target,
                                                 reg_entropy=reg_entropy,
 
-                                                eta1=eta,  # feature cost
-                                                eta2=eta,  # label cost
+                                                eta1=eta1,  # feature cost
+                                                eta2=eta2,  # label cost
 
                                                 source_classes=(151, 152, 153, 154, 155),
                                                 target_classes=(151, 152, 153, 154, 155, 156, 157, 158, 159, 160),
