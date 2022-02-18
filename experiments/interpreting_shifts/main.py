@@ -15,8 +15,10 @@ import collections
 import itertools
 import logging
 from typing import Dict
+from typing import Sequence
 
 import numpy as np
+from numpy import testing
 import ot
 from sklearn.manifold import TSNE
 import torch
@@ -214,6 +216,8 @@ class OptimalTransportDomainAdapter(object):
     def target_marginal(
         self,
         source_train_loader, target_train_loader_unshuffled,
+        # TODO: Input the right things!
+        source_train_data, target_train_data,
         epochs=1, balanced_op=False,
     ):
         # Logic:
@@ -223,8 +227,12 @@ class OptimalTransportDomainAdapter(object):
         source_train_loader_cycled = itertools.cycle(source_train_loader)
 
         global_step = 0
-        target_train_size = sum(packed[0].size(0) for packed in target_train_loader_unshuffled)
-        avg = np.zeros((target_train_size,))
+        # Don't use loader here to avoid off-by-index errors!
+        target_train_size = len(target_train_data)
+        source_train_size = len(source_train_data)
+
+        avg_marginal = np.zeros((target_train_size,))
+        avg_joint = np.zeros((source_train_size, target_train_size))
         for _ in tqdm.tqdm(range(epochs), desc="target marginal"):
             for target_train_data in target_train_loader_unshuffled:  # Sequential to avoid some examples not assigned.
                 target_train_data = tuple(t.to(device) for t in target_train_data)
@@ -234,7 +242,7 @@ class OptimalTransportDomainAdapter(object):
 
                 source_train_data = next(source_train_loader_cycled)
                 source_train_data = tuple(t.to(device) for t in source_train_data)
-                source_x, source_y = source_train_data[:2]
+                source_x, source_y, source_indices = source_train_data
                 source_gx = self.model_g(source_x)
 
                 if self.normalize_embeddings:
@@ -243,11 +251,13 @@ class OptimalTransportDomainAdapter(object):
 
                 # JDOT loss.
                 pairwise_diff = (source_gx[..., None] - target_gx.permute(1, 0)[None, ...])
-                feature_cost = torch.sum(pairwise_diff * pairwise_diff, dim=1)  # (source bsz, target bsz).
+                # (source bsz, target bsz). norm-squared.
+                feature_cost = torch.sum(pairwise_diff * pairwise_diff, dim=1)
 
                 source_y_oh = F.one_hot(source_y, num_classes=self.n_class).to(source_x.dtype)
                 label_cost = source_y_oh @ (- torch.log_softmax(target_fgx, dim=1).permute(1, 0))
 
+                assert feature_cost.size() == label_cost.size()
                 cost = self.eta1 * feature_cost + self.eta2 * label_cost
                 cost_numpy = cost.detach().cpu().numpy()
 
@@ -261,16 +271,45 @@ class OptimalTransportDomainAdapter(object):
                         a=a, b=b, log=True
                     )
 
-                marginal = np.sum(joint, axis=0)
+                # `joint`: (source bsz, target bsz).
+                marginal = np.sum(joint, axis=0)  # p(t_j) = \sum_i p(s_i, t_j).
                 target_indices = target_indices.cpu().numpy()
-                marginal_full = np.zeros_like(avg)
+                marginal_full = np.zeros_like(avg_marginal)
                 np.put(marginal_full, target_indices, marginal)
+
+                joint_full = _broadcast_joint(
+                    end_shape=avg_joint.shape, joint=joint, source_ids=source_indices, target_ids=target_indices,
+                )
 
                 # Online average.
                 global_step += 1
-                avg = avg * (global_step - 1) / global_step + marginal_full / global_step
+                avg_marginal = avg_marginal * (global_step - 1) / global_step + marginal_full / global_step
+                avg_joint = avg_joint * (global_step - 1) / global_step + joint_full / global_step
 
-        return avg
+        return avg_marginal
+
+
+def _broadcast_joint(end_shape: Sequence[int], joint: np.ndarray, source_ids: Sequence[int], target_ids: Sequence[int]):
+    joint_full = np.zeros(end_shape)
+    for source_idx, row in utils.zip_(source_ids, joint):
+        np.put(joint_full[source_idx], target_ids, row)
+    return joint_full
+
+
+def test_broadcast_joint():
+    end_shape = (5, 4)
+    joint = np.array([[1, -1], [2, -2.]])
+    source_ids = [0, 2]
+    target_ids = [3, 1]
+    joint_full = _broadcast_joint(end_shape=end_shape, joint=joint, source_ids=source_ids, target_ids=target_ids)
+    desired = np.array(
+        [[0., -1., 0., 1.],
+         [0., 0., 0., 0.],
+         [0., -2., 0., 2.],
+         [0., 0., 0., 0.],
+         [0., 0., 0., 0.]],
+    )
+    testing.assert_allclose(joint_full, desired)
 
 
 def _get_feature_extractor_and_classifier(feature_extractor, n_class):
@@ -486,7 +525,8 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--task', type=str, default="subpop_discovery", choices=('subpop_discovery',))
+    parser.add_argument('--task', type=str, default="subpop_discovery",
+                        choices=('subpop_discovery', 'test_broadcast_joint'))
     parser.add_argument('--seed', type=int, default=42)
 
     # --- core hparams ---
@@ -513,14 +553,18 @@ if __name__ == "__main__":
     parser.add_argument('--data_name', type=str, default='mnist')
     parser.add_argument('--source_classes', type=int, nargs="+", default=(1, 2, 3, 9, 0))
     parser.add_argument('--target_classes', type=int, nargs="+", default=tuple(range(10)))
-    parser.add_argument('--train_dir', type=str, required=True)
+    parser.add_argument('--train_dir', type=str, default=None)
     parser.add_argument('--bottom_percentages', type=float, nargs="+", default=(0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5))
     parser.add_argument('--normalize_embeddings', type=utils.str2bool, default=True)
 
     args = parser.parse_args()
 
-    utils.manual_seed(args)
-    utils.write_argparse(args)
-
     if args.task == "subpop_discovery":
+        assert args.train_dir is not None
+        utils.manual_seed(args)
+        utils.write_argparse(args)
+
         subpop_discovery(**args.__dict__)
+    elif args.task == "test_broadcast_joint":
+        # python -m interpreting_shifts.main --task "test_broadcast_joint"
+        test_broadcast_joint()
