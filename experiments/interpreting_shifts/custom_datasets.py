@@ -73,8 +73,10 @@ def get_data(
     name, split, classes, download=True,
     root=os.path.join(os.path.expanduser('~'), 'data'),
     enable_data_aug=False,
+    is_valid_file=None,
 ):
     # TODO: data aug for svhn and mnist!
+    # TODO: mnist svhn need overlap removal!
     if name == "svhn":
         transform_svhn = transforms.Compose([
             transforms.Resize(32),
@@ -100,6 +102,7 @@ def get_data(
             classes=classes,
             imagenet_path=utils.join(root, 'imagenet-dogs'),
             enable_data_aug=enable_data_aug,
+            is_valid_file=is_valid_file
         )
         print(f'spilt: {split}, classes: {classes}')
         print(ImageNet.class_to_idx)
@@ -108,7 +111,14 @@ def get_data(
         raise ValueError(f'Unknown name: {name}')
 
 
-def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, enable_data_aug: bool, normalize=False):
+def _get_imagenet_data(
+    classes: Sequence[int],
+    imagenet_path: str,
+    split: str,
+    enable_data_aug: bool,
+    normalize=False,
+    is_valid_file=None,  # Not quite safe, but quick to get working.
+):
     if split not in ('train', 'val'):
         raise ValueError(f"Unknown split for imagenet: {split}")
 
@@ -144,14 +154,18 @@ def _get_imagenet_data(classes: Sequence[int], imagenet_path: str, split: str, e
             if class_triplet[0] in classes_set
         ]
 
-    def is_valid_file(path):
+    def _is_valid_file(path):
+        """Check if an image is in one of the designated folders and `is_valid_file`."""
         for folder_id in folder_ids:
             if folder_id in path:
-                return True
+                if callable(is_valid_file):
+                    return is_valid_file(path)
+                else:
+                    return True
         return False
 
     return folder.ImageFolder(
-        root=split_path, transform=transform, is_valid_file=is_valid_file,
+        root=split_path, transform=transform, is_valid_file=_is_valid_file,
     )
 
 
@@ -168,10 +182,31 @@ def get_loaders(
     return_data=False,
 ):
     held_out_split_name = 'val' if 'imagenet' in source_data_name else 'test'
-    source_train = get_data(root=root, name=source_data_name, split='train', classes=source_classes)
+
+    def make_file_id_parity_check_fn(odd):
+        def check_fn(path):
+            file_name = os.path.basename(path)
+            file_id = file_name.split('_')[1].split('.')[0]
+            file_id = int(file_id)
+            return file_id % 2 == (1 if odd else 0)
+
+        return check_fn
+
+    odd_file_is_valid = make_file_id_parity_check_fn(odd=True)
+    eve_file_is_valid = make_file_id_parity_check_fn(odd=False)
+
+    source_train = get_data(
+        root=root, name=source_data_name, split='train', classes=source_classes,
+        is_valid_file=odd_file_is_valid,
+    )
+    target_train = get_data(
+        root=root, name=target_data_name, split='train', classes=target_classes,
+        is_valid_file=eve_file_is_valid,
+    )
+
     source_test = get_data(root=root, name=source_data_name, split=held_out_split_name, classes=source_classes)
-    target_train = get_data(root=root, name=target_data_name, split='train', classes=target_classes)
     target_test = get_data(root=root, name=target_data_name, split=held_out_split_name, classes=target_classes)
+
     print(
         f"example counts: \n"
         f"\tsource_train: {len(source_train)}, source_test: {len(source_test)}, \n"
