@@ -29,7 +29,7 @@ import tqdm
 from swissknife import utils
 from . import models
 from . import solvers
-from .custom_datasets import get_data, get_loaders
+from .custom_datasets import get_loaders
 
 
 class OptimalTransportDomainAdapter(object):
@@ -116,12 +116,8 @@ class OptimalTransportDomainAdapter(object):
                 target_train_data = tuple(t.to(device) for t in target_train_data)
                 target_x = target_train_data[0]
 
-                source_gx, target_gx = tuple(self.model_g(t) for t in (source_x, target_x))
+                source_gx, target_gx = tuple(self._model_g_apply(t) for t in (source_x, target_x))
                 source_fgx, target_fgx = tuple(self.model_f(t) for t in (source_gx, target_gx))
-
-                if self.normalize_embeddings:
-                    target_gx = target_gx / target_gx.norm(2, dim=1, keepdim=True)
-                    source_gx = source_gx / source_gx.norm(2, dim=1, keepdim=True)
 
                 # Source classification loss.
                 source_cls_loss = criterion(source_fgx, source_y)
@@ -173,7 +169,7 @@ class OptimalTransportDomainAdapter(object):
         features = []
         labels = []
         for batch in loader:
-            batch_features = self.model_g(batch[0].to(device)).cpu().numpy()
+            batch_features = self._model_g_apply(batch[0].to(device)).cpu().numpy()
             batch_labels = batch[1].numpy() + class_offset
             features.append(batch_features)
             labels.append(batch_labels)
@@ -209,8 +205,16 @@ class OptimalTransportDomainAdapter(object):
             "zeon": float(np.mean(np.array(zeons))),
         }
 
+    def _model_g_apply(self, x):
+        """`model_g.forward` wrapper that optionally enforces normalized outputs."""
+        features = self.model_g(x)
+        if self.normalize_embeddings:
+            features = features / features.norm(2, dim=1)
+        return features
+
     def _model(self, x):
-        return self.model_f(self.model_g(x))
+        features = self._model_g_apply(x)
+        return self.model_f(features)
 
     @torch.no_grad()
     def target_marginal(
@@ -233,16 +237,17 @@ class OptimalTransportDomainAdapter(object):
         source_train_loader_cycled = itertools.cycle(source_train_loader)
 
         for _ in tqdm.tqdm(range(epochs), desc="target marginal"):
-            for target_train_data in tqdm.tqdm(target_train_loader_unshuffled):  # Sequential to avoid some examples not assigned.
+            # Sequential to avoid some examples not assigned.
+            for target_train_data in tqdm.tqdm(target_train_loader_unshuffled):
                 target_train_data = tuple(t.to(device) for t in target_train_data)
                 target_x, _, target_indices = target_train_data
-                target_gx = self.model_g(target_x)
+                target_gx = self._model_g_apply(target_x)
                 target_fgx = self.model_f(target_gx)
 
                 source_train_data = next(source_train_loader_cycled)
                 source_train_data = tuple(t.to(device) for t in source_train_data)
                 source_x, source_y, source_indices = source_train_data
-                source_gx = self.model_g(source_x)
+                source_gx = self._model_g_apply(source_x)
 
                 if self.normalize_embeddings:
                     target_gx = target_gx / target_gx.norm(2, dim=1, keepdim=True)
