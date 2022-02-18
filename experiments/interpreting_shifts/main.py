@@ -209,7 +209,7 @@ class OptimalTransportDomainAdapter(object):
         """`model_g.forward` wrapper that optionally enforces normalized outputs."""
         features = self.model_g(x)
         if self.normalize_embeddings:
-            features = features / features.norm(2, dim=1)
+            features = features / features.norm(2, dim=1, keepdim=True)
         return features
 
     def _model(self, x):
