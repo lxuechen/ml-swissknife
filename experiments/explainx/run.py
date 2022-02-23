@@ -41,6 +41,8 @@ def load_demo_image(
 
 def main():
     # Captioning.
+    print("caption tutorial")
+
     image_size = 384
     image = load_demo_image(image_size=image_size, device=device)
 
@@ -55,6 +57,8 @@ def main():
         print('caption: ' + caption[0])
 
     # Caption some dog images.
+    print("imagenet dogs")
+
     dog_images_dir = "/home/lxuechen_stanford_edu/data/imagenet-dogs/train/n02085620"
     num_images_to_show = 10
     for i, path in enumerate(utils.listfiles(dog_images_dir)):
@@ -65,6 +69,8 @@ def main():
         print('caption: ' + caption[0])
 
     # VQA.
+    print("VQA")
+
     image_size = 480
     image = load_demo_image(image_size=image_size, device=device)
 
