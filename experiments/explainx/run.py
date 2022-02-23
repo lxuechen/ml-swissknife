@@ -13,7 +13,7 @@ import torch
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 
-from .BLIP.models import blip
+from .BLIP.models import blip, blip_vqa
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -31,6 +31,7 @@ def load_demo_image(image_size, device):
 
 
 def main():
+    # Captioning.
     image_size = 384
     image = load_demo_image(image_size=image_size, device=device)
 
@@ -43,6 +44,23 @@ def main():
     with torch.no_grad():
         caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
         print('caption: ' + caption[0])
+
+    # VQA.
+    image_size = 480
+    image = load_demo_image(image_size=image_size, device=device)
+
+    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_vqa.pth'
+
+    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
+    model = blip_vqa.blip_vqa(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
+    model.eval()
+    model = model.to(device)
+
+    question = 'where is the woman sitting?'
+
+    with torch.no_grad():
+        answer = model(image, question, train=False, inference='generate')
+        print('answer: ' + answer[0])
 
 
 if __name__ == "__main__":
