@@ -4,6 +4,7 @@ Test consensus beam search.
 To run
     python -m explainx.run
 """
+import os.path
 
 from PIL import Image
 import fire
@@ -34,7 +35,8 @@ def main():
     image = load_demo_image(image_size=image_size, device=device)
 
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
-    model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base')
+    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
+    model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
     model.eval()
     model = model.to(device)
 
