@@ -5,6 +5,7 @@ To run
     python -m explainx.run
 """
 import os.path
+from typing import Optional
 
 from PIL import Image
 import fire
@@ -13,14 +14,22 @@ import torch
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 
+from swissknife import utils
 from .BLIP.models import blip, blip_vqa
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def load_demo_image(image_size, device):
-    img_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg'
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert('RGB')
+def load_demo_image(
+    image_size, device,
+    img_url='https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg',
+    image_path: Optional[str] = None
+):
+    if image_path is not None:
+        with open(image_path, 'rb') as f:
+            raw_image = Image.open(f).convert('RGB')
+    else:  # Default image from tutorial.
+        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert('RGB')
     transform = transforms.Compose([
         transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
         transforms.ToTensor(),
@@ -42,6 +51,16 @@ def main():
     model = model.to(device)
 
     with torch.no_grad():
+        caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
+        print('caption: ' + caption[0])
+
+    # Caption some dog images.
+    dog_images_dir = "/home/lxuechen_stanford_edu/data/imagenet-dogs/train/n02085620"
+    num_images_to_show = 10
+    for i, path in enumerate(utils.listfiles(dog_images_dir)):
+        if i >= num_images_to_show:
+            break
+        image = load_demo_image(image_size=image_size, device=device, image_path=path)
         caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
         print('caption: ' + caption[0])
 
