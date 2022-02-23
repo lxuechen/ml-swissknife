@@ -2,7 +2,7 @@
 Test consensus beam search.
 
 To run
-    python -m explainX.run
+    python -m explainx.run
 """
 
 from PIL import Image
@@ -45,4 +45,3 @@ def main():
 
 if __name__ == "__main__":
     fire.Fire(main)
-ru
