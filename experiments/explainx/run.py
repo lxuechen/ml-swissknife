@@ -22,7 +22,7 @@ from swissknife import utils
 from .BLIP.models import blip, blip_vqa
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-dump_dir = "/nlp/scr/lxuechen"
+dump_dir = "/nlp/scr/lxuechen/explainx"
 
 
 def show(imgs, path):
@@ -65,6 +65,15 @@ def load_image_pil(image_path):
     return image_pil
 
 
+def load_image_tensor_raw(image_path):
+    """Don't unsqueeze or normalize."""
+    with open(image_path, 'rb') as f:
+        image_pil = Image.open(f).convert('RGB')
+    transform = transforms.Compose([transforms.ToTensor(), ])
+    image = transform(image_pil)
+    return image
+
+
 def main():
     # Captioning.
     print("caption tutorial")
@@ -95,7 +104,11 @@ def main():
         images_pil.append(load_image_pil(image_path))
         caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
         print('caption: ' + caption[0])
-    show(images_pil, path=utils.join(dump_dir, 'explainx', 'images.png'))
+
+        target_path = os.path.join(dump_dir, f"{i:04d}.png")
+        os.system(f'cp {image_path} {target_path}')
+
+    show(images_pil, path=utils.join(dump_dir, 'images.png'))
 
     # VQA.
     print("VQA")
