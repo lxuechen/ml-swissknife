@@ -7,6 +7,7 @@ To run
 import os.path
 from typing import Optional
 
+import PIL
 from PIL import Image
 import fire
 import matplotlib.pyplot as plt
@@ -29,14 +30,17 @@ def show(imgs, path):
         imgs = [imgs]
     fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
     for i, img in enumerate(imgs):
-        img = img.detach()
-        img = F.to_pil_image(img)
+        if isinstance(img, torch.Tensor):
+            img = img.detach()
+            img = F.to_pil_image(img)
+        elif not isinstance(img, PIL.Image.Image):
+            raise ValueError
         axs[0, i].imshow(np.asarray(img))
         axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
     plt.savefig(path)
 
 
-def load_demo_image(
+def load_image_tensor(
     image_size, device,
     img_url='https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg',
     image_path: Optional[str] = None
@@ -55,12 +59,18 @@ def load_demo_image(
     return image
 
 
+def load_image_pil(image_path):
+    with open(image_path, 'rb') as f:
+        image_pil = Image.open(f).convert('RGB')
+    return image_pil
+
+
 def main():
     # Captioning.
     print("caption tutorial")
 
     image_size = 384
-    image = load_demo_image(image_size=image_size, device=device)
+    image = load_image_tensor(image_size=image_size, device=device)
 
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
@@ -77,21 +87,21 @@ def main():
 
     dog_images_dir = "/home/lxuechen_stanford_edu/data/imagenet-dogs/train/n02085620"
     num_images_to_show = 10
-    images = []
-    for i, path in enumerate(utils.listfiles(dog_images_dir)):
+    images_pil = []
+    for i, image_path in enumerate(utils.listfiles(dog_images_dir)):
         if i >= num_images_to_show:
             break
-        image = load_demo_image(image_size=image_size, device=device, image_path=path)
-        images.append(image.squeeze())
+        image = load_image_tensor(image_size=image_size, device=device, image_path=image_path)
+        images_pil.append(load_image_pil(image_path))
         caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
         print('caption: ' + caption[0])
-    show(images, path=utils.join(dump_dir, 'explainx', 'images.png'))
+    show(images_pil, path=utils.join(dump_dir, 'explainx', 'images.png'))
 
     # VQA.
     print("VQA")
 
     image_size = 480
-    image = load_demo_image(image_size=image_size, device=device)
+    image = load_image_tensor(image_size=image_size, device=device)
 
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_vqa.pth'
 
