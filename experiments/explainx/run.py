@@ -9,22 +9,38 @@ from typing import Optional
 
 from PIL import Image
 import fire
+import matplotlib.pyplot as plt
+import numpy as np
 import requests
 import torch
 from torchvision import transforms
+import torchvision.transforms.functional as F
 from torchvision.transforms.functional import InterpolationMode
 
 from swissknife import utils
 from .BLIP.models import blip, blip_vqa
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+dump_dir = "/nlp/scr/lxuechen"
+
+
+def show(imgs, path):
+    if not isinstance(imgs, list):
+        imgs = [imgs]
+    fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
+    for i, img in enumerate(imgs):
+        img = img.detach()
+        img = F.to_pil_image(img)
+        axs[0, i].imshow(np.asarray(img))
+        axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+    plt.savefig(path)
 
 
 def load_demo_image(
     image_size, device,
     img_url='https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg',
     image_path: Optional[str] = None
-):
+) -> torch.Tensor:
     if image_path is not None:
         with open(image_path, 'rb') as f:
             raw_image = Image.open(f).convert('RGB')
@@ -61,12 +77,15 @@ def main():
 
     dog_images_dir = "/home/lxuechen_stanford_edu/data/imagenet-dogs/train/n02085620"
     num_images_to_show = 10
+    images = []
     for i, path in enumerate(utils.listfiles(dog_images_dir)):
         if i >= num_images_to_show:
             break
         image = load_demo_image(image_size=image_size, device=device, image_path=path)
+        images.append(image.squeeze())
         caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
         print('caption: ' + caption[0])
+    show(images, path=utils.join(dump_dir, 'explainx', 'images.png'))
 
     # VQA.
     print("VQA")
