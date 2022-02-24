@@ -5,6 +5,8 @@
  * For full license text, see LICENSE.txt file in the repo root or https://opensource.org/licenses/BSD-3-Clause
  * By Junnan Li
 '''
+import collections
+from typing import Sequence, Union
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -124,18 +126,37 @@ class BLIP_Decoder(nn.Module):
 
         return loss_lm
 
-    def generate(self, image, sample=False, num_beams=3, max_length=30, min_length=10, top_p=0.9,
-                 repetition_penalty=1.0):
-        image_embeds = self.visual_encoder(image)
+    def generate(
+        self,
+        images: Union[torch.Tensor, Sequence],
+        sample=False,
+        num_beams=3,
+        max_length=30,
+        min_length=10,
+        top_p=0.9,
+        repetition_penalty=1.0
+    ):
+        if not isinstance(images, (tuple, list)):
+            images = [images]
+        for image in images[1:]:
+            if image.shape != images[0].shape:
+                raise ValueError("Image tensors should all have the same shape.")
 
-        if not sample:
-            image_embeds = image_embeds.repeat_interleave(num_beams, dim=0)
+        # TODO: Parallel.
+        model_kwargs = collections.defaultdict(list)  # str -> list of tensors.
+        for image in images:
+            image_embeds = self.visual_encoder(image)  # (batch_size, seq_len, hidden_size).
+            if not sample:
+                # (batch_size * num_beams, seq_len, hidden_size).
+                image_embeds = image_embeds.repeat_interleave(num_beams, dim=0)
+            # (num_beams, seq_len).
+            image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
-        model_kwargs = {"encoder_hidden_states": image_embeds, "encoder_attention_mask": image_atts}
+            model_kwargs["encoder_hidden_states"].append(image_embeds)
+            model_kwargs["encoder_attention_mask"].append(image_atts)
 
-        prompt = [self.prompt] * image.size(0)
-        input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(image.device)
+        prompt = [self.prompt] * images[0].size(0)
+        input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(images[0].device)
         input_ids[:, 0] = self.tokenizer.bos_token_id
         input_ids = input_ids[:, :-1]
 
