@@ -9,6 +9,7 @@ import os
 from typing import List
 
 import fire
+import numpy as np
 import torch
 import tqdm
 
@@ -114,6 +115,7 @@ def vqa(
     print(metadata["rows"][0].keys())
 
     question = "is the bird on water or land?"
+    corrects = []
     results = []
     # background y==1 is water, y==0 is land
     for i, row in tqdm.tqdm(enumerate(metadata["rows"])):
@@ -126,18 +128,26 @@ def vqa(
         answers = get_answer(
             model=model, image_path=image_path, question=question, image_size=image_size
         )
+        top_answer = answers[0]
         results.append(
             dict(
                 img_filename=img_filename,
                 background=background,
-                answer=answers[0]
+                answer=top_answer
             )
         )
+        correct = int(background.strip() == top_answer.strip())
+        corrects.append(correct)
         print(f'background label: {label}')
         print(f'background: {background}')
         print(f'answers: {answers}')
+        print(f'correct? {correct}')
         print('---')
     utils.jdump(results, utils.join(dump_dir, 'vqa_check.json'))
+    utils.jdump(
+        dict(accuracy=np.mean(corrects)),
+        utils.join(dump_dir, 'vqa_report.json')
+    )
 
 
 def main(task="vqa", **kwargs):
