@@ -150,6 +150,15 @@ def vqa(
     )
 
 
+def consensus():
+    """Check consensus beam search works.
+
+    Give some images of waterbird on water vs land,
+    see if it's possible for the model to generate the difference.
+    """
+    pass
+
+
 def main(task="vqa", **kwargs):
     if task == "caption":
         caption(**kwargs)
