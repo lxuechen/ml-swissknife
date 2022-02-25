@@ -151,7 +151,7 @@ def vqa(
 
 
 @torch.no_grad()
-def consensus(num_per_background=20, image_size=384):
+def consensus(num_per_background=10, image_size=384):
     """Check consensus beam search works.
 
     Give some images of waterbird on water vs land,
@@ -198,7 +198,7 @@ def consensus(num_per_background=20, image_size=384):
     print(f"{captions}")
 
     captions = model.generate(
-        images=water_images,
+        images=land_images,
         sample=False, num_beams=5, max_length=50, min_length=3,
     )
     print('caption with only positives')
