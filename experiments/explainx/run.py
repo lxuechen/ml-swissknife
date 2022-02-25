@@ -35,14 +35,14 @@ def main():
     # Joint caption.
     print('Joint caption')
     dog_images_dir = "/home/lxuechen_stanford_edu/data/imagenet-dogs/train/n02085620"
-    num_images_to_show = 25
+    num_images_to_show = 30
     images = []
     for i, image_path in enumerate(utils.listfiles(dog_images_dir)):
         if i >= num_images_to_show:
             break
         image = load_image_tensor(image_size=image_size, device=device, image_path=image_path)
         images.append(image)
-    caption = model.generate(images, sample=False, num_beams=3, max_length=20, min_length=5)
+    caption = model.generate(images, sample=False, num_beams=10, max_length=20, min_length=1)
     print('caption: ' + caption[0])
 
     # Caption some dog images.
