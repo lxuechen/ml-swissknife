@@ -58,15 +58,12 @@ class ColoredMNIST(datasets.VisionDataset):
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
-        img, target = self.data_label_tuples[index]
+        img, blabel, label = self.data_label_tuples[index]
 
         if self.transform is not None:
             img = self.transform(img)
 
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img, target
+        return img, blabel, label
 
     def __len__(self):
         return len(self.data_label_tuples)
@@ -117,11 +114,11 @@ class ColoredMNIST(datasets.VisionDataset):
             colored_arr = color_grayscale_arr(im_array, red=color_red)
 
             if idx < 20000:
-                train1_set.append((Image.fromarray(colored_arr), binary_label))
+                train1_set.append((Image.fromarray(colored_arr), binary_label, label))
             elif idx < 40000:
-                train2_set.append((Image.fromarray(colored_arr), binary_label))
+                train2_set.append((Image.fromarray(colored_arr), binary_label, label))
             else:
-                test_set.append((Image.fromarray(colored_arr), binary_label))
+                test_set.append((Image.fromarray(colored_arr), binary_label, label))
 
         utils.makedirs(colored_mnist_dir, exist_ok=True)
         torch.save(train1_set, os.path.join(colored_mnist_dir, 'train1.pt'))
