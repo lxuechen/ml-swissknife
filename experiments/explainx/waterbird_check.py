@@ -72,7 +72,7 @@ def main(
             break
         img_filename = row["img_filename"]
         image_path = utils.join(waterbird_data_path, img_filename)
-        label = row["y"]
+        label = row["place"]
         background = Background.label2background(label)
         captions = get_captions(
             model=model, image_path=image_path, sample=sample,
@@ -89,6 +89,8 @@ def main(
         print(f'captions: {captions}')
         print('---')
     utils.jdump(results, utils.join(dump_dir, 'check.json'))
+
+    # TODO: VQA model!
 
 
 if __name__ == "__main__":
