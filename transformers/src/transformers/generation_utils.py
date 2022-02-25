@@ -2159,6 +2159,26 @@ class GenerationMixin:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
+            # lxuechen: Generate contrastive scores if there's opposite images.
+            if "encoder_hidden_states2" in model_kwargs and "encoder_attention_mask2" in model_kwargs:
+                negative_scores = self._generate_consensus(
+                    model_kwargs=model_kwargs,
+                    input_ids=input_ids,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    logits_processor=logits_processor,
+                    consensus_fn=consensus_fn,
+                    cur_len=cur_len,
+                    encoder_hidden_states=model_kwargs.get("encoder_hidden_states2"),
+                    encoder_attention_mask=model_kwargs.get("encoder_attention_mask2"),
+                )
+                # TODO(lxuechen): Figure out which one is good!
+                # logmeanexp = torch.logsumexp(
+                #     torch.stack([consensus_scores, negative_scores], dim=0), dim=0
+                # ) - 0.6931471805599453
+                # consensus_scores -= logmeanexp
+                consensus_scores -= negative_scores
+
             next_token_scores = consensus_scores + beam_scores[:, None].expand_as(consensus_scores)
             # lxuechen: Consensus scoring ends here.
 

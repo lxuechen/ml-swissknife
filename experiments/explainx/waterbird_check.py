@@ -150,20 +150,66 @@ def vqa(
     )
 
 
-def consensus():
+@torch.no_grad()
+def consensus(num_per_background=20, image_size=384):
     """Check consensus beam search works.
 
     Give some images of waterbird on water vs land,
     see if it's possible for the model to generate the difference.
     """
-    pass
+    metadata_path = utils.join(waterbird_data_path, "metadata.csv")
+    metadata = utils.read_csv(metadata_path, delimiter=",")
+    rows = metadata["rows"]
+
+    water_images = []
+    land_images = []
+    for i, row in enumerate(rows):
+        if len(water_images) >= num_per_background and len(land_images) >= num_per_background:
+            break
+
+        y = int(row["y"])
+        img_filename = row["img_filename"]
+        background = Background.label2background(row["place"])
+        image_path = utils.join(waterbird_data_path, img_filename)
+        image = load_image_tensor(image_size=image_size, device=device, image_path=image_path)
+
+        if y == 0:  # Only take images with label == 1!
+            continue
+        if background == Background.water:
+            if len(water_images) >= num_per_background:
+                continue
+            else:
+                water_images.append(image)
+        if background == Background.land:
+            if len(land_images) >= num_per_background:
+                continue
+            else:
+                land_images.append(image)
+    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
+    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
+    model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
+    model.to(device).eval()
+
+    captions = model.generate(
+        images=water_images, images2=land_images,
+        sample=False, num_beams=5, max_length=50, min_length=3,
+    )
+    print(f"{captions}")
+
+    captions = model.generate(
+        images=water_images,
+        sample=False, num_beams=5, max_length=50, min_length=3,
+    )
+    print(f"{captions}")
 
 
-def main(task="vqa", **kwargs):
+def main(task="consensus", **kwargs):
     if task == "caption":
         caption(**kwargs)
     elif task == "vqa":
         vqa(**kwargs)
+    elif task == "consensus":
+        consensus(**kwargs)
 
 
 if __name__ == "__main__":
