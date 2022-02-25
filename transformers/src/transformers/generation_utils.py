@@ -2196,7 +2196,7 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             # lxuechen: Line below is crucial to avoid last sequence bias!!!
-            del outputs.past_key_values
+            outputs = dict()
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
