@@ -127,10 +127,8 @@ class BLIP_Decoder(nn.Module):
 
     # lxuechen: Helpful when there's also contrastive images.
     def _create_conditioning_tensors(
-        self, images, sample: bool, num_beams: int,
+        self, images: List[torch.Tensor], sample: bool, num_beams: int,
     ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
-        if not isinstance(images, (tuple, list)):
-            images = [images]
         for image in images[1:]:
             if image.shape != images[0].shape:
                 raise ValueError("Image tensors should all have the same shape.")
@@ -161,20 +159,25 @@ class BLIP_Decoder(nn.Module):
         images2: Optional[Union[torch.Tensor, Sequence]] = None,  # Contrastive set.
     ) -> List[str]:
         model_kwargs = dict()  # str -> list of tensors.
+        if not isinstance(images, (tuple, list)):
+            images = [images]
         encoder_hidden_states, encoder_attention_mask = self._create_conditioning_tensors(
             images=images, sample=sample, num_beams=num_beams,
         )
         model_kwargs["encoder_hidden_states"] = encoder_hidden_states
         model_kwargs["encoder_attention_mask"] = encoder_attention_mask
         del encoder_hidden_states, encoder_attention_mask
+
         if images2 is not None:  # Create states for contrastive objective.
+            if not isinstance(images2, (tuple, list)):
+                images2 = [images2]
             encoder_hidden_states2, encoder_attention_mask2 = self._create_conditioning_tensors(
                 images=images2, sample=sample, num_beams=num_beams
             )
             model_kwargs["encoder_hidden_states2"] = encoder_hidden_states2
             model_kwargs["encoder_attention_mask2"] = encoder_attention_mask2
 
-        prompt = [self.prompt] * images[0].size(0)
+        prompt = [self.prompt] * images[0].size(0)  # l = batch_sz * beam_sz
         input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(images[0].device)
         input_ids[:, 0] = self.tokenizer.bos_token_id
         input_ids = input_ids[:, :-1]
