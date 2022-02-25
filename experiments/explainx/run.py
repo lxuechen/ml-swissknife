@@ -17,22 +17,20 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dump_dir = "/nlp/scr/lxuechen/explainx"
 
 
+@torch.no_grad()
 def main():
     # Captioning.
     print("caption tutorial")
 
     image_size = 384
     image = load_image_tensor(image_size=image_size, device=device)
-
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
     model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
     model.eval()
     model = model.to(device)
-
-    with torch.no_grad():
-        caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
-        print('caption: ' + caption[0])
+    caption = model.generate(image, sample=False, num_beams=3, max_length=20, min_length=5)
+    print('caption: ' + caption[0])
 
     # Joint caption.
     print('Joint caption')
@@ -44,13 +42,11 @@ def main():
             break
         image = load_image_tensor(image_size=image_size, device=device, image_path=image_path)
         images.append(image)
-    with torch.no_grad():
-        caption = model.generate(images, sample=False, num_beams=3, max_length=20, min_length=5)
-        print('caption: ' + caption[0])
+    caption = model.generate(images, sample=False, num_beams=3, max_length=20, min_length=5)
+    print('caption: ' + caption[0])
 
     # Caption some dog images.
     print("imagenet dogs")
-
     dog_images_dir = "/home/lxuechen_stanford_edu/data/imagenet-dogs/train/n02085620"
     num_images_to_show = 10
     images_pil = []
@@ -64,27 +60,20 @@ def main():
 
         target_path = os.path.join(dump_dir, f"{i:04d}.png")
         os.system(f'cp {image_path} {target_path}')
-
     show(images_pil, path=utils.join(dump_dir, 'images.png'))
 
     # VQA.
     print("VQA")
-
     image_size = 480
     image = load_image_tensor(image_size=image_size, device=device)
-
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_vqa.pth'
-
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
     model = blip_vqa.blip_vqa(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
     model.eval()
     model = model.to(device)
-
     question = 'where is the woman sitting?'
-
-    with torch.no_grad():
-        answer = model(image, question, train=False, inference='generate')
-        print('answer: ' + answer[0])
+    answer = model(image, question, train=False, inference='generate')
+    print('answer: ' + answer[0])
 
 
 if __name__ == "__main__":
