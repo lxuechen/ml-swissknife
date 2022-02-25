@@ -107,14 +107,21 @@ def _colored_mnist(image_size=480, **kwargs):
     for raw_image, blabel, label in data:
         image = transform(raw_image).unsqueeze(0).to(device)
         answer: List[str] = model(image, question, train=False, inference='generate')
+        answer: str = answer[0].strip()
         plt.imshow(raw_image)
-        print(f'question: {question}; answer: {answer[0]}; true label: {label}')
-        if not answer[0].isnumeric():
+        plt.show()
+        if not answer.isnumeric():
             corrects.append(0)
         else:
-            corrects.append(float(int(answer[0]) == label))
-        print(int(answer[0]) == label)
-    print(f'digit prediction accuracy: {np.mean(corrects)}')
+            corrects.append(float(int(answer) == label))
+        print(f'question: {question}; answer: {answer[0]}; true label: {label}')
+    accuracy = np.mean(corrects)
+    print(f'digit prediction accuracy: {accuracy}')
+    if torch.cuda.is_available():
+        utils.jdump(
+            dict(accuracy=accuracy),
+            utils.join("/nlp/scr/lxuechen/explainx", "colored_mnist")
+        )
 
 
 def main(task="main", **kwargs):
