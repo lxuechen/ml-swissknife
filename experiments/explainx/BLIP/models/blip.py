@@ -6,7 +6,7 @@
  * By Junnan Li
 '''
 import collections
-from typing import Sequence, Union
+from typing import Sequence, Union, List
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -135,7 +135,7 @@ class BLIP_Decoder(nn.Module):
         min_length=10,
         top_p=0.9,
         repetition_penalty=1.0
-    ):
+    ) -> List[str]:
         if not isinstance(images, (tuple, list)):
             images = [images]
         for image in images[1:]:
