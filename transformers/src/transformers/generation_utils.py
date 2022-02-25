@@ -2092,9 +2092,9 @@ class GenerationMixin:
             # lxuechen: Consensus scoring starts here.
             list_encoder_hidden_states = model_kwargs.get("encoder_hidden_states", [None])
             list_encoder_attention_mask = model_kwargs.get("encoder_attention_mask", [None])
-            if not isinstance(list_encoder_hidden_states, list):
+            if not isinstance(list_encoder_hidden_states, (list, tuple)):
                 list_encoder_hidden_states = [list_encoder_hidden_states]
-            if not isinstance(list_encoder_attention_mask, list):
+            if not isinstance(list_encoder_attention_mask, (list, tuple)):
                 list_encoder_attention_mask = [list_encoder_attention_mask]
 
             consensus_scores = torch.tensor(0., device=input_ids.device)
