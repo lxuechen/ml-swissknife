@@ -1904,6 +1904,60 @@ class GenerationMixin:
         else:
             return input_ids
 
+    # lxuechen: Helper function makes it easier with contrastive setup.
+    def _generate_consensus(
+        self,
+        model_kwargs: dict,
+        input_ids,
+        output_attentions,
+        output_hidden_states,
+        logits_processor,
+        consensus_fn,
+        cur_len,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        if not isinstance(encoder_hidden_states, (list, tuple)):
+            encoder_hidden_states = [encoder_hidden_states]
+        if not isinstance(encoder_attention_mask, (list, tuple)):
+            encoder_attention_mask = [encoder_attention_mask]
+
+        consensus_scores = torch.tensor(0., device=input_ids.device)
+        for this_encoder_hidden_states, this_encoder_attention_mask in zip(
+            encoder_hidden_states, encoder_attention_mask
+        ):
+            this_model_kwargs = copy.deepcopy(model_kwargs)
+            items_to_replace = (
+                ("encoder_hidden_states", this_encoder_hidden_states),
+                ("encoder_attention_mask", this_encoder_attention_mask)
+            )
+            for key, value in items_to_replace:
+                this_model_kwargs[key] = value
+
+            # lxuechen: BLIP associated Model class overrides `prepare_inputs_for_generation` to also
+            #   return keys like `encoder_hidden_states`.
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **this_model_kwargs)
+
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            next_token_logits = outputs.logits[:, -1, :]
+            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
+            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
+            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
+            next_token_scores = nn.functional.log_softmax(
+                next_token_logits, dim=-1
+            )  # (batch_size * num_beams, vocab_size)
+
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            consensus_scores = consensus_fn(consensus_scores, next_token_scores_processed)
+
+        return consensus_scores
+
     def beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -2090,71 +2144,29 @@ class GenerationMixin:
                     break
 
             # lxuechen: Consensus scoring starts here.
-            list_encoder_hidden_states = model_kwargs.get("encoder_hidden_states", [None])
-            list_encoder_attention_mask = model_kwargs.get("encoder_attention_mask", [None])
-            if not isinstance(list_encoder_hidden_states, (list, tuple)):
-                list_encoder_hidden_states = [list_encoder_hidden_states]
-            if not isinstance(list_encoder_attention_mask, (list, tuple)):
-                list_encoder_attention_mask = [list_encoder_attention_mask]
+            consensus_scores = self._generate_consensus(
+                model_kwargs=model_kwargs,
+                input_ids=input_ids,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                logits_processor=logits_processor,
+                consensus_fn=consensus_fn,
+                cur_len=cur_len,
+                encoder_hidden_states=model_kwargs.get("encoder_hidden_states", [None]),
+                encoder_attention_mask=model_kwargs.get("encoder_attention_mask", [None]),
+            )
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
 
-            consensus_scores = torch.tensor(0., device=input_ids.device)
-            for this_encoder_hidden_states, this_encoder_attention_mask in zip(
-                list_encoder_hidden_states, list_encoder_attention_mask
-            ):
-                this_model_kwargs = copy.deepcopy(model_kwargs)
-                items_to_replace = (
-                    ("encoder_hidden_states", this_encoder_hidden_states),
-                    ("encoder_attention_mask", this_encoder_attention_mask)
-                )
-                for key, value in items_to_replace:
-                    this_model_kwargs[key] = value
-
-                # lxuechen: Model class overrides `prepare_inputs_for_generation` to also
-                #   return keys like `encoder_hidden_states`.
-                model_inputs = self.prepare_inputs_for_generation(input_ids, **this_model_kwargs)
-
-                outputs = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
-
-                if synced_gpus and this_peer_finished:
-                    cur_len = cur_len + 1
-                    continue  # don't waste resources running the code we don't need
-
-                next_token_logits = outputs.logits[:, -1, :]
-                # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-                # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-                next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-                next_token_scores = nn.functional.log_softmax(
-                    next_token_logits, dim=-1
-                )  # (batch_size * num_beams, vocab_size)
-
-                next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-                consensus_scores = consensus_fn(consensus_scores, next_token_scores_processed)
             next_token_scores = consensus_scores + beam_scores[:, None].expand_as(consensus_scores)
             # lxuechen: Consensus scoring ends here.
 
             # Store scores, attentions and hidden_states when required
             # lxuechen: By default return_dict_in_generate=False in BLIP.
+            #   Also can't return this in general, since unclear what states are for outputs!
             if return_dict_in_generate:
-                if output_scores:
-                    scores += (consensus_scores,)
-                if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
-                if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
+                raise NotImplementedError
 
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
@@ -2183,6 +2195,8 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
+            # lxuechen: Line below is crucial to avoid last sequence bias!!!
+            del outputs.past_key_values
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
