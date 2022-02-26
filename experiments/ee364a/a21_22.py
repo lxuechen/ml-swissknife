@@ -35,11 +35,11 @@ def main():
     constraints = [B >= 0, Bt >= 0]
     constraints += yield_sparsity_constraints(B)
     constraints += yield_sparsity_constraints(Bt)
-
     constraints += [
         B @ ones == d, Bt @ ones == dt,
         cp.transpose(B) @ ones <= sp, cp.transpose(Bt) @ ones <= stp
     ]
+
     objective = cp.Minimize(
         kappa * cp.norm(t, 1) + p @ cp.transpose(B) @ ones + p @ cp.transpose(Bt) @ ones
     )
