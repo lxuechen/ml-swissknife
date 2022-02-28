@@ -16,6 +16,7 @@
 import copy
 from dataclasses import dataclass
 import inspect
+import math
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import warnings
 
@@ -1972,7 +1973,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
-        consensus_fn: Optional[Callable] = None,  # lxuechen
+        consensus_fn: Optional[Callable] = None,  # lxuechen: Callable that aggregates two sets of log-probs.
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -2106,27 +2107,29 @@ class GenerationMixin:
                 f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
             )
 
+        # lxuechen: beam search starts here.
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
-        beam_indices = (
-            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
-        )
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
+            raise NotImplementedError
 
-        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-        beam_scores[:, 1:] = -1e9
-        beam_scores = beam_scores.view((batch_size * num_beams,))
+        def init_scores():
+            """Initialize scores for the beams."""
+            _scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
+            _scores[:, 1:] = -1e9
+            _scores = beam_scores.view((batch_size * num_beams,))
+            return _scores
 
-        # lxuechen: Set up consensus function
+        def agg_scores(cs, bs):
+            """Aggregate the consensus scores computed at each step with the beam score."""
+            return cs + bs[:, None].expand_as(cs)  # Expand latter to vocab_size.
+
+        all_pos_scores = init_scores()
+        all_neg_scores = init_scores()  # lxuechen: This might not always be useful.
+
+        # lxuechen: Set up consensus function.
         if consensus_fn is None:
             consensus_fn = lambda x, y: x + y
 
@@ -2144,7 +2147,8 @@ class GenerationMixin:
                     break
 
             # lxuechen: Consensus scoring starts here.
-            consensus_scores = self._generate_consensus(
+            # (batch_size * num_beams, vocab_size).
+            pos_scores = self._generate_consensus(
                 model_kwargs=model_kwargs,
                 input_ids=input_ids,
                 output_attentions=output_attentions,
@@ -2155,13 +2159,19 @@ class GenerationMixin:
                 encoder_hidden_states=model_kwargs.get("encoder_hidden_states", [None]),
                 encoder_attention_mask=model_kwargs.get("encoder_attention_mask", [None]),
             )
+            all_pos_scores = agg_scores(pos_scores, all_pos_scores)
+            next_token_scores = all_pos_scores
+
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
-            # lxuechen: Generate contrastive scores if there's opposite images.
-            if "encoder_hidden_states2" in model_kwargs and "encoder_attention_mask2" in model_kwargs:
-                negative_scores = self._generate_consensus(
+            # lxuechen: Generate contrastive scores if there's negative examples.
+            has_negatives = "encoder_hidden_states2" in model_kwargs and "encoder_attention_mask2" in model_kwargs
+            if has_negatives:
+                marginal_weight = model_kwargs.get("marginal_weight", 1.)
+                # (batch_size * num_beams, vocab_size).
+                neg_scores = self._generate_consensus(
                     model_kwargs=model_kwargs,
                     input_ids=input_ids,
                     output_attentions=output_attentions,
@@ -2172,47 +2182,55 @@ class GenerationMixin:
                     encoder_hidden_states=model_kwargs.get("encoder_hidden_states2"),
                     encoder_attention_mask=model_kwargs.get("encoder_attention_mask2"),
                 )
-                # TODO(lxuechen): Figure out which one is good!
-                # logmeanexp = torch.logsumexp(
-                #     torch.stack([consensus_scores, negative_scores], dim=0), dim=0
-                # ) - 0.6931471805599453
-                # consensus_scores -= logmeanexp
-                consensus_scores -= negative_scores
-
-            next_token_scores = consensus_scores + beam_scores[:, None].expand_as(consensus_scores)
-            # lxuechen: Consensus scoring ends here.
+                all_neg_scores = agg_scores(neg_scores, all_neg_scores)
+                next_token_scores -= marginal_weight * (
+                    torch.logsumexp(torch.stack([all_pos_scores, all_neg_scores], dim=0), dim=0) - math.log(2)
+                )
+            # lxuechen: Consensus scoring ends here. `next_token_scores` is used below for ranking.
 
             # Store scores, attentions and hidden_states when required
             # lxuechen: By default return_dict_in_generate=False in BLIP.
-            #   Also can't return this in general, since unclear what states are for outputs!
+            #   Also, we can't return this in general, since unclear what states are for outputs!
             if return_dict_in_generate:
                 raise NotImplementedError
 
-            # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
-
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
-
             next_indices = torch_int_div(next_tokens, vocab_size)
             next_tokens = next_tokens % vocab_size
 
-            # stateless
+            # lxuechen: Prepare inputs for `.process`.
+            kwargs_for_process = dict(
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                jointly_evolving_scores=dict(
+                    all_pos_scores=all_pos_scores,
+                )
+            )
+            if has_negatives:
+                kwargs_for_process["jointly_evolving_scores"]["all_neg_scores"] = all_neg_scores
+
+            # lxuechen: Add beams which has eos to hyps and reduce 2K potential beams to K potential beams.
             beam_outputs = beam_scorer.process(
                 input_ids,
                 next_token_scores,
                 next_tokens,
                 next_indices,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
+                **kwargs_for_process,
             )
 
+            # lxuechen: Collect outputs for `.process`.
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
+            all_pos_scores = beam_outputs["jointly_evolving_scores"]["all_pos_scores"]
+            if has_negatives:
+                all_neg_scores = beam_outputs["jointly_evolving_scores"]["all_neg_scores"]
 
+            # lxuechen: Reorder along batch dimension to match sorted order; cat the new token.
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
             # lxuechen: Line below is crucial to avoid last sequence bias!!!
@@ -2224,7 +2242,7 @@ class GenerationMixin:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
             if return_dict_in_generate and output_scores:
-                beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
+                raise ValueError
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -2237,46 +2255,17 @@ class GenerationMixin:
 
         sequence_outputs = beam_scorer.finalize(
             input_ids,
-            beam_scores,
-            next_tokens,
-            next_indices,
+            beam_scores,  # lxuechen: Must be joint score!
+            None,  # lxuechen: This argument not really used.
+            None,  # lxuechen: This argument not really used.
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
         )
+        # lxuechen: beam search ends here.
 
         if return_dict_in_generate:
-            if not output_scores:
-                sequence_outputs["sequence_scores"] = None
-            else:
-                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
-                # return only as many indices as sequences
-                beam_indices = tuple(
-                    (beam_indices[i * num_beams: i * num_beams + num_return_sequences] for i in range(batch_size))
-                )
-                beam_indices = sum(beam_indices, ())
-
-            if self.config.is_encoder_decoder:
-                return BeamSearchEncoderDecoderOutput(
-                    sequences=sequence_outputs["sequences"],
-                    sequences_scores=sequence_outputs["sequence_scores"],
-                    scores=scores,
-                    beam_indices=beam_indices,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                )
-            else:
-                return BeamSearchDecoderOnlyOutput(
-                    sequences=sequence_outputs["sequences"],
-                    sequences_scores=sequence_outputs["sequence_scores"],
-                    scores=scores,
-                    beam_indices=beam_indices,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                )
+            raise ValueError
         else:
             return sequence_outputs["sequences"]
 
