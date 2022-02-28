@@ -2119,7 +2119,7 @@ class GenerationMixin:
             """Initialize scores for the beams."""
             _scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
             _scores[:, 1:] = -1e9
-            _scores = beam_scores.view((batch_size * num_beams,))
+            _scores = _scores.view((batch_size * num_beams,))
             return _scores
 
         def agg_scores(cs, bs):
