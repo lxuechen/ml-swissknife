@@ -2176,6 +2176,7 @@ class GenerationMixin:
             has_negatives = "encoder_hidden_states2" in model_kwargs and "encoder_attention_mask2" in model_kwargs
             if has_negatives:
                 marginal_weight = model_kwargs.get("marginal_weight", 1.)
+                z0_div_z1 = model_kwargs.get("z0_div_z1", 1.)
                 # (batch_size * num_beams, vocab_size).
                 neg_scores = self._generate_consensus(
                     model_kwargs=model_kwargs,
@@ -2190,7 +2191,9 @@ class GenerationMixin:
                 )
                 all_neg_scores = agg_scores(neg_scores, all_neg_scores)
                 next_token_scores = next_token_scores - marginal_weight * (
-                    torch.logsumexp(torch.stack([all_pos_scores, all_neg_scores], dim=0), dim=0) - math.log(2)
+                    torch.logsumexp(
+                        torch.stack([all_pos_scores, all_neg_scores + math.log(z0_div_z1)], dim=0), dim=0
+                    ) - math.log(2)
                 )
                 # lxuechen: Avoid creating a bunch of spurious zeros!!! Only because of init_scores.
                 next_token_scores.masked_fill_(all_pos_scores.le(-1e8), -1e9)

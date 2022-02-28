@@ -158,8 +158,9 @@ class BLIP_Decoder(nn.Module):
         repetition_penalty=1.0,
         images2: Optional[Union[torch.Tensor, Sequence]] = None,  # Contrastive set.
         marginal_weight: float = 1.,
+        z0_div_z1: float = 1.,
     ) -> List[str]:
-        model_kwargs = dict(marginal_weight=marginal_weight)  # str -> list of tensors.
+        model_kwargs = dict(marginal_weight=marginal_weight, z0_div_z1=z0_div_z1)  # str -> list of tensors.
         if not isinstance(images, (tuple, list)):
             images = [images]
         encoder_hidden_states, encoder_attention_mask = self._create_conditioning_tensors(
