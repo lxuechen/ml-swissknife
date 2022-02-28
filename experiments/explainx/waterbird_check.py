@@ -193,7 +193,7 @@ def consensus(num_per_background=10, image_size=384):
     for marginal_weight in np.linspace(0.1, 1, num=10):
         captions = model.generate(
             images=water_images, images2=land_images,
-            sample=False, num_beams=5, max_length=50, min_length=3,
+            sample=False, num_beams=10, max_length=50, min_length=3, marginal_weight=marginal_weight,
         )
         print(f'marginal_weight: {marginal_weight}; caption with positives and negatives')
         print(f"{captions}")
