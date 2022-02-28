@@ -231,16 +231,18 @@ class BeamSearchScorer(BeamScorer):
                 )
 
         device = input_ids.device
+        # lxuechen: next_scores has size (bsz, 2k), next_beam_scores has size (bsz, k).
         next_beam_scores = torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
         has_auxiliary_scores = jointly_evolving_scores is not None
         if has_auxiliary_scores:
             new_jointly_evolving_scores = {
-                key: torch.zeros_like(value) for key, value in jointly_evolving_scores.items()
+                key: torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
+                for key, value in jointly_evolving_scores.items()
             }
         else:
-            new_jointly_evolving_scores = None
+            new_jointly_evolving_scores = {}
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -307,6 +309,9 @@ class BeamSearchScorer(BeamScorer):
                 "next_beam_scores": next_beam_scores.view(-1),
                 "next_beam_tokens": next_beam_tokens.view(-1),
                 "next_beam_indices": next_beam_indices.view(-1),
+                "jointly_evolving_scores": {
+                    key: value.view(-1) for key, value in new_jointly_evolving_scores.items()
+                },
             }
         )
 

@@ -211,6 +211,7 @@ def main(task="consensus", **kwargs):
     elif task == "vqa":
         vqa(**kwargs)
     elif task == "consensus":
+        # python -m explainx.waterbird_check --task consensus
         consensus(**kwargs)
 
 
