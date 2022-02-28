@@ -190,12 +190,13 @@ def consensus(num_per_background=10, image_size=384):
     model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
     model.to(device).eval()
 
-    captions = model.generate(
-        images=water_images, images2=land_images,
-        sample=False, num_beams=5, max_length=50, min_length=3,
-    )
-    print('caption with positives and negatives')
-    print(f"{captions}")
+    for marginal_weight in np.linspace(0.1, 1, num=10):
+        captions = model.generate(
+            images=water_images, images2=land_images,
+            sample=False, num_beams=5, max_length=50, min_length=3,
+        )
+        print(f'marginal_weight: {marginal_weight}; caption with positives and negatives')
+        print(f"{captions}")
 
     captions = model.generate(
         images=land_images,
