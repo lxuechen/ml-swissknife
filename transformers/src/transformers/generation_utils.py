@@ -1959,6 +1959,12 @@ class GenerationMixin:
 
         return consensus_scores
 
+    # lxuechen: Rough logic of new beam search:
+    #   1. use all_pos_scores and all_neg_scores to keep track of accumulated scores (take the position of beam_scores)
+    #   2. next_token_scores is an aggregate of all_pos_scores and all_neg_scores
+    #   3. sort and rank using next_token_scores
+    #   4. filter and change ordering of all_pos_scores and all_neg_scores in parallel
+    #   5. finalize with beam_scores, which is produced by re-ranking with next_token_scores
     def beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -2160,7 +2166,7 @@ class GenerationMixin:
                 encoder_attention_mask=model_kwargs.get("encoder_attention_mask", [None]),
             )
             all_pos_scores = agg_scores(pos_scores, all_pos_scores)
-            next_token_scores = all_pos_scores
+            next_token_scores = all_pos_scores.detach().clone()
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
@@ -2183,9 +2189,11 @@ class GenerationMixin:
                     encoder_attention_mask=model_kwargs.get("encoder_attention_mask2"),
                 )
                 all_neg_scores = agg_scores(neg_scores, all_neg_scores)
-                next_token_scores -= marginal_weight * (
+                next_token_scores = next_token_scores - marginal_weight * (
                     torch.logsumexp(torch.stack([all_pos_scores, all_neg_scores], dim=0), dim=0) - math.log(2)
                 )
+                # lxuechen: Avoid creating a bunch of spurious zeros!!! Only because of init_scores.
+                next_token_scores.masked_fill_(all_pos_scores.le(-1e8), -1e9)
             # lxuechen: Consensus scoring ends here. `next_token_scores` is used below for ranking.
 
             # Store scores, attentions and hidden_states when required
