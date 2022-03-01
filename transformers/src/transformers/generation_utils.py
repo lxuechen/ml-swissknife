@@ -2175,6 +2175,7 @@ class GenerationMixin:
             # lxuechen: Generate contrastive scores if there's negative examples.
             has_negatives = "encoder_hidden_states2" in model_kwargs and "encoder_attention_mask2" in model_kwargs
             if has_negatives:
+                contrastive_mode = model_kwargs.get("contrastive_mode", "subtraction")
                 marginal_weight = model_kwargs.get("marginal_weight", 1.)
                 z0_div_z1 = model_kwargs.get("z0_div_z1", 1.)
                 # (batch_size * num_beams, vocab_size).
@@ -2190,12 +2191,17 @@ class GenerationMixin:
                     encoder_attention_mask=model_kwargs.get("encoder_attention_mask2"),
                 )
                 all_neg_scores = agg_scores(neg_scores, all_neg_scores)
-                next_token_scores = next_token_scores - marginal_weight * (
-                    torch.logsumexp(
-                        torch.stack([all_pos_scores, all_neg_scores + math.log(z0_div_z1)], dim=0), dim=0
-                    ) - math.log(2)
-                )
-                # lxuechen: Avoid creating a bunch of spurious zeros!!! Only because of init_scores.
+                if contrastive_mode == "subtraction":
+                    next_token_scores = next_token_scores - marginal_weight * all_neg_scores
+                elif contrastive_mode == "marginalization":
+                    next_token_scores = next_token_scores - marginal_weight * (
+                        torch.logsumexp(
+                            torch.stack([all_pos_scores, all_neg_scores + math.log(z0_div_z1)], dim=0), dim=0
+                        ) - math.log(2)
+                    )
+                else:
+                    raise ValueError(f"Unknown contrastive_mode: {contrastive_mode}")
+                # lxuechen: Avoid creating a bunch of spurious zeros because of init_scores.
                 next_token_scores.masked_fill_(all_pos_scores.le(-1e8), -1e9)
             # lxuechen: Consensus scoring ends here. `next_token_scores` is used below for ranking.
 
