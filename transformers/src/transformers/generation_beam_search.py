@@ -13,17 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
+import warnings
 
 import numpy as np
 import torch
 
 from .file_utils import add_start_docstrings
 from .generation_beam_constraints import Constraint, ConstraintListState
-
 
 PROCESS_INPUTS_DOCSTRING = r"""
     Args:
@@ -122,7 +121,8 @@ class BeamSearchScorer(BeamScorer):
     [`BeamScorer`] implementing standard beam search decoding.
 
     Adapted in part from [Facebook's XLM beam search
-    code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
+    code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer
+    .py#L529).
 
     Reference for the diverse beam search algorithm and implementation [Ashwin Kalyan's DBS
     implementation](https://github.com/ashwinkalyan/dbs/blob/master/dbs/beam_utils.lua)
@@ -183,13 +183,15 @@ class BeamSearchScorer(BeamScorer):
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
-                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, one should make use of `greedy_search` instead."
+                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, "
+                f"one should make use of `greedy_search` instead."
             )
 
         if not isinstance(num_beam_groups, int) or (num_beam_groups > num_beams) or (num_beams % num_beam_groups != 0):
             raise ValueError(
                 f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` "
-                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
+                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being "
+                f"{num_beams}."
             )
 
         if "max_length" in kwargs:
@@ -203,6 +205,7 @@ class BeamSearchScorer(BeamScorer):
     def is_done(self) -> bool:
         return self._done.all()
 
+    # lxuechen: `.process` starts here.
     def process(
         self,
         input_ids: torch.LongTensor,
@@ -211,6 +214,7 @@ class BeamSearchScorer(BeamScorer):
         next_indices: torch.LongTensor,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        jointly_evolving_scores: Optional[Dict] = None,  # lxuechen: Feed in positive and negative scores here.
     ) -> Tuple[torch.Tensor]:
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
@@ -227,9 +231,18 @@ class BeamSearchScorer(BeamScorer):
                 )
 
         device = input_ids.device
+        # lxuechen: next_scores has size (bsz, 2k), next_beam_scores has size (bsz, k).
         next_beam_scores = torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
+        has_auxiliary_scores = jointly_evolving_scores is not None
+        if has_auxiliary_scores:
+            new_jointly_evolving_scores = {
+                key: torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
+                for key, value in jointly_evolving_scores.items()
+            }
+        else:
+            new_jointly_evolving_scores = {}
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -237,10 +250,14 @@ class BeamSearchScorer(BeamScorer):
                     raise ValueError(f"Batch can only be done if at least {self.num_beams} beams have been generated")
                 if eos_token_id is None or pad_token_id is None:
                     raise ValueError("Generated beams >= num_beams -> eos_token_id and pad_token have to be defined")
-                # pad the batch
                 next_beam_scores[batch_idx, :] = 0
                 next_beam_tokens[batch_idx, :] = pad_token_id
                 next_beam_indices[batch_idx, :] = 0
+                # lxuechen: Joint scores.
+                if has_auxiliary_scores:
+                    for key in jointly_evolving_scores:
+                        new_value = new_jointly_evolving_scores[key]
+                        new_value[batch_idx, :] = 0
                 continue
 
             # next tokens for this sentence
@@ -264,6 +281,12 @@ class BeamSearchScorer(BeamScorer):
                     next_beam_scores[batch_idx, beam_idx] = next_score
                     next_beam_tokens[batch_idx, beam_idx] = next_token
                     next_beam_indices[batch_idx, beam_idx] = batch_beam_idx
+                    # lxuechen: Joint scores.
+                    if has_auxiliary_scores:
+                        for key in jointly_evolving_scores:
+                            value = jointly_evolving_scores[key]
+                            new_value = new_jointly_evolving_scores[key]
+                            new_value[batch_idx, beam_idx] = value[batch_idx, beam_token_rank]
                     beam_idx += 1
 
                 # once the beam for next step is full, don't add more tokens to it.
@@ -272,7 +295,8 @@ class BeamSearchScorer(BeamScorer):
 
             if beam_idx < self.group_size:
                 raise ValueError(
-                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: "
+                    f"{eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
@@ -285,6 +309,9 @@ class BeamSearchScorer(BeamScorer):
                 "next_beam_scores": next_beam_scores.view(-1),
                 "next_beam_tokens": next_beam_tokens.view(-1),
                 "next_beam_indices": next_beam_indices.view(-1),
+                "jointly_evolving_scores": {
+                    key: value.view(-1) for key, value in new_jointly_evolving_scores.items()
+                },
             }
         )
 
@@ -314,15 +341,17 @@ class BeamSearchScorer(BeamScorer):
                 beam_hyp.add(final_tokens, final_score)
 
         # select the best hypotheses
+        # lxuechen: Most commonly, just find the single best beam.
         sent_lengths = input_ids.new(batch_size * self.num_beam_hyps_to_keep)
         best = []
         best_scores = torch.zeros(batch_size * self.num_beam_hyps_to_keep, device=self.device, dtype=torch.float32)
 
         # retrieve best hypotheses
         for i, beam_hyp in enumerate(self._beam_hyps):
+            # lxuechen: Ascending.
             sorted_hyps = sorted(beam_hyp.beams, key=lambda x: x[0])
             for j in range(self.num_beam_hyps_to_keep):
-                best_hyp_tuple = sorted_hyps.pop()
+                best_hyp_tuple = sorted_hyps.pop()  # lxuechen: Pop last with highest score.
                 best_score = best_hyp_tuple[0]
                 best_hyp = best_hyp_tuple[1]
                 sent_lengths[self.num_beam_hyps_to_keep * i + j] = len(best_hyp)
@@ -331,6 +360,7 @@ class BeamSearchScorer(BeamScorer):
                 best.append(best_hyp)
                 best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
 
+        # lxuechen: Pad the sequences and constrain max length.
         # prepare for adding eos
         sent_max_len = min(sent_lengths.max().item() + 1, max_length)
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
@@ -418,13 +448,15 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
-                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, one should make use of `greedy_search` instead."
+                f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, "
+                f"one should make use of `greedy_search` instead."
             )
 
         if not isinstance(num_beam_groups, int) or (num_beam_groups > num_beams) or (num_beams % num_beam_groups != 0):
             raise ValueError(
                 f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` "
-                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
+                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being "
+                f"{num_beams}."
             )
 
         if "max_length" in kwargs:
@@ -569,7 +601,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
             if beam_idx < self.group_size:
                 raise ValueError(
-                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: "
+                    f"{eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
@@ -599,7 +632,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         # (candidate next tokens)
 
         # 1. Adding "advance_tokens"
-        #     using ConstraintStateList.advance(), we propose new tokens to be added into this "candidate list" that will
+        #     using ConstraintStateList.advance(), we propose new tokens to be added into this "candidate list" that
+        #     will
         #     advance us in fulfilling the constraints.
 
         # 2. Selecting best candidates such that we end up with highest probable candidates
@@ -649,7 +683,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                         track_new["new_scores"].append(this_batch_token_scores[seq_idx].take(advance_token))
                         track_new["new_states"].append(new_state)
             elif push_progress:
-                # Basically, `sent_beam_indices` often chooses very little among `input_ids` the generated sequences that
+                # Basically, `sent_beam_indices` often chooses very little among `input_ids` the generated sequences
+                # that
                 # actually fulfill our constraints. For example, let constraints == ["loves pies"] and
 
                 #     pre_seq_1 = "The child loves pies and" pre_seq_2 = "The child plays in the playground and"
@@ -810,7 +845,7 @@ class BeamHypotheses:
         self.length_penalty = length_penalty
         self.early_stopping = early_stopping
         self.num_beams = num_beams
-        self.beams = []
+        self.beams = []  # lxuechen: List of tuple (score, input_ids).
         self.worst_score = 1e9
 
     def __len__(self):
@@ -828,6 +863,7 @@ class BeamHypotheses:
             self.beams.append((score, hyp))
             if len(self) > self.num_beams:
                 sorted_next_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
+                # lxuechen: Too many beams, oozing... Remove the beam with worst score. Update `self.worst_score`.
                 del self.beams[sorted_next_scores[0][1]]
                 self.worst_score = sorted_next_scores[1][0]
             else:
@@ -844,6 +880,6 @@ class BeamHypotheses:
         elif self.early_stopping:
             return True
         else:
-            cur_score = best_sum_logprobs / cur_len**self.length_penalty
+            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret
