@@ -199,16 +199,16 @@ def consensus(
     marginal_weights = np.concatenate(
         [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5), np.linspace(1.2, 2, num=5)]
     ).tolist()  # Serializable.
-    captions = []
+    pairs = []
     for marginal_weight in tqdm.tqdm(marginal_weights):
         cap = model.generate(
             images=water_images, images2=land_images,
             sample=False, num_beams=20, max_length=50, min_length=3, marginal_weight=marginal_weight,
             z0_div_z1=z0_div_z1, contrastive_mode=contrastive_mode,
         )[0]
-        captions.append(cap)
+        pairs.append((marginal_weight, cap))
         print(f"marginal_weight: {marginal_weight}, cap: {cap}")
-    dump = dict(captions=captions, marginal_weights=marginal_weights, z0_div_z1=z0_div_z1)
+    dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
     captions = model.generate(
