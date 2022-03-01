@@ -1,17 +1,26 @@
-"""
-"""
-
+# python -m explainx.launchers.feb2822
 import fire
-import torch
-import os
-import sys
-import numpy as np
-import transformers
+
 from swissknife import utils
 
 
+def _get_command(dump_file, contrastive_mode):
+    return f'''
+python -m explainx.waterbird_check \
+    --task consensus \
+    --contrastive_mode "{contrastive_mode}" \
+    --dump_file {dump_file}
+    '''
+
+
 def main():
-    pass
+    commands = []
+    for contrastive_mode in ("subtraction", "marginalization"):
+        dump_file = f'caps-weights-{contrastive_mode}.json'
+        commands.append(
+            _get_command(dump_file=dump_file, contrastive_mode=contrastive_mode)
+        )
+    utils.gpu_scheduler(commands=commands)
 
 
 if __name__ == "__main__":
