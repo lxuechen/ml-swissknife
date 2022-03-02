@@ -34,8 +34,11 @@ def consensus(
     dump_file: str = 'caps-weights.json',
     contrastive_mode: str = "subtraction",  # one of 'subtraction' 'marginalization'
     black_first=True,
+    gender_target: int = 0,  # Either 0 or 1.
 ):
-    # Female with blond and dark hair.
+    if gender_target not in (0, 1):
+        raise ValueError(f"Unknown `gender_target`: {gender_target}")
+
     celeba = torchvision.datasets.CelebA(root=root, download=True)
     attr_names: List = celeba.attr_names
     blond_hair_index = attr_names.index("Blond_Hair")
@@ -53,7 +56,7 @@ def consensus(
         blond_hair = attr[blond_hair_index].item()
         image = misc.load_image_tensor(image_pil=image, image_size=image_size, device=device)
 
-        if male == 0:  # Female.
+        if male == gender_target:
             if black_hair == 1:
                 if len(images) >= num_per_group:
                     continue
@@ -70,11 +73,13 @@ def consensus(
     # Show the images!
     torchvision.utils.save_image(
         utils.denormalize(torch.cat(group1, dim=0), mean=misc.CHANNEL_MEAN, std=misc.CHANNEL_STD),
-        fp=utils.join(dump_dir, 'group1'),
+        fp=utils.join(dump_dir, 'group1.png'),
+        nrow=5,
     )
     torchvision.utils.save_image(
         utils.denormalize(torch.cat(group2, dim=0), mean=misc.CHANNEL_MEAN, std=misc.CHANNEL_STD),
-        fp=utils.join(dump_dir, 'group2'),
+        fp=utils.join(dump_dir, 'group2.png'),
+        nrow=5,
     )
 
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
