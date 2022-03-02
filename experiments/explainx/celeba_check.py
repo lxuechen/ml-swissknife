@@ -38,6 +38,7 @@ def consensus(
 ):
     if gender_target not in (0, 1):
         raise ValueError(f"Unknown `gender_target`: {gender_target}")
+    os.makedirs(dump_dir, exist_ok=True)
 
     celeba = torchvision.datasets.CelebA(root=root, download=True)
     attr_names: List = celeba.attr_names
