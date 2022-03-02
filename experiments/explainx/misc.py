@@ -29,11 +29,14 @@ def show(imgs, path):
 def load_image_tensor(
     image_size, device,
     img_url='https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg',
-    image_path: Optional[str] = None
+    image_path: Optional[str] = None,
+    image_pil: Optional[PIL.Image.Image] = None,
 ) -> torch.Tensor:
     if image_path is not None:
         with open(image_path, 'rb') as f:
             raw_image = Image.open(f).convert('RGB')
+    elif image_pil is not None:
+        raw_image = image_pil.convert("RGB")
     else:  # Default image from tutorial.
         raw_image = Image.open(requests.get(img_url, stream=True).raw).convert('RGB')
     transform = transforms.Compose([
