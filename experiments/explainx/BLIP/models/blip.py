@@ -157,12 +157,12 @@ class BLIP_Decoder(nn.Module):
         top_p=0.9,
         repetition_penalty=1.0,
         images2: Optional[Union[torch.Tensor, Sequence]] = None,  # Contrastive set.
-        marginal_weight: float = 1.,
+        contrastive_weight: float = 1.,
         z0_div_z1: float = 1.,
         contrastive_mode: str = "subtraction",
     ) -> List[str]:
         model_kwargs = dict(
-            marginal_weight=marginal_weight,
+            contrastive_weight=contrastive_weight,
             z0_div_z1=z0_div_z1,
             contrastive_mode=contrastive_mode,
         )  # str -> list of tensors.

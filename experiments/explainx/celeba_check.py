@@ -88,18 +88,18 @@ def consensus(
     model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
     model.to(device).eval()
 
-    marginal_weights = np.concatenate(
+    contrastive_weights = np.concatenate(
         [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5), np.linspace(1.2, 2, num=5)]
     ).tolist()  # Serializable.
     pairs = []
-    for marginal_weight in tqdm.tqdm(marginal_weights):
+    for contrastive_weight in tqdm.tqdm(contrastive_weights):
         cap = model.generate(
             images=group1, images2=group2,
-            sample=False, num_beams=20, max_length=50, min_length=3, marginal_weight=marginal_weight,
+            sample=False, num_beams=20, max_length=50, min_length=3, contrastive_weight=contrastive_weight,
             z0_div_z1=z0_div_z1, contrastive_mode=contrastive_mode,
         )[0]
-        pairs.append((marginal_weight, cap))
-        print(f"marginal_weight: {marginal_weight}, cap: {cap}")
+        pairs.append((contrastive_weight, cap))
+        print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
     dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
