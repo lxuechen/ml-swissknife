@@ -52,12 +52,12 @@ def consensus(
         blond_hair = attr[blond_hair_index].item()
         image = misc.load_image_tensor(image_pil=image, image_size=image_size, device=device)
 
-        if male == 0:
+        if male == 0:  # Female.
             if black_hair == 1:
                 if len(images) >= num_per_group:
                     continue
                 images.append(image)
-            if blond_hair == 1:
+            elif blond_hair == 1:
                 if len(images2) >= num_per_group:
                     continue
                 images2.append(image)
