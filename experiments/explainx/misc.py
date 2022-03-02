@@ -10,6 +10,9 @@ from torchvision import transforms
 import torchvision.transforms.functional as F
 from torchvision.transforms.functional import InterpolationMode
 
+CHANNEL_MEAN = (0.48145466, 0.4578275, 0.40821073)
+CHANNEL_STD = (0.26862954, 0.26130258, 0.27577711)
+
 
 def show(imgs, path):
     if not isinstance(imgs, list):
@@ -42,7 +45,7 @@ def load_image_tensor(
     transform = transforms.Compose([
         transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
         transforms.ToTensor(),
-        transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
+        transforms.Normalize(CHANNEL_MEAN, CHANNEL_STD)
     ])
     image = transform(raw_image).unsqueeze(0).to(device)
     return image
