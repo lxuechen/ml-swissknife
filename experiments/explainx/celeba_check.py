@@ -20,6 +20,11 @@ celeba_data_path = "/home/lxuechen_stanford_edu/data/img_align_celeba"
 metadata_path = "/home/lxuechen_stanford_edu/data/list_attr_celeba.txt"
 dump_dir = "/nlp/scr/lxuechen/explainx/celeba"
 
+if torch.cuda.is_available():
+    root = "/home/lxuechen_stanford_edu/data"
+else:
+    root = "/Users/xuechenli/data"
+
 
 @torch.no_grad()
 def consensus(
@@ -30,7 +35,7 @@ def consensus(
     contrastive_mode: str = "subtraction",  # one of 'subtraction' 'marginalization'
 ):
     # Female with blond and dark hair.
-    celeba = torchvision.datasets.CelebA(root="/Users/xuechenli/data", download=True)
+    celeba = torchvision.datasets.CelebA(root=root, download=True)
     attr_names: List = celeba.attr_names
     blond_hair_index = attr_names.index("Blond_Hair")
     black_hair_index = attr_names.index("Black_Hair")
