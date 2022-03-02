@@ -93,10 +93,10 @@ def consensus(
     print(f"{captions}")
 
 
-def main(task="consensus"):
+def main(task="consensus", **kwargs):
     # python -m explainx.celeba_check
     if task == "consensus":
-        consensus()
+        consensus(**kwargs)
 
 
 if __name__ == "__main__":
