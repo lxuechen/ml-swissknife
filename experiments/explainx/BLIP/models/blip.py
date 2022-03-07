@@ -9,6 +9,7 @@ from typing import Sequence, Union, List, Optional, Tuple
 import warnings
 
 warnings.filterwarnings("ignore")
+import torch.nn.functional as F
 
 from .vit import VisionTransformer, interpolate_pos_embed
 from .med import BertConfig, BertModel, BertLMHeadModel
@@ -101,29 +102,38 @@ class BLIP_Decoder(nn.Module):
         self.prompt = prompt
         self.prompt_length = len(self.tokenizer(self.prompt).input_ids) - 1
 
-    def forward(self, image, caption):
-
+    def forward(self, image, caption, label_smoothing: int = 0.1, return_tensor_loss=False):
         image_embeds = self.visual_encoder(image)
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
-        text = self.tokenizer(caption, padding='longest', truncation=True, max_length=40, return_tensors="pt").to(
-            image.device)
-
+        text = self.tokenizer(
+            caption, padding='longest', truncation=True, max_length=40, return_tensors="pt"
+        ).to(image.device)
         text.input_ids[:, 0] = self.tokenizer.bos_token_id
 
         decoder_targets = text.input_ids.masked_fill(text.input_ids == self.tokenizer.pad_token_id, -100)
         decoder_targets[:, :self.prompt_length] = -100
 
-        decoder_output = self.text_decoder(text.input_ids,
-                                           attention_mask=text.attention_mask,
-                                           encoder_hidden_states=image_embeds,
-                                           encoder_attention_mask=image_atts,
-                                           labels=decoder_targets,
-                                           return_dict=True,
-                                           )
-        loss_lm = decoder_output.loss
+        decoder_output = self.text_decoder(
+            text.input_ids,
+            attention_mask=text.attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_atts,
+            labels=decoder_targets,
+            return_dict=True,
+        )
 
-        return loss_lm
+        if return_tensor_loss:
+            # Return (batch_size,) losses, each is summed for a sequence.
+            tensor_loss = F.cross_entropy(
+                decoder_output.logits.permute(0, 2, 1)[:, :, :-1],
+                decoder_targets[:, 1:],
+                label_smoothing=label_smoothing,
+                reduction='none'
+            )
+            return tensor_loss.sum(dim=-1)
+        else:
+            return decoder_output.loss
 
     # lxuechen: Helpful when there's also contrastive images.
     def _create_conditioning_tensors(
