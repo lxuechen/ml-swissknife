@@ -1961,6 +1961,9 @@ class GenerationMixin:
         if average_consensus:
             consensus_scores /= len(encoder_hidden_states)
 
+        # Per-step normalization.
+        consensus_scores = consensus_scores.log_softmax(dim=-1)
+
         return consensus_scores
 
     # lxuechen: Rough logic of new beam search:
@@ -2134,6 +2137,8 @@ class GenerationMixin:
 
         def agg_scores(cs, bs):
             """Aggregate the consensus scores computed at each step with the beam score."""
+            # cs: (batch_size * beam_size, vocab_size)
+            # bs: (batch_size * beam_size,)
             return cs + bs[:, None].expand_as(cs)  # Expand latter to vocab_size.
 
         all_pos_scores = init_scores()
