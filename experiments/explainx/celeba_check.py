@@ -1,5 +1,7 @@
 """
 Gender <-> hair color.
+
+python -m explainx.celeba_check
 """
 
 import os
@@ -28,11 +30,14 @@ else:
 @torch.no_grad()
 def consensus(
     num_per_group=10,
+    num_group1=None,
+    num_group2=None,
     image_size=384,
     z0_div_z1=1.,
     dump_dir="/nlp/scr/lxuechen/explainx/celeba",
     dump_file: str = 'caps-weights.json',
     contrastive_mode: str = "subtraction",  # one of 'subtraction' 'marginalization'
+    average_consensus: bool = True,
     black_first=True,
     gender_target: int = 0,  # Either 0 or 1.
 ):
@@ -46,10 +51,15 @@ def consensus(
     black_hair_index = attr_names.index("Black_Hair")
     male_index = attr_names.index("Male")
 
+    if num_group1 is None:
+        num_group1 = num_per_group
+    if num_group2 is None:
+        num_group2 = num_per_group
+
     images = []  # Female with dark hair.
     images2 = []  # Female with blonde hair.
     for i, (image, attr) in enumerate(celeba):
-        if len(images) >= num_per_group and len(images2) >= num_per_group:
+        if len(images) >= num_group1 and len(images2) >= num_group2:
             break
 
         male = attr[male_index].item()
@@ -59,17 +69,18 @@ def consensus(
 
         if male == gender_target:
             if black_hair == 1:
-                if len(images) >= num_per_group:
+                if len(images) >= num_group1:
                     continue
                 images.append(image)
             elif blond_hair == 1:
-                if len(images2) >= num_per_group:
+                if len(images2) >= num_group2:
                     continue
                 images2.append(image)
     if black_first:
         group1, group2 = images, images2
     else:  # blond first.
         group1, group2 = images2, images
+    print(f'num images from group1: {len(images)}, from group2: {len(images2)}')
 
     # Show the images!
     torchvision.utils.save_image(
@@ -96,7 +107,7 @@ def consensus(
         cap = model.generate(
             images=group1, images2=group2,
             sample=False, num_beams=20, max_length=50, min_length=3, contrastive_weight=contrastive_weight,
-            z0_div_z1=z0_div_z1, contrastive_mode=contrastive_mode,
+            z0_div_z1=z0_div_z1, contrastive_mode=contrastive_mode, average_consensus=average_consensus,
         )[0]
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
@@ -105,14 +116,13 @@ def consensus(
 
     captions = model.generate(
         images=images,
-        sample=False, num_beams=5, max_length=50, min_length=3,
+        sample=False, num_beams=5, max_length=50, min_length=3, average_consensus=average_consensus,
     )
     print('caption with only positives')
     print(f"{captions}")
 
 
 def main(task="consensus", **kwargs):
-    # python -m explainx.celeba_check
     if task == "consensus":
         consensus(**kwargs)
 

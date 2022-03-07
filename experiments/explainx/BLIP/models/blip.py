@@ -160,11 +160,13 @@ class BLIP_Decoder(nn.Module):
         contrastive_weight: float = 1.,
         z0_div_z1: float = 1.,
         contrastive_mode: str = "subtraction",
+        average_consensus: bool = True,
     ) -> List[str]:
         model_kwargs = dict(
             contrastive_weight=contrastive_weight,
             z0_div_z1=z0_div_z1,
             contrastive_mode=contrastive_mode,
+            average_consensus=average_consensus
         )  # str -> list of tensors.
         if not isinstance(images, (tuple, list)):
             images = [images]
