@@ -1917,6 +1917,7 @@ class GenerationMixin:
         cur_len,
         encoder_hidden_states,
         encoder_attention_mask,
+        average_consensus: bool,
     ):
         if not isinstance(encoder_hidden_states, (list, tuple)):
             encoder_hidden_states = [encoder_hidden_states]
@@ -1956,6 +1957,9 @@ class GenerationMixin:
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
             consensus_scores = consensus_fn(consensus_scores, next_token_scores_processed)
+
+        if average_consensus:
+            consensus_scores /= len(encoder_hidden_states)
 
         return consensus_scores
 
@@ -2164,6 +2168,7 @@ class GenerationMixin:
                 cur_len=cur_len,
                 encoder_hidden_states=model_kwargs.get("encoder_hidden_states", [None]),
                 encoder_attention_mask=model_kwargs.get("encoder_attention_mask", [None]),
+                average_consensus=model_kwargs.get("average_consensus", True),
             )
             all_pos_scores = agg_scores(pos_scores, all_pos_scores)
             next_token_scores = all_pos_scores.detach().clone()
@@ -2189,6 +2194,7 @@ class GenerationMixin:
                     cur_len=cur_len,
                     encoder_hidden_states=model_kwargs.get("encoder_hidden_states2"),
                     encoder_attention_mask=model_kwargs.get("encoder_attention_mask2"),
+                    average_consensus=model_kwargs.get("average_consensus", True),
                 )
                 all_neg_scores = agg_scores(neg_scores, all_neg_scores)
                 if contrastive_mode == "subtraction":
