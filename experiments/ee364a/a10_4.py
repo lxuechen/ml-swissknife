@@ -45,6 +45,8 @@ class Soln:
 
 
 def _solve_residual(soln: Soln, prob: LPCenteringProb):
+    # correct
+    # gradf + A^t nu, A x - b
     x, nu = soln.x, soln.nu
     A = prob.A
     g = prob.c - 1. / x + A.t() @ nu
@@ -53,6 +55,7 @@ def _solve_residual(soln: Soln, prob: LPCenteringProb):
 
 
 def _solve_kkt(soln: Soln, prob: LPCenteringProb):
+    # correct
     # textbook 10.21 + 10.33s
     x, nu = soln.x, soln.nu
     Hinv = torch.diag(x ** 2.)
@@ -71,7 +74,7 @@ def _solve_kkt(soln: Soln, prob: LPCenteringProb):
 def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=10 ** -6, return_residual_norms=False):
     if not torch.all(soln.x > 0):
         raise ValueError("Initial iterate not in domain")
-    if not (0 < alpha < .5) or not (0 < beta < 1):
+    if not (0 < alpha < .5) or not (0 < beta < 1.):
         raise ValueError("Invalid solver params")
 
     this_step = 0
@@ -95,7 +98,6 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
                 break
             t = beta * t  # Reduce step size.
         # ===
-        print(res.norm())
         soln = proposal
         res = new_res
         this_step += 1
@@ -109,25 +111,33 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
 
 
 def _generate_prob(m=5, n=10):
-    A = torch.randn(m, n).abs()
-    p = torch.randn(n)
+    A = torch.randn(m, n)
+    A[0].abs_()
+    rank = torch.linalg.matrix_rank(A)
+    assert rank == m
+
+    p = torch.randn(n).abs()  # Make positive.
     b = A @ p
     c = torch.randn(n).exp()
 
-    x = torch.randn(n).exp()  # Make positive.
-    nu = torch.zeros(m)
+    x = torch.randn(n).exp() * 2  # Make positive.
+    nu = torch.randn(m)
     return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c)
 
 
 @torch.no_grad()
-def main():
+def main(seed=0):
+    torch.manual_seed(seed)
     torch.set_default_dtype(torch.float64)
 
     soln, prob = _generate_prob()
     soln, steps, residual_norms = solve(
-        soln=soln, prob=prob, alpha=0.45, beta=0.9, return_residual_norms=True
+        soln=soln, prob=prob,
+        alpha=0.3, beta=0.9, return_residual_norms=True, max_steps=100,
     )
-    print(soln, steps)
+    print(soln)
+    print(steps)
+    print(residual_norms)
 
 
 if __name__ == "__main__":
