@@ -1,11 +1,10 @@
 """
 
-- Plot residual norms to verify quadratic convergence (semilog).
-- Stop when norm residual <= 10 ** -6 or num iterations reach 50.
-- vary algo. parameters alpha, beta
-- generating the problem instance requires care
-- feasible vs non-feasible (unbounded below)
-  - TODO when is it infeasible???
+[x] Plot residual norms to verify quadratic convergence (semilog).
+[x] Stop when norm residual <= 10 ** -6 or num iterations reach 50.
+[ ] Vary algo. parameters alpha, beta
+[x] Generating the problem instance requires care
+[ ] Feasible vs non-feasible
 
 - backtracking line search has to backtrack until the new point, x + t * dx, is in the domain of the objective function
 -  the sufficient decrease condition, is that you iterate on reducing t until the 2 norm of the residual at the new
@@ -69,16 +68,21 @@ def _solve_kkt(soln: Soln, prob: LPCenteringProb):
     return Soln(x=v, nu=w)  # Descent direction.
 
 
-def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=10 ** -6):
+def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=10 ** -6, return_residual_norms=False):
     if not torch.all(soln.x > 0):
         raise ValueError("Initial iterate not in domain")
     if not (0 < alpha < .5) or not (0 < beta < 1):
         raise ValueError("Invalid solver params")
 
-    steps = 0
+    residual_norms = []
+    steps = []
+    this_step = 0
     while True:
         res = _solve_residual(soln=soln, prob=prob)
         direction = _solve_kkt(soln, prob)
+
+        steps.append(this_step)
+        residual_norms.append(res.norm().item())
 
         # === backtracking line search
         t = 1.
@@ -91,14 +95,17 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
                 break
             t = beta * t  # Reduce step size.
         # ===
-        print(steps)
 
         soln = proposal
         res = new_res
-        steps += 1
-        if steps >= max_steps or res.norm() <= epsilon:
+        this_step += 1
+        if this_step >= max_steps or res.norm() <= epsilon:
             break
-    return soln, steps
+
+    if return_residual_norms:
+        return soln, steps, residual_norms
+    else:
+        return soln, steps
 
 
 def _generate_prob(m=5, n=10, unbounded=True):
@@ -120,8 +127,8 @@ def _generate_prob(m=5, n=10, unbounded=True):
 def main():
     soln, prob = _generate_prob()
 
-    soln, steps = solve(
-        soln=soln, prob=prob, alpha=0.1, beta=0.5,
+    soln, steps, residual_norms = solve(
+        soln=soln, prob=prob, alpha=0.1, beta=0.8, return_residual_norms=True
     )
     print(soln, steps)
 
