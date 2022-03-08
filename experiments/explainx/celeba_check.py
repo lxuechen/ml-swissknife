@@ -189,7 +189,7 @@ def check_score(
     model = _make_model(image_size=image_size).eval()
 
     setup = (
-        f"group1={'black hair' if black_first else 'blond hair'}" +
+        f"group1={'black hair' if black_first else 'blond hair'}; " +
         f"group2={'blond hair' if black_first else 'black hair'}"
     )
     results = dict(setup=setup)
