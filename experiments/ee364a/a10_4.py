@@ -13,13 +13,14 @@ the residual at the current iterate
 
 Common mistakes:
     - nan due to division
-    - not checking if iterate still in domain
+    - not checking if iterate still in domain (use `in_domain`)
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Callable
 
 import fire
+import numpy as np
 import torch
 
 
@@ -43,6 +44,7 @@ class LPCenteringProb:
     A: torch.Tensor
     b: torch.Tensor
     c: torch.Tensor
+    in_domain: Optional[Callable] = None
 
     def loss(self, soln: Soln):
         return self.c @ soln.x - torch.log(soln.x).sum()
@@ -88,9 +90,6 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
     while True:
         res = _solve_residual(soln=soln, prob=prob)
         direction = _solve_kkt(soln, prob)
-        print(res)
-        print(direction)
-        import pdb; pdb.set_trace()
 
         steps.append(this_step)
         residual_norms.append(res.norm().item())
@@ -103,7 +102,10 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
 
             factor = (1. - alpha * t)
             if new_res.norm() <= factor * res.norm():
-                break
+                if prob.in_domain is None:
+                    break
+                elif prob.in_domain(proposal):
+                    break
             t = beta * t  # Reduce step size.
         # ===
         soln = proposal
@@ -125,29 +127,30 @@ def _generate_prob():
 
     p = torch.randn(n).abs()  # Make positive.
     b = A @ p
-    c = torch.zeros(n)
+    c = torch.randn(n)
+    in_domain = lambda soln: torch.all(soln.x > 0)
 
     x = torch.randn(n).exp() * 2  # Make positive.
     nu = torch.randn(m)
-    return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c)
+
+    return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c, in_domain=in_domain)
 
 
 def _load_example_prob():
-    import numpy as np
+    """Problem for one-step sanity check."""
     m = 4
     n = 8
     np.random.seed(364)
     A = np.round(np.random.rand(m, n), 2)
-    A = np.vstack((A, np.ones(n)));
-    p = np.random.rand(n);
+    A = np.vstack((A, np.ones(n)))
+    p = np.random.rand(n)
     b = np.round(A.dot(p), 2)
     c = np.round(np.random.rand(n), 2)
     x0 = np.random.rand(n)
     nu = np.zeros((m + 1,))
-    A, b, c, x0,nu = tuple(
-        torch.from_numpy(a) for a in (A, b, c, x0, nu)
-    )
-    return Soln(x=x0, nu=nu), LPCenteringProb(A=A, b=b, c=c)
+    A, b, c, x0, nu = tuple(torch.from_numpy(a) for a in (A, b, c, x0, nu))
+    in_domain = lambda soln: torch.all(soln.x > 0)
+    return Soln(x=x0, nu=nu), LPCenteringProb(A=A, b=b, c=c, in_domain=in_domain)
 
     # Use alpha = 0.1
     #     beta = 0.5
@@ -172,18 +175,15 @@ def main(seed=0):
     torch.manual_seed(seed)
     torch.set_default_dtype(torch.float64)
 
-    # soln, prob = _generate_prob()
-
-    soln, prob = _load_example_prob()
-
+    soln, prob = _generate_prob()
     soln, steps, residual_norms, losses = solve(
         soln=soln, prob=prob,
         alpha=0.1, beta=0.5, epsilon=1e-5,
     )
-    # print(soln)
-    # print(steps)
-    # print(residual_norms)
-    # print(losses)
+    print(soln)
+    print(steps)
+    print(residual_norms)
+    print(losses)
 
 
 if __name__ == "__main__":
