@@ -113,6 +113,10 @@ def consensus(
 
     dump_dir="/nlp/scr/lxuechen/explainx/celeba",
     dump_file: str = 'caps-weights.json',
+
+    num_beams=20,
+    max_length=50,
+    min_length=3,
 ):
     if gender_target not in (0, 1):
         raise ValueError(f"Unknown `gender_target`: {gender_target}")
@@ -129,24 +133,33 @@ def consensus(
     )
     model = _make_model(image_size=image_size).eval()
 
+    beam_search_kwargs = dict(
+        num_beams=num_beams,
+        max_length=max_length,
+        min_length=min_length,
+    )
     contrastive_weights = np.concatenate(
         [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5), np.linspace(1.2, 2, num=5)]
     ).tolist()  # Serializable.
     pairs = []
     for contrastive_weight in tqdm.tqdm(contrastive_weights):
         cap = model.generate(
-            images=group1, images2=group2,
-            sample=False, num_beams=20, max_length=50, min_length=3, contrastive_weight=contrastive_weight,
-            z0_div_z1=z0_div_z1, contrastive_mode=contrastive_mode, average_consensus=average_consensus,
+            images=group1, images2=group2, sample=False,
+            contrastive_weight=contrastive_weight,
+            z0_div_z1=z0_div_z1,
+            contrastive_mode=contrastive_mode,
+            average_consensus=average_consensus,
+            **beam_search_kwargs
         )[0]
         pairs.append((contrastive_weight, cap))
-        print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
+        print(f"contrastive_weight: {contrastive_weight:.2f}, cap: {cap}")
     dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
     captions = model.generate(
-        images=group1,
-        sample=False, num_beams=5, max_length=50, min_length=3, average_consensus=average_consensus,
+        images=group1, sample=False,
+        average_consensus=average_consensus,
+        **beam_search_kwargs
     )
     print('caption with only positives')
     print(f"{captions}")
