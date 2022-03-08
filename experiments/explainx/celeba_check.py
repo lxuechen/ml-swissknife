@@ -188,10 +188,14 @@ def check_score(
     )
     model = _make_model(image_size=image_size).eval()
 
-    results = dict()
+    setup = (
+        f"group1={'black hair' if black_first else 'blond hair'}" +
+        f"group2={'blond hair' if black_first else 'black hair'}"
+    )
+    results = dict(setup=setup)
     for caption in captions:
         results[caption] = dict()
-        for idx, group in enumerate((group1, group2)):
+        for idx, group in enumerate((group1, group2), 1):
             tensor_loss = model(
                 images=group,
                 caption=caption,
