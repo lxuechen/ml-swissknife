@@ -1,12 +1,12 @@
 """
 Gender <-> hair color.
 
-python -m explainx.celeba_check
+python -m explainx.celeba_check --task consensus
 python -m explainx.celeba_check --task check_score
 """
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import fire
 import numpy as np
@@ -93,7 +93,7 @@ def _make_model(image_size):
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
     model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
-    model.to(device).eval()
+    model.to(device)
     return model
 
 
@@ -126,7 +126,7 @@ def consensus(
         image_size=image_size,
         dump_dir=dump_dir,
     )
-    model = _make_model(image_size=image_size)
+    model = _make_model(image_size=image_size).eval()
 
     contrastive_weights = np.concatenate(
         [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5), np.linspace(1.2, 2, num=5)]
@@ -153,7 +153,11 @@ def consensus(
 
 @torch.no_grad()
 def check_score(
-    caption: str = "a woman with black hair",
+    captions: Tuple[str] = (
+        "a woman with black hair",
+        "black hair",
+        "a woman",
+    ),
 
     num_per_group=10,
     num_group1=None,
@@ -181,18 +185,20 @@ def check_score(
         image_size=image_size,
         dump_dir=dump_dir,
     )
-    model = _make_model(image_size=image_size)
+    model = _make_model(image_size=image_size).eval()
 
     results = dict()
-    for idx, group in enumerate((group1, group2)):
-        loss = model(
-            images=group,
-            caption=caption,
-            label_smoothing=0.0,
-            average_consensus=average_consensus,
-            return_batch_loss=False,
-        )
-        results[f"group{idx}_loss"] = loss.cpu().item()
+    for caption in captions:
+        results[caption] = dict()
+        for idx, group in enumerate((group1, group2)):
+            loss = model(
+                images=group,
+                caption=caption,
+                label_smoothing=0.0,
+                average_consensus=average_consensus,
+                return_batch_loss=False,
+            )
+            results[caption][f"group{idx}_loss"] = loss.cpu().item()
     print(f'results: {results}')
 
     utils.jdump(
