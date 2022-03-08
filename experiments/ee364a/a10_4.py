@@ -23,6 +23,8 @@ import fire
 import numpy as np
 import torch
 
+from swissknife import utils
+
 
 @dataclass
 class Soln:
@@ -118,8 +120,8 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
 
 
 def _generate_prob():
-    m = 5
-    n = 10
+    m = 50
+    n = 100
     A = torch.randn(m, n)
     A[0].abs_()
     rank = torch.linalg.matrix_rank(A)
@@ -130,7 +132,7 @@ def _generate_prob():
     c = torch.randn(n)
     in_domain = lambda soln: torch.all(soln.x > 0)
 
-    x = torch.randn(n).exp() * 2  # Make positive.
+    x = torch.randn(n).exp()  # Make positive.
     nu = torch.randn(m)
 
     return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c, in_domain=in_domain)
@@ -178,12 +180,19 @@ def main(seed=0):
     soln, prob = _generate_prob()
     soln, steps, residual_norms, losses = solve(
         soln=soln, prob=prob,
-        alpha=0.1, beta=0.5, epsilon=1e-5,
+        alpha=0.4, beta=0.9, epsilon=1e-7,
     )
     print(soln)
     print(steps)
     print(residual_norms)
     print(losses)
+
+    utils.plot_wrapper(
+        img_path=utils.join('.', 'plots', 'a10_4'),
+        suffixes=(".png", '.pdf'),
+        plots=[dict(x=steps, y=residual_norms, label='infeasible start Newton')],
+        options=dict(xlabel='step count', ylabel='norm of residual', yscale='log')
+    )
 
 
 if __name__ == "__main__":
