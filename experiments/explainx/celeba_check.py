@@ -5,6 +5,7 @@ python -m explainx.celeba_check --task consensus
 python -m explainx.celeba_check --task check_score
 """
 
+import json
 import os
 from typing import List, Optional, Tuple
 
@@ -191,15 +192,18 @@ def check_score(
     for caption in captions:
         results[caption] = dict()
         for idx, group in enumerate((group1, group2)):
-            loss = model(
+            tensor_loss = model(
                 images=group,
                 caption=caption,
                 label_smoothing=0.0,
                 average_consensus=average_consensus,
-                return_batch_loss=False,
+                return_tensor_loss=True,
             )
-            results[caption][f"group{idx}_loss"] = loss.cpu().item()
-    print(f'results: {results}')
+            token_loss = tensor_loss.mean(dim=1).mean(dim=0)
+            sequence_loss = tensor_loss.sum(dim=1).mean(dim=0)
+            results[caption][f"group{idx}_token_loss"] = token_loss.cpu().item()
+            results[caption][f"group{idx}_sequence_loss"] = sequence_loss.cpu().item()
+    print(f'results: {json.dumps(results, indent=4)}')
 
     utils.jdump(
         results,

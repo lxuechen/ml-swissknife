@@ -146,7 +146,7 @@ class BLIP_Decoder(nn.Module):
         average_consensus=True,
         consensus_fn=None,
         label_smoothing: int = 0.1,
-        return_batch_loss=False,
+        return_tensor_loss=False,
     ):
         """Get the loss under consensus scoring based on a group of images."""
         if not isinstance(images, (tuple, list)):
@@ -156,12 +156,17 @@ class BLIP_Decoder(nn.Module):
         )
 
         text = self.tokenizer(
-            caption, padding='longest', truncation=True, max_length=40, return_tensors="pt"
+            self.prompt + caption, padding='longest', truncation=True, max_length=40, return_tensors="pt"
         ).to(self._device)
         text.input_ids[:, 0] = self.tokenizer.bos_token_id
 
         decoder_targets = text.input_ids.masked_fill(text.input_ids == self.tokenizer.pad_token_id, -100)
         decoder_targets[:, :self.prompt_length] = -100
+
+        full_caption_text = self.tokenizer.decode(text.input_ids.cpu().tolist()[0])
+        loss_caption_text = self.tokenizer.decode(decoder_targets[:, self.prompt_length:].cpu().tolist()[0])
+        print(f'full caption: {full_caption_text}')
+        print(f'caption where loss is computed: {loss_caption_text}')
 
         if consensus_fn is None:
             consensus_fn = lambda x, y: x + y
@@ -179,8 +184,7 @@ class BLIP_Decoder(nn.Module):
             label_smoothing=label_smoothing,
             reduction='none'
         )
-        batch_loss = tensor_loss.sum(dim=-1)  # Sum over sequence.
-        return batch_loss if return_batch_loss else batch_loss.mean(dim=0)
+        return tensor_loss if return_tensor_loss else tensor_loss.mean(dim=0)
 
     # lxuechen: Helpful when there's also contrastive images.
     def _create_conditioning_tensors(
