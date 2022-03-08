@@ -74,9 +74,9 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
     if not (0 < alpha < .5) or not (0 < beta < 1):
         raise ValueError("Invalid solver params")
 
+    this_step = 0
     residual_norms = []
     steps = []
-    this_step = 0
     while True:
         res = _solve_residual(soln=soln, prob=prob)
         direction = _solve_kkt(soln, prob)
@@ -91,11 +91,11 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
             new_res = _solve_residual(soln=proposal, prob=prob)
 
             factor = (1. - alpha * t)
-            if new_res.norm() < factor * res.norm():
+            if new_res.norm() <= factor * res.norm():
                 break
             t = beta * t  # Reduce step size.
         # ===
-
+        print(res.norm())
         soln = proposal
         res = new_res
         this_step += 1
@@ -108,27 +108,24 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
         return soln, steps
 
 
-def _generate_prob(m=5, n=10, unbounded=True):
-    A = torch.randn(m, n)
-    if unbounded:
-        A[0].abs_()
-    else:
-        A = -A.abs()
+def _generate_prob(m=5, n=10):
+    A = torch.randn(m, n).abs()
     p = torch.randn(n)
     b = A @ p
-    c = torch.randn(n).exp() / 3
+    c = torch.randn(n).exp()
 
-    x = torch.randn(n).exp() / 3  # Make positive.
+    x = torch.randn(n).exp()  # Make positive.
     nu = torch.zeros(m)
     return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c)
 
 
 @torch.no_grad()
 def main():
-    soln, prob = _generate_prob()
+    torch.set_default_dtype(torch.float64)
 
+    soln, prob = _generate_prob()
     soln, steps, residual_norms = solve(
-        soln=soln, prob=prob, alpha=0.1, beta=0.8, return_residual_norms=True
+        soln=soln, prob=prob, alpha=0.45, beta=0.9, return_residual_norms=True
     )
     print(soln, steps)
 
