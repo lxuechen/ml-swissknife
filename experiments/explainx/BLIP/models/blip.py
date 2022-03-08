@@ -5,22 +5,21 @@
  * For full license text, see LICENSE.txt file in the repo root or https://opensource.org/licenses/BSD-3-Clause
  * By Junnan Li
 '''
-from typing import Sequence, Union, List, Optional, Tuple
+import os
+from typing import Sequence, Union, List, Optional, Tuple, Callable
+from urllib.parse import urlparse
 import warnings
 
-warnings.filterwarnings("ignore")
-import torch.nn.functional as F
-
-from .vit import VisionTransformer, interpolate_pos_embed
-from .med import BertConfig, BertModel, BertLMHeadModel
-from transformers import BertTokenizer
-
+from timm.models.hub import download_cached_file
 import torch
 from torch import nn
+import torch.nn.functional as F
 
-import os
-from urllib.parse import urlparse
-from timm.models.hub import download_cached_file
+from transformers import BertTokenizer
+from .med import BertConfig, BertModel, BertLMHeadModel
+from .vit import VisionTransformer, interpolate_pos_embed
+
+warnings.filterwarnings("ignore")
 
 
 class BLIP_Base(nn.Module):
@@ -102,38 +101,86 @@ class BLIP_Decoder(nn.Module):
         self.prompt = prompt
         self.prompt_length = len(self.tokenizer(self.prompt).input_ids) - 1
 
-    def forward(self, image, caption, label_smoothing: int = 0.1, return_tensor_loss=False):
-        image_embeds = self.visual_encoder(image)
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
+    @property
+    def _device(self):
+        return next(self.parameters()).device
+
+    def _generate_consensus_multistep(
+        self,
+        text,
+        encoder_hidden_states: List[torch.Tensor],
+        encoder_attention_mask: List[torch.Tensor],
+        consensus_fn: Callable,
+        average_consensus: bool,
+    ):
+        """Same logic as `_generate_consensus` in generation_utils.py but parallelized."""
+        consensus_scores = torch.tensor(0., device=self._device)
+        for this_encoder_hidden_states, this_encoder_attention_mask in zip(
+            encoder_hidden_states, encoder_attention_mask
+        ):
+            decoder_output = self.text_decoder(
+                text.input_ids,
+                attention_mask=text.attention_mask,
+                encoder_hidden_states=this_encoder_hidden_states,
+                encoder_attention_mask=this_encoder_attention_mask,
+                labels=None,
+                return_dict=True,
+            )
+            # (batch_size, vocab_size, seq_len - 1).
+            logits = decoder_output.logits.permute(0, 2, 1)[:, :, :-1]
+            logprob = logits.log_softmax(dim=1)
+            consensus_scores = consensus_fn(consensus_scores, logprob)
+
+        if average_consensus:
+            consensus_scores /= len(encoder_hidden_states)
+
+        # Per-step normalization; get true logits.
+        consensus_scores = consensus_scores.log_softmax(dim=-1)
+
+        return consensus_scores
+
+    def forward(
+        self,
+        images: Union[torch.Tensor, Sequence[torch.Tensor]],
+        caption: str,
+        average_consensus=True,
+        consensus_fn=None,
+        label_smoothing: int = 0.1,
+        return_batch_loss=False,
+    ):
+        """Get the loss under consensus scoring based on a group of images."""
+        if not isinstance(images, (tuple, list)):
+            images = [images]
+        encoder_hidden_states, encoder_attention_mask = self._create_conditioning_tensors(
+            images=images, sample=True, num_beams=1,
+        )
 
         text = self.tokenizer(
             caption, padding='longest', truncation=True, max_length=40, return_tensors="pt"
-        ).to(image.device)
+        ).to(self._device)
         text.input_ids[:, 0] = self.tokenizer.bos_token_id
 
         decoder_targets = text.input_ids.masked_fill(text.input_ids == self.tokenizer.pad_token_id, -100)
         decoder_targets[:, :self.prompt_length] = -100
 
-        decoder_output = self.text_decoder(
-            text.input_ids,
-            attention_mask=text.attention_mask,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            labels=decoder_targets,
-            return_dict=True,
-        )
+        if consensus_fn is None:
+            consensus_fn = lambda x, y: x + y
 
-        if return_tensor_loss:
-            # Return (batch_size,) losses, each is summed for a sequence.
-            tensor_loss = F.cross_entropy(
-                decoder_output.logits.permute(0, 2, 1)[:, :, :-1],
-                decoder_targets[:, 1:],
-                label_smoothing=label_smoothing,
-                reduction='none'
-            )
-            return tensor_loss.sum(dim=-1)
-        else:
-            return decoder_output.loss
+        consensus_scores = self._generate_consensus_multistep(
+            text=text,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            consensus_fn=consensus_fn,
+            average_consensus=average_consensus,
+        )
+        tensor_loss = F.cross_entropy(
+            consensus_scores,
+            decoder_targets[:, 1:],
+            label_smoothing=label_smoothing,
+            reduction='none'
+        )
+        batch_loss = tensor_loss.sum(dim=-1)  # Sum over sequence.
+        return batch_loss if return_batch_loss else batch_loss.mean(dim=0)
 
     # lxuechen: Helpful when there's also contrastive images.
     def _create_conditioning_tensors(
