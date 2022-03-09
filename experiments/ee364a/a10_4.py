@@ -50,47 +50,44 @@ class LPCenteringProb:
     A: torch.Tensor
     b: torch.Tensor
     c: torch.Tensor
+    t: Optional[float] = None  # To reuse in barrier method.
     in_domain: Optional[Callable] = None
 
     def loss(self, soln: Soln):
         return self.c @ soln.x - torch.log(soln.x).sum()
 
+    def _grad(self, soln: Soln):  # grad objective
+        t = 1. if self.t is None else self.t
+        return t * self.c - 1. / soln.x
 
-def _grad(soln, prob):
-    return prob.c - 1. / soln.x
+    def _hinv(self, soln: Soln):  # Hessian inverse.
+        return torch.diag(soln.x ** 2.)
 
+    def solve_residual(self, soln: Soln):
+        # gradf + A^t nu, A x - b
+        x, nu = soln.x, soln.nu
+        g = self._grad(soln) + self.A.t() @ nu
+        h = self.A @ x - self.b
+        return Soln(x=g, nu=h)
 
-def _hinv(soln, prob):  # Hessian inverse.
-    return torch.diag(soln.x ** 2.)
+    def solve_kkt(self, soln: Soln):
+        # Solve for descent direction.
+        # textbook 10.21 + 10.33
+        Hinv = self._hinv(soln)
+        residual = self.solve_residual(soln)
+        g, h = residual.x, residual.nu
 
-
-def _solve_residual(soln: Soln, prob: LPCenteringProb):
-    # correct
-    # gradf + A^t nu, A x - b
-    x, nu = soln.x, soln.nu
-    A = prob.A
-    g = _grad(soln, prob) + A.t() @ nu
-    h = A @ x - prob.b
-    return Soln(x=g, nu=h)
-
-
-def _solve_kkt(soln: Soln, prob: LPCenteringProb):
-    # correct
-    # textbook 10.21 + 10.33s
-    Hinv = _hinv(soln, prob)
-    A = prob.A
-    residual = _solve_residual(soln, prob)
-    g, h = residual.x, residual.nu
-
-    HinvAt = Hinv @ A.t()
-    Hinvg = Hinv @ g
-    S = -A @ HinvAt
-    w = torch.inverse(S) @ (A @ Hinvg - h)
-    v = Hinv @ (- A.t() @ w - g)
-    return Soln(x=v, nu=w)  # Descent direction.
+        HinvAt = Hinv @ self.A.t()
+        Hinvg = Hinv @ g
+        S = -self.A @ HinvAt
+        w = torch.inverse(S) @ (self.A @ Hinvg - h)
+        v = Hinv @ (- self.A.t() @ w - g)
+        return Soln(x=v, nu=w)
 
 
-def infeasible_start_newton_solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon=1e-8):
+def infeasible_start_newton_solve(
+    soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon=1e-8,
+):
     if not torch.all(soln.x > 0):
         raise ValueError("Initial iterate not in domain")
     if not (0 < alpha < .5) or not (0 < beta < 1.):
@@ -102,8 +99,8 @@ def infeasible_start_newton_solve(soln: Soln, prob: LPCenteringProb, alpha, beta
     steps = []
     ls_steps = []
     while True:
-        res = _solve_residual(soln=soln, prob=prob)
-        direction = _solve_kkt(soln, prob)
+        res = prob.solve_residual(soln)
+        direction = prob.solve_kkt(soln)
 
         steps.append(this_step)
         residual_norms.append(res.norm().item())
@@ -113,7 +110,7 @@ def infeasible_start_newton_solve(soln: Soln, prob: LPCenteringProb, alpha, beta
         cnt = 0
         while True:
             proposal = soln + direction * t
-            new_res = _solve_residual(soln=proposal, prob=prob)
+            new_res = prob.solve_residual(soln=proposal)
 
             factor = (1. - alpha * t)
             if new_res.norm() <= factor * res.norm():
