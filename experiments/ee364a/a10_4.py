@@ -15,6 +15,8 @@ the residual at the current iterate
 Common mistakes:
     - nan due to division
     - not checking if iterate still in domain (use `in_domain`)
+
+python -m ee364a.a10_4
 """
 
 from dataclasses import dataclass
@@ -54,12 +56,20 @@ class LPCenteringProb:
         return self.c @ soln.x - torch.log(soln.x).sum()
 
 
+def _grad(soln, prob):
+    return prob.c - 1. / soln.x
+
+
+def _hinv(soln, prob):  # Hessian inverse.
+    return torch.diag(soln.x ** 2.)
+
+
 def _solve_residual(soln: Soln, prob: LPCenteringProb):
     # correct
     # gradf + A^t nu, A x - b
     x, nu = soln.x, soln.nu
     A = prob.A
-    g = prob.c - 1. / x + A.t() @ nu
+    g = _grad(soln, prob) + A.t() @ nu
     h = A @ x - prob.b
     return Soln(x=g, nu=h)
 
@@ -67,8 +77,7 @@ def _solve_residual(soln: Soln, prob: LPCenteringProb):
 def _solve_kkt(soln: Soln, prob: LPCenteringProb):
     # correct
     # textbook 10.21 + 10.33s
-    x, nu = soln.x, soln.nu
-    Hinv = torch.diag(x ** 2.)
+    Hinv = _hinv(soln, prob)
     A = prob.A
     residual = _solve_residual(soln, prob)
     g, h = residual.x, residual.nu
