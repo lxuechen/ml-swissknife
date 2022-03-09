@@ -81,7 +81,7 @@ def _solve_kkt(soln: Soln, prob: LPCenteringProb):
     return Soln(x=v, nu=w)  # Descent direction.
 
 
-def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon=1e-8):
+def infeasible_start_newton_solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon=1e-8):
     if not torch.all(soln.x > 0):
         raise ValueError("Initial iterate not in domain")
     if not (0 < alpha < .5) or not (0 < beta < 1.):
@@ -212,7 +212,7 @@ def main(seed=0):
 
     # Quad conv.
     soln_init, prob = _generate_prob()
-    soln, steps, residual_norms, losses, _ = solve(
+    soln, steps, residual_norms, losses, _ = infeasible_start_newton_solve(
         soln=soln_init, prob=prob,
         alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
     )
@@ -230,7 +230,7 @@ def main(seed=0):
         this_x = alphas
         this_y = []
         for alpha in tqdm.tqdm(alphas, desc="alpha"):
-            soln, steps, residual_norms, losses, ls_steps = solve(
+            soln, steps, residual_norms, losses, ls_steps = infeasible_start_newton_solve(
                 soln=soln_init, prob=prob, alpha=alpha, beta=beta
             )
             this_y.append(steps[-1])
@@ -246,7 +246,7 @@ def main(seed=0):
 
     # infeasible.
     # soln_init, prob = _generate_prob(infeasible=True)
-    # soln, steps, residual_norms, losses, _ = solve(
+    # soln, steps, residual_norms, losses, _ = infeasible_start_newton_solve(
     #     soln=soln_init, prob=prob,
     #     alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
     # )
@@ -259,7 +259,7 @@ def main(seed=0):
 
     # unbounded.
     soln_init, prob = _generate_prob(unbounded=True)
-    soln, steps, residual_norms, losses, _ = solve(
+    soln, steps, residual_norms, losses, _ = infeasible_start_newton_solve(
         soln=soln_init, prob=prob,
         alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=500,
     )
