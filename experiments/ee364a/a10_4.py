@@ -3,8 +3,8 @@
 [x] Plot residual norms to verify quadratic convergence (semilog).
 [x] Stop when norm residual <= 10 ** -6 or num iterations reach 50.
 [x] Generating the problem instance requires care
-[ ] Vary algo. parameters alpha, beta
-[ ] Feasible vs non-feasible
+[x] Vary algo. parameters alpha, beta
+[ ] infeasible, unbounded below
 
 - backtracking line search has to backtrack until the new point, x + t * dx, is in the domain of the objective function
 -  the sufficient decrease condition, is that you iterate on reducing t until the 2 norm of the residual at the new
@@ -126,20 +126,26 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon
     return soln, steps, residual_norms, losses, ls_steps
 
 
-def _generate_prob():
-    m = 200
-    n = 400
-    A = torch.randn(m, n)
-    A[0].abs_()
-    rank = torch.linalg.matrix_rank(A)
-    assert rank == m
+def _generate_prob(infeasible=False):
+    m = 100
+    n = 600
 
-    p = torch.randn(n).abs()  # Make positive.
-    b = A @ p
-    c = torch.randn(n) * 2
+    if infeasible:
+        A = torch.zeros(m, n)
+        b = torch.ones(n)
+    else:
+        A = torch.randn(m, n)
+        A[0].abs_()
+        rank = torch.linalg.matrix_rank(A)
+        assert rank == m
+
+        p = torch.randn(n).abs()  # Make positive.
+        b = A @ p
+
+    c = torch.randn(n)
     in_domain = lambda soln: torch.all(soln.x > 0)
 
-    x = torch.randn(n).exp()  # Make positive.
+    x = torch.randn(n).exp() * 3  # Make positive.
     nu = torch.randn(m)
 
     return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c, in_domain=in_domain)
@@ -201,7 +207,7 @@ def main(seed=0):
     soln_init, prob = _generate_prob()
     alphas = np.linspace(0.01, 0.49, num=10)
     plots = []
-    for beta in tqdm.tqdm(np.linspace(0.1, 0.9, num=9), desc="beta"):
+    for beta in tqdm.tqdm(np.linspace(0.1, 0.9, num=5), desc="beta"):
         this_x = alphas
         this_y = []
         for alpha in tqdm.tqdm(alphas, desc="alpha"):
@@ -211,13 +217,27 @@ def main(seed=0):
             this_y.append(steps[-1])
             print(alpha, ls_steps)
         plots.append(
-            dict(x=this_x, y=this_y, label=f'$\\beta={beta}$', marker='x', alpha=0.4)
+            dict(x=this_x, y=this_y, label=f'$\\beta={beta}$', marker='x', alpha=0.8)
         )
     utils.plot_wrapper(
         img_path=utils.join('.', 'plots', 'a10_4_2'),
         suffixes=(".png", '.pdf'),
         plots=plots,
         options=dict(xlabel='alpha', ylabel='total Newton steps')
+    )
+
+    soln_init, prob = _generate_prob(infeasible=True)
+    soln, steps, residual_norms, losses, _ = solve(
+        soln=soln_init, prob=prob,
+        alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
+    )
+
+    # Quad conv.
+    utils.plot_wrapper(
+        img_path=utils.join('.', 'plots', 'a10_4'),
+        suffixes=(".png", '.pdf'),
+        plots=[dict(x=steps, y=residual_norms, label='infeasible start Newton')],
+        options=dict(xlabel='step count', ylabel='norm of residual', yscale='log', title='infeasible problem')
     )
 
 
