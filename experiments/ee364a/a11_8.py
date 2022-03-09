@@ -23,7 +23,7 @@ def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilo
         prob.t = t  # Solve the right problem.
         soln.nu = torch.zeros_like(soln.nu)
         soln, this_newton_steps, _, _, _ = infeasible_start_newton_solve(
-            soln=soln, prob=prob, epsilon=1e-1, max_steps=2000,
+            soln=soln, prob=prob, epsilon=1e-3, max_steps=2000,
         )
 
         this_step += 1
@@ -67,12 +67,12 @@ def _generate_prob():
 @torch.no_grad()
 def main(seed=0):
     torch.manual_seed(seed)
-    torch.set_default_dtype(torch.float64)
+    torch.set_default_dtype(torch.float64)  # Single precision makes this fail.
 
     soln, prob = _generate_prob()
 
     soln, steps, gaps, newton_steps = barrier_solve(
-        soln=soln, prob=prob, t=0.1, mu=4, verbose=True
+        soln=soln, prob=prob, t=0.1, mu=8, verbose=True
     )
     print(gaps)
     print(newton_steps)
