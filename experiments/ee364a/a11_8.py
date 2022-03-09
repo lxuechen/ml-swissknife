@@ -14,22 +14,28 @@ import torch
 from .a10_4 import Soln, LPCenteringProb, infeasible_start_newton_solve
 
 
-def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilon=1e-3):
+def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilon=1e-3, verbose=False):
     this_step = 0
     steps = []
     newton_steps = []
     gaps = []
     while True:
         prob.t = t  # Solve the right problem.
+        soln.nu = torch.zeros_like(soln.nu)
         soln, this_newton_steps, _, _, _ = infeasible_start_newton_solve(
-            soln=soln, prob=prob,
+            soln=soln, prob=prob, epsilon=1e-2, max_steps=1000,
         )
 
         this_step += 1
         this_gap = prob.m / t
+        this_newton_steps = this_newton_steps[-1]
+
         steps.append(this_step)
         gaps.append(this_gap)
-        newton_steps.append(this_newton_steps[-1])
+        newton_steps.append(this_newton_steps)
+
+        if verbose:
+            print(f'this_step: {this_step}, this_gap: {this_gap}, newton_steps: {this_newton_steps}')
 
         if this_gap < epsilon:
             break
@@ -52,7 +58,7 @@ def _generate_prob():
     c = torch.randn(n)
     in_domain = lambda soln: torch.all(soln.x > 0)
 
-    x = torch.randn(n).exp() * 3  # Make positive.
+    x = torch.randn(n).exp()  # Make positive.
     nu = torch.zeros(m)
 
     return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c, in_domain=in_domain)
@@ -62,7 +68,7 @@ def main():
     soln, prob = _generate_prob()
 
     soln, steps, gaps, newton_steps = barrier_solve(
-        soln=soln, prob=prob, t=1, mu=2
+        soln=soln, prob=prob, t=0.1, mu=1.5, verbose=True
     )
     print(gaps)
     print(newton_steps)

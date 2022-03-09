@@ -20,6 +20,7 @@ python -m ee364a.a10_4
 """
 
 from dataclasses import dataclass
+import logging
 from typing import Optional, Callable
 
 import fire
@@ -134,6 +135,8 @@ def infeasible_start_newton_solve(
         res = new_res
         this_step += 1
         if this_step >= max_steps or res.norm() <= epsilon:
+            if this_step >= max_steps:
+                logging.warning("Hit max steps!")
             steps.append(this_step)
             residual_norms.append(res.norm().item())
             break
