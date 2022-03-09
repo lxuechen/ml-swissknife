@@ -4,7 +4,8 @@
 [x] Stop when norm residual <= 10 ** -6 or num iterations reach 50.
 [x] Generating the problem instance requires care
 [x] Vary algo. parameters alpha, beta
-[ ] infeasible, unbounded below
+[ ] infeasible => KKT linear system cannot be solved if A isn't full rank
+[ ] unbounded below
 
 - backtracking line search has to backtrack until the new point, x + t * dx, is in the domain of the objective function
 -  the sufficient decrease condition, is that you iterate on reducing t until the 2 norm of the residual at the new
@@ -126,13 +127,32 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon
     return soln, steps, residual_norms, losses, ls_steps
 
 
-def _generate_prob(infeasible=False):
+def _generate_prob(infeasible=False, unbounded=False):
     m = 100
     n = 600
 
     if infeasible:
         A = torch.zeros(m, n)
-        b = torch.ones(n)
+        b = torch.ones(m)
+
+        c = torch.randn(n)
+
+        x = torch.randn(n).exp() * 3  # Make positive.
+        nu = torch.randn(m)
+
+    elif unbounded:
+        A = torch.tensor(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0]
+            ],
+            dtype=torch.get_default_dtype()
+        )
+        b = torch.tensor([0, 0], dtype=torch.get_default_dtype())
+        c = torch.zeros(4)
+
+        x = torch.randn(4).exp()
+        nu = torch.zeros(2)
     else:
         A = torch.randn(m, n)
         A[0].abs_()
@@ -142,12 +162,12 @@ def _generate_prob(infeasible=False):
         p = torch.randn(n).abs()  # Make positive.
         b = A @ p
 
-    c = torch.randn(n)
+        c = torch.randn(n)
+
+        x = torch.randn(n).exp() * 3  # Make positive.
+        nu = torch.randn(m)
+
     in_domain = lambda soln: torch.all(soln.x > 0)
-
-    x = torch.randn(n).exp() * 3  # Make positive.
-    nu = torch.randn(m)
-
     return Soln(x=x, nu=nu), LPCenteringProb(A=A, b=b, c=c, in_domain=in_domain)
 
 
@@ -190,13 +210,12 @@ def main(seed=0):
     torch.manual_seed(seed)
     torch.set_default_dtype(torch.float64)
 
+    # Quad conv.
     soln_init, prob = _generate_prob()
     soln, steps, residual_norms, losses, _ = solve(
         soln=soln_init, prob=prob,
         alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
     )
-
-    # Quad conv.
     utils.plot_wrapper(
         img_path=utils.join('.', 'plots', 'a10_4'),
         suffixes=(".png", '.pdf'),
@@ -226,15 +245,27 @@ def main(seed=0):
         options=dict(xlabel='alpha', ylabel='total Newton steps')
     )
 
-    soln_init, prob = _generate_prob(infeasible=True)
+    # infeasible.
+    # soln_init, prob = _generate_prob(infeasible=True)
+    # soln, steps, residual_norms, losses, _ = solve(
+    #     soln=soln_init, prob=prob,
+    #     alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
+    # )
+    # utils.plot_wrapper(
+    #     img_path=utils.join('.', 'plots', 'a10_4_3'),
+    #     suffixes=(".png", '.pdf'),
+    #     plots=[dict(x=steps, y=residual_norms, label='infeasible start Newton')],
+    #     options=dict(xlabel='step count', ylabel='norm of residual', yscale='log', title='infeasible problem')
+    # )
+
+    # unbounded.
+    soln_init, prob = _generate_prob(unbounded=True)
     soln, steps, residual_norms, losses, _ = solve(
         soln=soln_init, prob=prob,
-        alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
+        alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=500,
     )
-
-    # Quad conv.
     utils.plot_wrapper(
-        img_path=utils.join('.', 'plots', 'a10_4'),
+        img_path=utils.join('.', 'plots', 'a10_4_4'),
         suffixes=(".png", '.pdf'),
         plots=[dict(x=steps, y=residual_norms, label='infeasible start Newton')],
         options=dict(xlabel='step count', ylabel='norm of residual', yscale='log', title='infeasible problem')
