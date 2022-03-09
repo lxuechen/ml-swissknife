@@ -25,7 +25,7 @@ def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilo
         prob.t = t  # Solve the right problem.
         soln.nu = torch.zeros_like(soln.nu)
         soln, this_newton_steps, _, _, _ = infeasible_start_newton_solve(
-            soln=soln, prob=prob, max_steps=2000, epsilon=1e-3,
+            soln=soln, prob=prob, max_steps=2000, epsilon=1e-4,
         )
 
         this_step += 1
@@ -102,10 +102,10 @@ def main(seed=0, t=0.1, mu=8):
     # vary mu
     avg_steps = []
     tot_steps = []
-    mus = (2, 4, 8, 16, 32,)
+    mus = (2, 4, 8, 16, 32, 64, 128, 256, 512)
     for mu in tqdm.tqdm(mus, desc="mu"):
-        soln, steps, gaps, newton_steps = barrier_solve(
-            soln=soln_init, prob=prob, t=t, mu=mu, verbose=True
+        _, steps, gaps, newton_steps = barrier_solve(
+            soln=soln_init, prob=prob, t=t, mu=mu, verbose=False
         )
         avg_steps.append(np.mean(newton_steps))
         tot_steps.append(np.sum(newton_steps))
