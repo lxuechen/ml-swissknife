@@ -53,6 +53,14 @@ class LPCenteringProb:
     t: Optional[float] = None  # To reuse in barrier method.
     in_domain: Optional[Callable] = None
 
+    @property
+    def m(self):
+        return self.A.size(0)
+
+    @property
+    def n(self):
+        return self.A.size(1)
+
     def loss(self, soln: Soln):
         return self.c @ soln.x - torch.log(soln.x).sum()
 
@@ -86,7 +94,7 @@ class LPCenteringProb:
 
 
 def infeasible_start_newton_solve(
-    soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon=1e-8,
+    soln: Soln, prob: LPCenteringProb, alpha=0.4, beta=0.9, max_steps=100, epsilon=1e-8,
 ):
     if not torch.all(soln.x > 0):
         raise ValueError("Initial iterate not in domain")
@@ -97,7 +105,7 @@ def infeasible_start_newton_solve(
     residual_norms = []
     losses = []
     steps = []
-    ls_steps = []
+    ls_steps = []  # line search steps
     while True:
         res = prob.solve_residual(soln)
         direction = prob.solve_kkt(soln)
