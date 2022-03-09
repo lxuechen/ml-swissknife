@@ -1,14 +1,15 @@
 """
 [x] terminate based on duality gap at 1e-3
-[ ] check against cvxpy
+[x] check against cvxpy
 [ ] experiment with mu; inner newton steps and total newton steps
-[ ] plot log duality gap vs total newton steps
+[x] plot log duality gap vs total newton steps
     - textbook format step plot
 
 python -m ee364a.a11_8
 """
 
 import fire
+import numpy as np
 import torch
 
 from .a10_4 import Soln, LPCenteringProb, infeasible_start_newton_solve
@@ -23,7 +24,7 @@ def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilo
         prob.t = t  # Solve the right problem.
         soln.nu = torch.zeros_like(soln.nu)
         soln, this_newton_steps, _, _, _ = infeasible_start_newton_solve(
-            soln=soln, prob=prob, epsilon=1e-3, max_steps=2000,
+            soln=soln, prob=prob, max_steps=2000,
         )
 
         this_step += 1
@@ -74,8 +75,28 @@ def main(seed=0):
     soln, steps, gaps, newton_steps = barrier_solve(
         soln=soln, prob=prob, t=0.1, mu=8, verbose=True
     )
-    print(gaps)
-    print(newton_steps)
+    # duality gap vs cumulative Newton steps
+    from swissknife import utils
+    utils.plot_wrapper(
+        img_path=utils.join('.', 'ee364a', 'plots', 'a11_8'),
+        plots=[dict(x=np.cumsum(newton_steps), y=gaps)],
+        options=dict(yscale='log', xlabel='cumulative Newton steps', ylabel='duality gap')
+    )
+
+    # compare against CVXPY
+    import cvxpy as cp
+
+    x = cp.Variable(prob.n)
+    obj = cp.Minimize(prob.c.numpy() @ x)
+    con = [
+        x >= 0.,
+        prob.A.numpy() @ x == prob.b.numpy()
+    ]
+    cp.Problem(obj, con).solve()
+
+    # diff should be small
+    print(np.sum(prob.c.numpy() * soln.x.numpy()))  # -762.7124775791468
+    print(np.sum(prob.c.numpy() * x.value))  # -762.7143847548298
 
 
 if __name__ == "__main__":

@@ -1076,6 +1076,7 @@ def plot_wrapper(*args, suffixes: Optional[Sequence] = None, **kwargs):
 def plot(
     img_path: Optional[str] = None,
     plots: Sequence = (),
+    steps: Sequence = (),
     vlines: Sequence = (),
     hlines: Sequence = (),
     scatters: Sequence = (),
@@ -1087,6 +1088,7 @@ def plot(
     annotates=(),
 
     plots2: Sequence = (),
+    steps2: Sequence = (),
     vlines2: Sequence = (),
     hlines2: Sequence = (),
     scatters2: Sequence = (),
@@ -1114,6 +1116,7 @@ def plot(
     Args:
         img_path (str): A path to the place where the image should be written.
         plots (list of dict, optional): A list of curves that needs `plt.plot`.
+        steps (list of dict, optional): A list of curves that needs `plt.step`.
         vlines (list of dict, optional): A list of vertical lines that needs `plt.vline`.
         scatters (list of dict, optional): A list of scatter plots that needs `plt.scatter`.
         hists (list of histograms, optional): A list of histograms that needs `plt.hist`.
@@ -1123,12 +1126,13 @@ def plot(
         options (dict, optional): A dictionary of optional arguments, such as title, xlabel, ylabel, etc.
 
         plots2: Same format as above, but for twin plot.
-        vlines2 (list of dict, optional): A list of vertical lines that needs `plt.vline`.
+        steps2: Same format as above, but for twin plot.
+        vlines2: Same format as above, but for twin plot.
         scatters2: Same format as above, but for twin plot.
         hists2: Same format as above, but for twin plot.
         errorbars2: Same format as above, but for twin plot.
         bars2: Same format as above, but for twin plot.
-        fill_betweens2: (list of dict, optional): A list of shaded regions; kwargs: 'x', 'y1', 'y2'.
+        fill_betweens2: Same format as above, but for twin plot.
         options2: Same format as above, but for twin plot.
 
         legend_options (dict, optional): A dictionary for kwargs passed to `ax.legend` or `plt.legend`.
@@ -1161,6 +1165,7 @@ def plot(
     _plot(
         ax=ax,
         plots=plots,
+        steps=steps,
         vlines=vlines,
         hlines=hlines,
         errorbars=errorbars,
@@ -1177,6 +1182,7 @@ def plot(
         _plot(
             ax=ax2,
             plots=plots2,
+            steps=steps2,
             vlines=vlines2,
             hlines=hlines2,
             scatters=scatters2,
@@ -1223,7 +1229,7 @@ def _feed_args(options, key, func):
             func(params)
 
 
-def _plot(ax, plots, vlines, hlines, errorbars, scatters, hists, bars, fill_betweens, options, annotates):
+def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fill_betweens, options, annotates):
     if options is None:
         options = dict()
 
@@ -1266,6 +1272,10 @@ def _plot(ax, plots, vlines, hlines, errorbars, scatters, hists, bars, fill_betw
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         kwargs.pop('aux', None)
         ax.plot(entry['x'], entry['y'], **kwargs)
+    for entry in steps:
+        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
+        kwargs.pop('aux', None)
+        ax.step(entry['x'], entry['y'], **kwargs)
     for entry in vlines:
         kwargs = {key: entry[key] for key in entry if key not in ('x', 'ymin', 'ymax')}
         kwargs.pop('aux', None)
