@@ -2,8 +2,8 @@
 
 [x] Plot residual norms to verify quadratic convergence (semilog).
 [x] Stop when norm residual <= 10 ** -6 or num iterations reach 50.
-[ ] Vary algo. parameters alpha, beta
 [x] Generating the problem instance requires care
+[ ] Vary algo. parameters alpha, beta
 [ ] Feasible vs non-feasible
 
 - backtracking line search has to backtrack until the new point, x + t * dx, is in the domain of the objective function
@@ -22,6 +22,7 @@ from typing import Optional, Callable
 import fire
 import numpy as np
 import torch
+import tqdm
 
 from swissknife import utils
 
@@ -79,7 +80,7 @@ def _solve_kkt(soln: Soln, prob: LPCenteringProb):
     return Soln(x=v, nu=w)  # Descent direction.
 
 
-def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=10 ** -6):
+def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=100, epsilon=1e-8):
     if not torch.all(soln.x > 0):
         raise ValueError("Initial iterate not in domain")
     if not (0 < alpha < .5) or not (0 < beta < 1.):
@@ -89,6 +90,7 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
     residual_norms = []
     losses = []
     steps = []
+    ls_steps = []
     while True:
         res = _solve_residual(soln=soln, prob=prob)
         direction = _solve_kkt(soln, prob)
@@ -98,6 +100,7 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
 
         # === backtracking line search
         t = 1.
+        cnt = 0
         while True:
             proposal = soln + direction * t
             new_res = _solve_residual(soln=proposal, prob=prob)
@@ -109,19 +112,23 @@ def solve(soln: Soln, prob: LPCenteringProb, alpha, beta, max_steps=50, epsilon=
                 elif prob.in_domain(proposal):
                     break
             t = beta * t  # Reduce step size.
+            cnt += 1
+        ls_steps.append(cnt)
         # ===
         soln = proposal
         res = new_res
         this_step += 1
         if this_step >= max_steps or res.norm() <= epsilon:
+            steps.append(this_step)
+            residual_norms.append(res.norm().item())
             break
 
-    return soln, steps, residual_norms, losses
+    return soln, steps, residual_norms, losses, ls_steps
 
 
 def _generate_prob():
-    m = 50
-    n = 100
+    m = 200
+    n = 400
     A = torch.randn(m, n)
     A[0].abs_()
     rank = torch.linalg.matrix_rank(A)
@@ -129,7 +136,7 @@ def _generate_prob():
 
     p = torch.randn(n).abs()  # Make positive.
     b = A @ p
-    c = torch.randn(n)
+    c = torch.randn(n) * 2
     in_domain = lambda soln: torch.all(soln.x > 0)
 
     x = torch.randn(n).exp()  # Make positive.
@@ -177,21 +184,40 @@ def main(seed=0):
     torch.manual_seed(seed)
     torch.set_default_dtype(torch.float64)
 
-    soln, prob = _generate_prob()
-    soln, steps, residual_norms, losses = solve(
-        soln=soln, prob=prob,
-        alpha=0.4, beta=0.9, epsilon=1e-7,
+    soln_init, prob = _generate_prob()
+    soln, steps, residual_norms, losses, _ = solve(
+        soln=soln_init, prob=prob,
+        alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
     )
-    print(soln)
-    print(steps)
-    print(residual_norms)
-    print(losses)
 
+    # Quad conv.
     utils.plot_wrapper(
         img_path=utils.join('.', 'plots', 'a10_4'),
         suffixes=(".png", '.pdf'),
         plots=[dict(x=steps, y=residual_norms, label='infeasible start Newton')],
         options=dict(xlabel='step count', ylabel='norm of residual', yscale='log')
+    )
+
+    soln_init, prob = _generate_prob()
+    alphas = np.linspace(0.01, 0.49, num=10)
+    plots = []
+    for beta in tqdm.tqdm(np.linspace(0.1, 0.9, num=9), desc="beta"):
+        this_x = alphas
+        this_y = []
+        for alpha in tqdm.tqdm(alphas, desc="alpha"):
+            soln, steps, residual_norms, losses, ls_steps = solve(
+                soln=soln_init, prob=prob, alpha=alpha, beta=beta
+            )
+            this_y.append(steps[-1])
+            print(alpha, ls_steps)
+        plots.append(
+            dict(x=this_x, y=this_y, label=f'$\\beta={beta}$', marker='x', alpha=0.4)
+        )
+    utils.plot_wrapper(
+        img_path=utils.join('.', 'plots', 'a10_4_2'),
+        suffixes=(".png", '.pdf'),
+        plots=plots,
+        options=dict(xlabel='alpha', ylabel='total Newton steps')
     )
 
 
