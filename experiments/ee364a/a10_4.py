@@ -4,8 +4,8 @@
 [x] Stop when norm residual <= 10 ** -6 or num iterations reach 50.
 [x] Generating the problem instance requires care
 [x] Vary algo. parameters alpha, beta
-[ ] infeasible => KKT linear system cannot be solved if A isn't full rank
-[ ] unbounded below
+[x] infeasible => KKT linear system cannot be solved if A isn't full rank
+[x] unbounded below
 
 - backtracking line search has to backtrack until the new point, x + t * dx, is in the domain of the objective function
 -  the sufficient decrease condition, is that you iterate on reducing t until the 2 norm of the residual at the new
@@ -234,9 +234,8 @@ def main(seed=0):
                 soln=soln_init, prob=prob, alpha=alpha, beta=beta
             )
             this_y.append(steps[-1])
-            print(alpha, ls_steps)
         plots.append(
-            dict(x=this_x, y=this_y, label=f'$\\beta={beta}$', marker='x', alpha=0.8)
+            dict(x=this_x, y=this_y, label=f'$\\beta={beta:.2f}$', marker='x', alpha=0.8)
         )
     utils.plot_wrapper(
         img_path=utils.join('.', 'plots', 'a10_4_2'),
