@@ -80,6 +80,7 @@ def main(seed=0, t=0.5, mu=8):
     from swissknife import utils
     utils.plot_wrapper(
         img_path=utils.join('.', 'ee364a', 'plots', 'a11_8'),
+        suffixes=(".png", '.pdf'),
         steps=[dict(x=np.cumsum(newton_steps), y=gaps)],
         options=dict(yscale='log', xlabel='cumulative Newton steps', ylabel='duality gap')
     )
@@ -102,7 +103,7 @@ def main(seed=0, t=0.5, mu=8):
     # vary mu
     avg_steps = []
     tot_steps = []
-    mus = (2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
+    mus = (2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048)
     for mu in tqdm.tqdm(mus, desc="mu"):
         _, steps, gaps, newton_steps = barrier_solve(
             soln=soln_init, prob=prob, t=t, mu=mu, verbose=False
@@ -110,6 +111,8 @@ def main(seed=0, t=0.5, mu=8):
         avg_steps.append(np.mean(newton_steps))
         tot_steps.append(np.sum(newton_steps))
     utils.plot_wrapper(
+        img_path=utils.join('.', 'ee364a', 'plots', 'a11_8_2'),
+        suffixes=(".png", '.pdf'),
         plots=[
             dict(x=mus, y=avg_steps, label='average steps per centering'),
             dict(x=mus, y=tot_steps, label='total steps'),
