@@ -192,7 +192,7 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
 
 
 def _check_labels(
-    dataset_name="celeba", train_batch_size=128, eval_batch_size=1024,
+    dataset_name="celeba", train_batch_size=128, eval_batch_size=1024, eval_batches=sys.maxsize,
 ):  # Are there examples with both black and blond hair, or neither?
     confusion_mats = dict()
 
@@ -205,7 +205,10 @@ def _check_labels(
         (train_loader, valid_loader, test_loader),
     ):
         confusion_mat = collections.defaultdict(int)
-        for tensors in tqdm.tqdm(loader, desc="batches"):
+        for batch_idx, tensors in tqdm.tqdm(enumerate(loader), desc="batches"):
+            if batch_idx >= eval_batches:
+                break
+
             _, labels = tensors
 
             black_labels = labels[:, 8].bool()
@@ -221,6 +224,7 @@ def _check_labels(
             confusion_mat["not_black_blond"] += not_black_blond
             confusion_mat["not_black_not_blond"] += not_black_not_blond
 
+        confusion_mat = dict(confusion_mat)
         confusion_mats[loader_name] = confusion_mat
         print(f'loader: {loader_name}')
         print(json.dumps(confusion_mat, indent=4))
@@ -254,7 +258,7 @@ def _finetune_clip(
 
 
 def main(task="finetune_clip", **kwargs):
-    if task == "finetune_clips":
+    if task == "finetune_clip":
         _finetune_clip(**kwargs)
     elif task == "check_labels":
         _check_labels(**kwargs)
