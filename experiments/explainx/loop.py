@@ -118,6 +118,9 @@ def evaluate(model, loader, target, num_batches=sys.maxsize):
     xents, zeons = [], []
     model.eval()
     for batch_idx, tensors in enumerate(loader):
+        if batch_idx >= num_batches:
+            break
+
         tensors = tuple(t.to(device) for t in tensors)
         images, labels = tensors
 
@@ -132,7 +135,8 @@ def evaluate(model, loader, target, num_batches=sys.maxsize):
     return tuple(sum(lst) / len(lst) for lst in (zeons, xents))
 
 
-def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="hair"):
+def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="hair", eval_steps=100):
+    global_step = 0
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
         for tensors in tqdm.tqdm(train_loader, desc="batches"):
             tensors = tuple(t.to(device) for t in tensors)
@@ -145,13 +149,14 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
             loss = _loss_fn(logits=logits, labels=labels, target=target)
             loss.backward()
             optimizer.step()
+            global_step += 1
 
-        for loader_name, loader in zip(
-            ('train', 'valid', 'test'),
-            (train_loader, valid_loader, test_loader)
-        ):
-            avg_zeon, avg_xent = evaluate(model, loader, target, max_batches=10)
-            print(f'loader: {loader_name}, epoch: {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
+            if global_step % eval_steps == 0:
+                for loader_name, loader in zip(
+                    ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
+                ):
+                    avg_zeon, avg_xent = evaluate(model, loader, target, max_batches=10)
+                    print(f'loader: {loader_name}, epoch: {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
 
 
 def main(
