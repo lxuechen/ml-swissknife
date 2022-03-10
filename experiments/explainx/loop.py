@@ -114,11 +114,11 @@ def _loss_fn(logits: torch.Tensor, labels: torch.Tensor, target: str, reduction:
 
 
 @torch.no_grad()
-def evaluate(model, loader, target, num_batches=sys.maxsize):
+def evaluate(model, loader, target, eval_batches=sys.maxsize):
     xents, zeons = [], []
     model.eval()
     for batch_idx, tensors in enumerate(loader):
-        if batch_idx >= num_batches:
+        if batch_idx >= eval_batches:
             break
 
         tensors = tuple(t.to(device) for t in tensors)
@@ -135,7 +135,8 @@ def evaluate(model, loader, target, num_batches=sys.maxsize):
     return tuple(sum(lst) / len(lst) for lst in (zeons, xents))
 
 
-def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="hair", eval_steps=100):
+def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="hair",
+          eval_steps=100, eval_batches=20):
     global_step = 0
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
         for tensors in tqdm.tqdm(train_loader, desc="batches"):
@@ -155,7 +156,7 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
                 for loader_name, loader in zip(
                     ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
                 ):
-                    avg_zeon, avg_xent = evaluate(model, loader, target, max_batches=10)
+                    avg_zeon, avg_xent = evaluate(model, loader, target, eval_batches=eval_batches)
                     print(f'loader: {loader_name}, epoch: {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
 
 
