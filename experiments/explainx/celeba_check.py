@@ -18,15 +18,9 @@ import tqdm
 from swissknife import utils
 from . import misc
 from .BLIP.models import blip
+from .common import root
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-celeba_data_path = "/home/lxuechen_stanford_edu/data/img_align_celeba"
-metadata_path = "/home/lxuechen_stanford_edu/data/list_attr_celeba.txt"
-
-if torch.cuda.is_available():
-    root = "/home/lxuechen_stanford_edu/data"
-else:
-    root = "/Users/xuechenli/data"
 
 
 def _make_image_tensors(
@@ -156,6 +150,7 @@ def consensus(
     dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
+    # TODO: There has to be a bug! so different from contrastive.
     captions = model.generate(
         images=group1, sample=False,
         average_consensus=average_consensus,
