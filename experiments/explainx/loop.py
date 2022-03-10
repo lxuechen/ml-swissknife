@@ -5,6 +5,8 @@ celeba predict hair color. clip fine-tuning. check error.
 
 python -m explainx.loop --dataset_name celeba
 """
+import collections
+import json
 import sys
 from typing import Sequence
 
@@ -189,9 +191,44 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
                     )
 
 
-# TODO: Code for visual inspection!
+def _check_labels(
+    dataset_name="celeba", train_batch_size=128, eval_batch_size=1024,
+):  # Are there examples with both black and blond hair, or neither?
+    confusion_mats = dict()
 
-def main(
+    train_loader, valid_loader, test_loader = _make_loaders(
+        dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
+    )
+
+    for loader_name, loader in zip(
+        ("train", 'valid', 'test'),
+        (train_loader, valid_loader, test_loader),
+    ):
+        confusion_mat = collections.defaultdict(int)
+        for tensors in loader:
+            _, labels = tensors
+
+            black_labels = labels[:, 8].bool()
+            blond_labels = labels[:, 9].bool()
+
+            black_blond = (black_labels & blond_labels).sum()
+            black_not_blond = (black_labels & ~blond_labels).sum()
+            not_black_blond = (~black_labels & blond_labels).sum()
+            not_black_not_blond = (~black_labels & ~blond_labels).sum()
+
+            confusion_mat["black_blond"] += black_blond
+            confusion_mat["black_not_blond"] += black_not_blond
+            confusion_mat["not_black_blond"] += not_black_blond
+            confusion_mat["not_black_not_blond"] += not_black_not_blond
+
+        confusion_mats[loader_name] = confusion_mat
+        print(f'loader: {loader_name}')
+        print(json.dumps(confusion_mat, indent=4))
+
+    return confusion_mats
+
+
+def _finetune_clip(
     dataset_name="celeba",
     train_batch_size=128,
     eval_batch_size=1024,
@@ -214,6 +251,13 @@ def main(
         eval_steps=eval_steps,
         eval_batches=eval_batches,
     )
+
+
+def main(task="finetune_clip", **kwargs):
+    if task == "finetune_clips":
+        _finetune_clip(**kwargs)
+    elif task == "check_labels":
+        _check_labels(**kwargs)
 
 
 if __name__ == "__main__":
