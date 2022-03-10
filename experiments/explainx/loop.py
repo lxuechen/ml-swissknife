@@ -4,6 +4,7 @@ Closing the loop.
 celeba predict hair color. clip fine-tuning. check error.
 
 python -m explainx.loop --dataset_name celeba --save_steps 1 --train_dir "/nlp/scr/lxuechen/explainx/mar1022"
+python -m explainx.loop --task check_data
 """
 import collections
 import json
@@ -28,7 +29,7 @@ from .misc import CHANNEL_MEAN, CHANNEL_STD
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=224, resize_size=256):
+def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=224, resize_size=256, num_workers=4):
     if dataset_name == "celeba":
         train_transform = T.Compose([
             T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
@@ -51,11 +52,11 @@ def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=22
         )
 
         train_loader = data.DataLoader(
-            train, batch_size=train_batch_size, drop_last=True, shuffle=True, pin_memory=True, num_workers=4
+            train, batch_size=train_batch_size, drop_last=True, shuffle=True, pin_memory=True, num_workers=num_workers
         )
         valid_loader, test_loader = tuple(
             data.DataLoader(
-                d, batch_size=eval_batch_size, drop_last=False, shuffle=False, pin_memory=True, num_workers=4
+                d, batch_size=eval_batch_size, drop_last=False, shuffle=False, pin_memory=True, num_workers=num_workers
             )
             for d in (valid, test)
         )
@@ -353,7 +354,7 @@ def _analyze(
     train_batch_size=32,
     eval_batch_size=512,
     target="blond hair",
-    num_per_group=10,
+    num_per_group=50,
 ):
     """Check the error blocks in the confusion matrix."""
     train_loader, valid_loader, test_loader = _make_loaders(
@@ -407,6 +408,52 @@ def _analyze(
             )
 
 
+def _check_data(
+    dataset_name="celeba",
+    train_batch_size=32,
+    eval_batch_size=512,
+    target="blond hair",
+    num_per_group=100,
+):
+    """Check if the data is mislabeled."""
+    train_loader, valid_loader, test_loader = _make_loaders(
+        dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size, num_workers=0
+    )
+    out = []
+    for tensors in test_loader:
+        if len(out) >= num_per_group:
+            break
+
+        images, labels = tensors
+
+        labels = labels[:, 9]  # blond hair.
+        labels = labels.bool().cpu().tolist()
+        for image, label in utils.zip_(images, labels):
+            if label and len(out) < num_per_group:
+                out.append(image)
+        del images, labels
+
+    out = torch.stack(out)
+    out = utils.denormalize(out, mean=CHANNEL_MEAN, std=CHANNEL_STD)
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import torchvision.transforms.functional as tvF
+
+    def show(imgs):
+        if not isinstance(imgs, list):
+            imgs = [imgs]
+        fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
+        for i, img in enumerate(imgs):
+            img = img.detach()
+            img = tvF.to_pil_image(img)
+            axs[0, i].imshow(np.asarray(img))
+            axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+
+    grid = torchvision.utils.make_grid(out)
+    show(grid)
+
+
 def main(task="finetune_clip", **kwargs):
     if task == "finetune_clip":
         _finetune_clip(**kwargs)
@@ -414,6 +461,8 @@ def main(task="finetune_clip", **kwargs):
         _check_labels(**kwargs)
     elif task == "analyze":
         _analyze(**kwargs)
+    elif task == "check_data":
+        _check_data(**kwargs)
 
 
 if __name__ == "__main__":
