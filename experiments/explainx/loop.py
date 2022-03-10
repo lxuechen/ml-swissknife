@@ -145,13 +145,13 @@ def evaluate(model, loader, target, eval_batches=sys.maxsize):
         zeon = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="zeon")
         xent = _loss_fn(logits=logits, labels=labels, target=target, reduction="none")
 
-        zeons.append(zeon.cpu().tolist())
-        xents.append(xent.cpu().tolist())
+        zeons.extend(zeon.cpu().tolist())
+        xents.extend(xent.cpu().tolist())
     return tuple(sum(lst) / len(lst) for lst in (zeons, xents))
 
 
 def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="hair",
-          eval_steps=100, eval_batches=20):
+          eval_steps=50, eval_batches=20):
     global_step = 0
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
         for tensors in tqdm.tqdm(train_loader, desc="batches"):
@@ -175,12 +175,16 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
                     print(f'loader: {loader_name}, epoch: {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
 
 
+# TODO: Code for visual inspection!
+
 def main(
     dataset_name="celeba",
     train_batch_size=128,
     eval_batch_size=1024,
     lr=1e-4,
-    epochs=10
+    epochs=10,
+    eval_steps=50,
+    eval_batches=20,
 ):
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
@@ -192,7 +196,9 @@ def main(
         optimizer=optimizer,
         train_loader=train_loader,
         valid_loader=valid_loader,
-        test_loader=test_loader
+        test_loader=test_loader,
+        eval_steps=eval_steps,
+        eval_batches=eval_batches,
     )
 
 
