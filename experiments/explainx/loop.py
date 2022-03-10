@@ -4,11 +4,10 @@ Closing the loop.
 celeba predict hair color. clip fine-tuning. check error.
 
 python -m explainx.loop --dataset_name celeba --save_steps 1 --train_dir "/nlp/scr/lxuechen/explainx/mar1022"
-python -m explainx.loop --task analyze --train_dir
-/nlp/scr/lxuechen/explainx/mar1022/linear_probe_True_model_name_openai_clip-vit-base-patch32
 """
 import collections
 import json
+import os.path
 import sys
 from typing import Sequence, Optional
 
@@ -356,7 +355,8 @@ def _analyze(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
     model = _make_model(model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder)
-    utils.load_ckpt(utils.latest_ckpt(train_dir), model=model, verbose=True)
+    ckpt_path = train_dir if os.path.isfile(train_dir) else utils.latest_ckpt(train_dir)
+    utils.load_ckpt(ckpt_path, model=model, verbose=True)
     model.eval()
 
     for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
