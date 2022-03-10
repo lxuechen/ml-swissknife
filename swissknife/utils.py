@@ -2163,7 +2163,12 @@ def latest_ckpt(dir_):
     return latest_path
 
 
-def save_ckpt(model, optimizer, path, ema_model=None, scheduler=None, cloud_storage=False, to_gcs=False):
+def save_ckpt(
+    path: str,
+    model: nn.Module, optimizer: optim.Optimizer,
+    ema_model: Optional[nn.Module] = None, scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
+    cloud_storage=False, to_gcs=False
+):
     # cloud_storage is the legacy argument.
     logging.warning('Calling the method `save_ckpt` which is to be deprecated later.')
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -2176,6 +2181,20 @@ def save_ckpt(model, optimizer, path, ema_model=None, scheduler=None, cloud_stor
     torch.save(state_dicts, path)
     if cloud_storage or to_gcs:
         gs_upload_from_path(path)
+
+
+def load_ckpt(
+    path: str,
+    model: nn.Module, optimizer: optim.Optimizer,
+    ema_model: Optional[nn.Module] = None, scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
+):
+    state_dicts = torch.load(path)
+    model.load_state_dict(state_dicts['model'])
+    optimizer.load_state_dict(state_dicts['optimizer'])
+    if ema_model is not None:
+        ema_model.load_state_dict(state_dicts['ema_model'])
+    if scheduler is not None:
+        scheduler.load_state_dict(state_dicts['scheduler'])
 
 
 def save_state_dicts(state_dicts, path, to_gcs=False):
