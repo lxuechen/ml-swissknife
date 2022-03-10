@@ -2165,19 +2165,25 @@ def latest_ckpt(dir_):
 
 def save_ckpt(
     path: str,
-    model: nn.Module, optimizer: optim.Optimizer,
-    ema_model: Optional[nn.Module] = None, scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
-    cloud_storage=False, to_gcs=False
+    model: nn.Module,
+    optimizer: optim.Optimizer,
+    scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
+    additional_state_dicts: Optional[Dict] = None,  # Other state_dicts you might want to include.
+    cloud_storage=False,  # cloud_storage is the legacy argument.
+    to_gcs=False,
 ):
-    # cloud_storage is the legacy argument.
-    logging.warning('Calling the method `save_ckpt` which is to be deprecated later.')
+    # model, optimizer, scheduler are special parameters.
     os.makedirs(os.path.dirname(path), exist_ok=True)
     state_dicts = {
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
-        "ema_model": None if ema_model is None else ema_model.state_dict(),
         "scheduler": None if scheduler is None else scheduler.state_dict(),
     }
+    if additional_state_dicts is not None:
+        for key, value in additional_state_dicts:
+            state_dicts[key] = value
+
+    # Save and upload.
     torch.save(state_dicts, path)
     if cloud_storage or to_gcs:
         gs_upload_from_path(path)
@@ -2186,22 +2192,19 @@ def save_ckpt(
 def load_ckpt(
     path: str,
     model: nn.Module, optimizer: optim.Optimizer,
-    ema_model: Optional[nn.Module] = None, scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
+    scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
+    additional_state_objects: Optional[Dict] = None,
 ):
+    # model, optimizer, scheduler are special parameters.
     state_dicts = torch.load(path)
+
     model.load_state_dict(state_dicts['model'])
     optimizer.load_state_dict(state_dicts['optimizer'])
-    if ema_model is not None:
-        ema_model.load_state_dict(state_dicts['ema_model'])
     if scheduler is not None:
         scheduler.load_state_dict(state_dicts['scheduler'])
-
-
-def save_state_dicts(state_dicts, path, to_gcs=False):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(state_dicts, path)
-    if to_gcs:
-        gs_upload_from_path(path)
+    if additional_state_objects is not None:
+        for key, value in additional_state_objects:
+            value.load_state_dict(state_dicts["key"])
 
 
 # Data.
