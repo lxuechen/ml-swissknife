@@ -361,10 +361,7 @@ def _analyze(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
     model = _make_model(model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder)
-    if ckpt_file is not None:
-        ckpt_path = utils.join(train_dir, ckpt_file)
-    else:
-        ckpt_path = utils.latest_ckpt(train_dir)
+    ckpt_path = utils.join(train_dir, ckpt_file) if ckpt_file is not None else utils.latest_ckpt(train_dir)
     utils.load_ckpt(ckpt_path, model=model, verbose=True)
 
     for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
@@ -413,7 +410,7 @@ def _check_data(
     train_batch_size=32,
     eval_batch_size=512,
     target="blond hair",
-    num_per_group=100,
+    num_per_group=500,
 ):
     """Check if the data is mislabeled."""
     train_loader, valid_loader, test_loader = _make_loaders(
@@ -459,8 +456,14 @@ def _check_data(
         plt.show()
         plt.close()
 
-    show(torchvision.utils.make_grid(blond))
-    show(torchvision.utils.make_grid(not_blond))
+    torchvision.utils.save_image(
+        blond,
+        utils.join('.', 'explainx', 'plots', 'blond.png')
+    )
+    torchvision.utils.save_image(
+        not_blond,
+        utils.join('.', 'explainx', 'plots', 'not_blond.png')
+    )
 
 
 def main(task="finetune_clip", **kwargs):
