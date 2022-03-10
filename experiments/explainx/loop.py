@@ -80,7 +80,7 @@ class CLIP:
     def __init__(
         self,
         model_name="openai/clip-vit-base-patch32",
-        text_labels_raw: Sequence[str] = ('black hair', 'blond hair'),
+        text_labels_raw: Sequence[str] = ('other hair color', 'blond hair'),
     ):
         self.model: nn.Module = transformers.CLIPModel.from_pretrained(model_name).to(device)
         self.tokenizer = transformers.CLIPTokenizer.from_pretrained(model_name)
@@ -214,10 +214,10 @@ def _check_labels(
             black_labels = labels[:, 8].bool()
             blond_labels = labels[:, 9].bool()
 
-            black_blond = (black_labels & blond_labels).sum()
-            black_not_blond = (black_labels & ~blond_labels).sum()
-            not_black_blond = (~black_labels & blond_labels).sum()
-            not_black_not_blond = (~black_labels & ~blond_labels).sum()
+            black_blond = (black_labels & blond_labels).sum().item()
+            black_not_blond = (black_labels & ~blond_labels).sum().item()
+            not_black_blond = (~black_labels & blond_labels).sum().item()
+            not_black_not_blond = (~black_labels & ~blond_labels).sum().item()
 
             confusion_mat["black_blond"] += black_blond
             confusion_mat["black_not_blond"] += black_not_blond
