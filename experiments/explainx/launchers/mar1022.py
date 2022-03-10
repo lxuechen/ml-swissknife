@@ -21,7 +21,8 @@ def _get_command(linear_probe, model_name):
 
 def main():
     commands = []
-    for model_name in ("openai/clip-vit-base-patch32", "openai/clip-vit-large-patch14"):  # Smallest, largest
+    # Smallest 80m, largest 304m.
+    for model_name in ("openai/clip-vit-base-patch32", "openai/clip-vit-large-patch14"):
         for linear_probe in (True, False):
             commands.append(
                 _get_command(linear_probe=linear_probe, model_name=model_name)

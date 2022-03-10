@@ -277,6 +277,7 @@ def _check_labels(
 # TODO: Anything in common for false predictions
 def _finetune_clip(
     dataset_name="celeba",
+    # openai/clip-vit-base-patch32 smallest 80m, openai/clip-vit-large-patch14 largest 304m.
     model_name="openai/clip-vit-base-patch32",  # base model patch size is 32 x 32.
     train_batch_size=128,
     eval_batch_size=1024,
