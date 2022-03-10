@@ -401,7 +401,7 @@ def _analyze(
             torchvision.utils.save_image(
                 utils.denormalize(images, mean=CHANNEL_MEAN, std=CHANNEL_STD),
                 fp=utils.join(train_dir, f"{loader_name}-{file_name}"),
-                nrow=5,
+                nrow=20,
             )
 
 
@@ -458,11 +458,13 @@ def _check_data(
 
     torchvision.utils.save_image(
         blond,
-        utils.join('.', 'explainx', 'plots', 'blond.png')
+        utils.join('.', 'explainx', 'plots', 'blond.png'),
+        nrow=20,
     )
     torchvision.utils.save_image(
         not_blond,
-        utils.join('.', 'explainx', 'plots', 'not_blond.png')
+        utils.join('.', 'explainx', 'plots', 'not_blond.png'),
+        nrow=20,
     )
 
 
