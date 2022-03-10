@@ -217,7 +217,7 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
         for loader_name, loader in zip(
             ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
         ):
-            zeon, xent = evaluate(model, loader, target, eval_batches=sys.maxsize)  # Full eval!
+            zeon, xent = evaluate(model, loader, target, eval_batches=eval_batches)
             print(
                 f'final loader: {loader_name}, global_step: {global_step}, epoch: {0}, '
                 f'zeon: {zeon:.4f}, xent: {xent:.4f}'

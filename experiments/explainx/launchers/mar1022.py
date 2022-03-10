@@ -1,18 +1,28 @@
 """
+python -m explainx.launchers.mar1022
 """
 
 import fire
-import torch
-import os
-import sys
-import numpy as np
-import transformers
+
 from swissknife import utils
-import torchvision
+
+
+def _get_command(linear_probe):
+    command = f'''python -m explainx.loop \
+        --dataset_name celeba \
+        --train_dir "/nlp/scr/lxuechen/explainx/mar1022/linear_probe_{linear_probe}" \
+        --epochs 3 \
+        --linear_probe {linear_probe} \
+        --eval_batches 40
+    '''
+    return command
 
 
 def main():
-    pass
+    commands = [
+        _get_command(linear_probe=True), _get_command(linear_probe=False)
+    ]
+    utils.gpu_scheduler(commands)
 
 
 if __name__ == "__main__":
