@@ -5,7 +5,7 @@ celeba predict hair color. clip fine-tuning. check error.
 
 python -m explainx.loop --dataset_name celeba
 """
-
+import sys
 from typing import Sequence
 
 import fire
@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from torch.utils import data
 from torchvision import datasets as D
 from torchvision import transforms as T
+import tqdm
 
 import transformers
 from .common import root
@@ -61,9 +62,13 @@ def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=22
     return train_loader, valid_loader, test_loader
 
 
-def _make_model_and_optimizer(**optimizer_kwargs):
+def _make_model_and_optimizer(linear_probe=False, **optimizer_kwargs):
     model = CLIP()
     optimizer = optim.Adam(params=model.parameters(), **optimizer_kwargs)
+    if linear_probe:
+        model.model.requires_grad_(False)
+        model.model.visual_projection.requires_grad_(True)
+        model.model.text_projection.requires_grad_(True)
     return model, optimizer
 
 
@@ -109,15 +114,15 @@ def _loss_fn(logits: torch.Tensor, labels: torch.Tensor, target: str, reduction:
 
 
 @torch.no_grad()
-def evaluate(model, loader, target):
+def evaluate(model, loader, target, num_batches=sys.maxsize):
     xents, zeons = [], []
     model.eval()
-    for tensors in loader:
+    for batch_idx, tensors in enumerate(loader):
         tensors = tuple(t.to(device) for t in tensors)
         images, labels = tensors
 
         output = model(images)
-        logits = output.logits_per_image.size()
+        logits = output.logits_per_image
 
         zeon = logits.argmax(dim=-1).eq(labels)
         xent = _loss_fn(logits=logits, labels=labels, target=target, reduction="none")
@@ -128,21 +133,25 @@ def evaluate(model, loader, target):
 
 
 def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="hair"):
-    for epoch in range(epochs):
-        for tensors in train_loader:
+    for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
+        for tensors in tqdm.tqdm(train_loader, desc="batches"):
             tensors = tuple(t.to(device) for t in tensors)
             images, labels = tensors
 
             model.train()
             model.zero_grad()
             output = model(images)
-            logits = output.logits_per_image.size()
+            logits = output.logits_per_image
             loss = _loss_fn(logits=logits, labels=labels, target=target)
             loss.backward()
             optimizer.step()
 
-        avg_zeon, avg_xent = evaluate(model, test_loader, target)
-        print(f'epoch: {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
+        for loader_name, loader in zip(
+            ('train', 'valid', 'test'),
+            (train_loader, valid_loader, test_loader)
+        ):
+            avg_zeon, avg_xent = evaluate(model, loader, target, max_batches=10)
+            print(f'loader: {loader_name}, epoch: {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
 
 
 def main(
@@ -155,7 +164,7 @@ def main(
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
-    model, optimizer = _make_model_and_optimizer(lr=lr)
+    model, optimizer = _make_model_and_optimizer(linear_probe=True, lr=lr)
     train(
         epochs=epochs,
         model=model,
