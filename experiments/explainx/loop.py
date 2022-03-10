@@ -419,9 +419,12 @@ def _check_data(
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size, num_workers=0
     )
-    out = []
+    blond = []
+    not_blond = []
     for tensors in test_loader:
-        if len(out) >= num_per_group:
+        if len(blond) >= num_per_group:
+            break
+        if len(not_blond) >= num_per_group:
             break
 
         images, labels = tensors
@@ -429,12 +432,16 @@ def _check_data(
         labels = labels[:, 9]  # blond hair.
         labels = labels.bool().cpu().tolist()
         for image, label in utils.zip_(images, labels):
-            if label and len(out) < num_per_group:
-                out.append(image)
+            if label and len(blond) < num_per_group:
+                blond.append(image)
+            elif len(not_blond) < num_per_group:
+                not_blond.append(image)
         del images, labels
 
-    out = torch.stack(out)
-    out = utils.denormalize(out, mean=CHANNEL_MEAN, std=CHANNEL_STD)
+    blond, not_blond = tuple(
+        utils.denormalize(torch.stack(t), mean=CHANNEL_MEAN, std=CHANNEL_STD)
+        for t in (blond, not_blond)
+    )
 
     import matplotlib.pyplot as plt
     import numpy as np
@@ -449,9 +456,11 @@ def _check_data(
             img = tvF.to_pil_image(img)
             axs[0, i].imshow(np.asarray(img))
             axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+        plt.show()
+        plt.close()
 
-    grid = torchvision.utils.make_grid(out)
-    show(grid)
+    show(torchvision.utils.make_grid(blond))
+    show(torchvision.utils.make_grid(not_blond))
 
 
 def main(task="finetune_clip", **kwargs):
