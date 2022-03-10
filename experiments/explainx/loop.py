@@ -105,12 +105,27 @@ class CLIP:
         self.model.eval()
 
 
-def _loss_fn(logits: torch.Tensor, labels: torch.Tensor, target: str, reduction: str = 'mean'):
+def _loss_fn(
+    logits: torch.Tensor, labels: torch.Tensor, target: str,
+    metric="xent", reduction: str = 'mean',
+):
     if target == "hair":
         labels = labels[:, 9]  # on is blond hair.
-        return F.cross_entropy(logits, labels, reduction=reduction)
     else:
         raise ValueError(f"Unknown target: {target}")
+
+    if metric == "xent":
+        return F.cross_entropy(logits, labels, reduction=reduction)
+    elif metric == "zeon":
+        zeon = logits.argmax(dim=-1).eq(labels)
+        if reduction == 'mean':
+            return zeon.mean(dim=0)
+        elif reduction == 'none':
+            return zeon
+        else:
+            raise ValueError(f"Unknown reduction: {reduction}")
+    else:
+        raise ValueError(f"Unknown metric: {metric}")
 
 
 @torch.no_grad()
@@ -127,7 +142,7 @@ def evaluate(model, loader, target, eval_batches=sys.maxsize):
         output = model(images)
         logits = output.logits_per_image
 
-        zeon = logits.argmax(dim=-1).eq(labels)
+        zeon = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="zeon")
         xent = _loss_fn(logits=logits, labels=labels, target=target, reduction="none")
 
         zeons.append(zeon.cpu().tolist())
