@@ -172,7 +172,7 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
                     ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
                 ):
                     avg_zeon, avg_xent = evaluate(model, loader, target, eval_batches=eval_batches)
-                    print(f'loader: {loader_name}, epoch: {epoch}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
+                    print(f'loader: {loader_name}, global_step: {global_step}, avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}')
 
 
 # TODO: Code for visual inspection!
