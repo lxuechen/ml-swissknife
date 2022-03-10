@@ -167,9 +167,9 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
                 f'loader: {loader_name}, global_step: {global_step}, epoch: {0}, '
                 f'zeon: {zeon:.4f}, xent: {xent:.4f}'
             )
-            record["global_step"].append(global_step)
             record[loader_name]["zeon"].append(zeon)
             record[loader_name]["xent"].append(xent)
+        record["global_step"].append(global_step)
 
         if train_dir is not None:
             utils.jdump(record, utils.join(train_dir, 'record.json'))
@@ -206,9 +206,9 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
                         f'loader: {loader_name}, global_step: {global_step}, epoch: {epoch}, '
                         f'zeon: {zeon:.4f}, xent: {xent:.4f}'
                     )
-                    record["global_step"].append(global_step)
                     record[loader_name]["zeon"].append(zeon)
                     record[loader_name]["xent"].append(xent)
+                record["global_step"].append(global_step)
 
                 if train_dir is not None:
                     utils.jdump(record, utils.join(train_dir, 'record.json'))
@@ -224,9 +224,9 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
                 f'final loader: {loader_name}, global_step: {global_step}, epoch: {0}, '
                 f'zeon: {zeon:.4f}, xent: {xent:.4f}'
             )
-            record["global_step"].append(global_step)
             record[loader_name]["zeon"].append(zeon)
             record[loader_name]["xent"].append(xent)
+        record["global_step"].append(global_step)
 
         if train_dir is not None:
             utils.jdump(record, utils.join(train_dir, 'record.json'))
