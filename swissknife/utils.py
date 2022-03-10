@@ -2138,35 +2138,34 @@ def sort_ckpts(file_names: Union[map, filter, list]):
     return file_names_copy
 
 
-def latest_ckpt(dir_):
+def latest_ckpt(dir_, prefix="global_step_", suffix=".ckpt"):
     # Returns the path towards the latest ckpt. Returns `None` if no ckpt is found.
     # Assumes names are of the format `./parent_dir/global_step_i.ckpt`, where i is the index.
     # The prefix "global_step_" and suffix ".ckpt" must *both* be present in the path.
     def extract_id(name):
         assert isinstance(name, str)
-        prefix, suffix = 'global_step_', '.ckpt'
-        assert name.startswith('global_step_') and name.endswith('.ckpt')
+        assert name.startswith(prefix) and name.endswith(suffix)
         name = name[len(prefix):]
         name = name[:-len(suffix)]
         return int(name)
 
     file_names = os.listdir(dir_)
-    file_names = filter(lambda f: f.startswith('global_step_'), file_names)
-    file_names = filter(lambda f: f.endswith('.ckpt'), file_names)
+    file_names = filter(lambda f: f.startswith(prefix), file_names)
+    file_names = filter(lambda f: f.endswith(suffix), file_names)
     idx = map(extract_id, file_names)
     idx = list(idx)
     if len(idx) == 0:
         print(f'Did not find any checkpoints in: {dir_}')
         return None
 
-    latest_path = os.path.join(dir_, f'global_step_{max(idx)}.ckpt')
+    latest_path = os.path.join(dir_, f'{prefix}{max(idx)}{suffix}')
     return latest_path
 
 
 def save_ckpt(
     path: str,
     model: nn.Module,
-    optimizer: optim.Optimizer,
+    optimizer: Optional[optim.Optimizer] = None,
     scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
     additional_state_dicts: Optional[Dict] = None,  # Other state_dicts you might want to include.
     cloud_storage=False,  # cloud_storage is the legacy argument.
@@ -2176,7 +2175,7 @@ def save_ckpt(
     os.makedirs(os.path.dirname(path), exist_ok=True)
     state_dicts = {
         "model": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
+        "optimizer": None if optimizer is None else optimizer.state_dict(),
         "scheduler": None if scheduler is None else scheduler.state_dict(),
     }
     if additional_state_dicts is not None:
@@ -2191,15 +2190,20 @@ def save_ckpt(
 
 def load_ckpt(
     path: str,
-    model: nn.Module, optimizer: optim.Optimizer,
+    model: nn.Module,
+    optimizer: Optional[optim.Optimizer] = None,
     scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
     additional_state_objects: Optional[Dict] = None,
+    verbose=True,
 ):
-    # model, optimizer, scheduler are special parameters.
+    if verbose:
+        logging.warning(f'Loading checkpoint from {path}')
+
     state_dicts = torch.load(path)
 
     model.load_state_dict(state_dicts['model'])
-    optimizer.load_state_dict(state_dicts['optimizer'])
+    if optimizer is not None:
+        optimizer.load_state_dict(state_dicts['optimizer'])
     if scheduler is not None:
         scheduler.load_state_dict(state_dicts['scheduler'])
     if additional_state_objects is not None:
