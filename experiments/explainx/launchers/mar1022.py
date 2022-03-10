@@ -16,7 +16,8 @@ def _get_command(linear_probe, model_name):
         --epochs 3 \
         --linear_probe {linear_probe} \
         --eval_batches 40 \
-        --model_name {model_name}
+        --model_name {model_name} \
+        --eval_steps 100
     '''
     return command
 
