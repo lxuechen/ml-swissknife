@@ -279,7 +279,7 @@ def _finetune_clip(
     dataset_name="celeba",
     # openai/clip-vit-base-patch32 smallest 80m, openai/clip-vit-large-patch14 largest 304m.
     model_name="openai/clip-vit-base-patch32",  # base model patch size is 32 x 32.
-    train_batch_size=64,
+    train_batch_size=32,
     eval_batch_size=512,
     lr=1e-4,
     epochs=3,

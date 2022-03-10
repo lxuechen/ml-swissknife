@@ -8,9 +8,10 @@ from swissknife import utils
 
 
 def _get_command(linear_probe, model_name):
+    train_dir = f"/nlp/scr/lxuechen/explainx/mar1022/linear_probe_{linear_probe}_model_name_{model_name}"
     command = f'''python -m explainx.loop \
         --dataset_name celeba \
-        --train_dir "/nlp/scr/lxuechen/explainx/mar1022/linear_probe_{linear_probe}" \
+        --train_dir {train_dir} \
         --epochs 3 \
         --linear_probe {linear_probe} \
         --eval_batches 40 \
