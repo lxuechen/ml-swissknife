@@ -131,7 +131,7 @@ def _loss_fn(
                 out = (labels.bool() & ~predictions.bool())
             elif metric == "true_positive":
                 out = (labels.bool() & predictions.bool())
-            elif metric == "true_negatives":
+            elif metric == "true_negative":
                 out = (~labels.bool() & ~predictions.bool())
             else:
                 raise ValueError(f"Unknown metric: {metric}")
