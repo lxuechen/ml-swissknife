@@ -279,8 +279,8 @@ def _finetune_clip(
     dataset_name="celeba",
     # openai/clip-vit-base-patch32 smallest 80m, openai/clip-vit-large-patch14 largest 304m.
     model_name="openai/clip-vit-base-patch32",  # base model patch size is 32 x 32.
-    train_batch_size=128,
-    eval_batch_size=1024,
+    train_batch_size=64,
+    eval_batch_size=512,
     lr=1e-4,
     epochs=3,
     eval_steps=50,
@@ -289,6 +289,8 @@ def _finetune_clip(
     train_dir: Optional[str] = None,
     linear_probe=False,
     unfreeze_text_encoder=False,
+    eval_before_train=True,
+    eval_after_train=True,
 ):
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
@@ -308,6 +310,8 @@ def _finetune_clip(
         eval_batches=eval_batches,
         save_steps=save_steps,
         train_dir=train_dir,
+        eval_before_train=eval_before_train,
+        eval_after_train=eval_after_train,
     )
 
 
