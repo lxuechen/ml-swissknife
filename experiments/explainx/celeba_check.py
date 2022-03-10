@@ -45,6 +45,7 @@ def _make_image_tensors(
         f'black_hair_index: {black_hair_index}, '
         f'male_index: {male_index}'
     )
+    print(f'All attrs: {celeba.attr_names}')  # 40 attributes. The last attribute is empty.
 
     if num_group1 is None:
         num_group1 = num_per_group
