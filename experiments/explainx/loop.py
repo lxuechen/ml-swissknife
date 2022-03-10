@@ -129,6 +129,10 @@ def _loss_fn(
                 out = (~labels.bool() & predictions.bool())
             elif metric == "false_negative":
                 out = (labels.bool() & ~predictions.bool())
+            elif metric == "true_positive":
+                out = (labels.bool() & predictions.bool())
+            elif metric == "true_negatives":
+                out = (~labels.bool() & ~predictions.bool())
             else:
                 raise ValueError(f"Unknown metric: {metric}")
 
@@ -363,11 +367,10 @@ def _analyze(
     utils.load_ckpt(ckpt_path, model=model, verbose=True)
 
     for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
-        # Collect the images!
-        fps = []
-        fns = []
+        # Lists to collect the images!
+        lsts = [[] for _ in range(4)]
         for tensors in loader:
-            if len(fps) >= num_per_group and len(fns) >= num_per_group:
+            if all(len(lst) >= num_per_group for lst in lsts):
                 break
 
             model.eval()
@@ -378,17 +381,21 @@ def _analyze(
             output = model(images)
             logits = output.logits_per_image
 
-            fp = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="false_positive")
-            fn = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="false_negative")
+            tp, tn, fp, fn = tuple(
+                _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric=metric)
+                for metric in ("true_positive", "true_negative", "false_positive", "false_negative")
+            )
+            tp, tn, fp, fn = tuple(t.bool().cpu().tolist() for t in (tp, tn, fp, fn))
 
-            fp, fn = tuple(t.bool().cpu().tolist() for t in (fp, fn))
-            for fp_i, fn_i, image_i in zip(fp, fn, images):
-                if fp_i and len(fps) < num_per_group:
-                    fps.append(image_i)
-                if fn_i and len(fns) < num_per_group:
-                    fns.append(image_i)
+            for items in utils.zip_(tp, tn, fp, fn, images):
+                quants = items[:4]
+                image = items[-1]
+                for quant, lst in utils.zip_(quants, lsts):
+                    if len(lst) < num_per_group and quant:
+                        lst.append(image)
+                        break
 
-        for image_group, file_name in zip((fps, fns), ('fps.png', 'fns.png')):
+        for image_group, file_name in zip(lsts, ('tps.png', 'tns.png', 'fps.png', 'fns.png')):
             if len(image_group) > 0 and image_group[0].dim() == 3:
                 images = torch.stack(image_group, dim=0)
             else:  # dim == 4.
