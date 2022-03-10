@@ -205,7 +205,7 @@ def _check_labels(
         (train_loader, valid_loader, test_loader),
     ):
         confusion_mat = collections.defaultdict(int)
-        for tensors in loader:
+        for tensors in tqdm.tqdm(loader, desc="batches"):
             _, labels = tensors
 
             black_labels = labels[:, 8].bool()
