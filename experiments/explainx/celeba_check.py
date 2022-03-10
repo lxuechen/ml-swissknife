@@ -1,6 +1,8 @@
 """
 Gender <-> hair color.
 
+Black hair and blond hair are two attributes in CelebA; 1 means on and 0 means off.
+
 python -m explainx.celeba_check --task consensus
 python -m explainx.celeba_check --task check_score
 """
@@ -37,6 +39,12 @@ def _make_image_tensors(
     blond_hair_index = attr_names.index("Blond_Hair")
     black_hair_index = attr_names.index("Black_Hair")
     male_index = attr_names.index("Male")
+    print(
+        f'CelebA has {len(attr_names)} attributes. '
+        f'blond_hair_index: {blond_hair_index}, '
+        f'black_hair_index: {black_hair_index}, '
+        f'male_index: {male_index}'
+    )
 
     if num_group1 is None:
         num_group1 = num_per_group
@@ -112,6 +120,7 @@ def consensus(
     max_length=50,
     min_length=3,
 ):
+    """Run consensus beam search with contrastive image grouups."""
     if gender_target not in (0, 1):
         raise ValueError(f"Unknown `gender_target`: {gender_target}")
     os.makedirs(dump_dir, exist_ok=True)
@@ -180,7 +189,7 @@ def check_score(
     dump_dir="/nlp/scr/lxuechen/explainx/celeba",
     dump_file: str = 'score-check.json',
 ):
-    """Check caption scores for two groups of images."""
+    """Check caption scores for two groups of images; a sanity check."""
     if gender_target not in (0, 1):
         raise ValueError(f"Unknown `gender_target`: {gender_target}")
     os.makedirs(dump_dir, exist_ok=True)
