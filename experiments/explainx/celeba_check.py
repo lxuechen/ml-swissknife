@@ -41,9 +41,9 @@ def _make_image_tensors(
     male_index = attr_names.index("Male")
     print(
         f'CelebA has {len(attr_names)} attributes. '
-        f'blond_hair_index: {blond_hair_index}, '
-        f'black_hair_index: {black_hair_index}, '
-        f'male_index: {male_index}'
+        f'blond_hair_index: {blond_hair_index}, '  # 9
+        f'black_hair_index: {black_hair_index}, '  # 8
+        f'male_index: {male_index}'  # 20
     )
     print(f'All attrs: {celeba.attr_names}')  # 40 attributes. The last attribute is empty.
 
