@@ -4,6 +4,8 @@ Closing the loop.
 celeba predict hair color. clip fine-tuning. check error.
 
 python -m explainx.loop --dataset_name celeba --save_steps 1 --train_dir "/nlp/scr/lxuechen/explainx/mar1022"
+python -m explainx.loop --task analyze --train_dir
+/nlp/scr/lxuechen/explainx/mar1022/linear_probe_True_model_name_openai_clip-vit-base-patch32
 """
 import collections
 import json
@@ -66,16 +68,26 @@ def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=22
     return train_loader, valid_loader, test_loader
 
 
-def _make_model_and_optimizer(
-    model_name="openai/clip-vit-base-patch32", linear_probe=False, unfreeze_text_encoder=False, **optimizer_kwargs
+def _make_model(
+    model_name="openai/clip-vit-base-patch32", linear_probe=False, unfreeze_text_encoder=False,
 ):
     model = CLIP(model_name=model_name).to(device)
-    optimizer = optim.Adam(params=model.parameters(), **optimizer_kwargs)
     if linear_probe:
         model.model.requires_grad_(False)
         model.model.visual_projection.requires_grad_(True)
         model.model.text_projection.requires_grad_(True)
     model.model.text_model.requires_grad_(unfreeze_text_encoder)
+    return model
+
+
+def _make_model_and_optimizer(
+    model_name="openai/clip-vit-base-patch32", linear_probe=False, unfreeze_text_encoder=False,
+    **optimizer_kwargs,
+):
+    model = _make_model(
+        model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder
+    )
+    optimizer = optim.Adam(params=model.parameters(), **optimizer_kwargs)
     return model, optimizer
 
 
@@ -103,21 +115,32 @@ def _loss_fn(
 ):
     if target == "blond hair":
         labels = labels[:, 9]  # on is blond hair.
+    elif target == "black hair":
+        labels = labels[:, 8]  # on is black hair.
     else:
         raise ValueError(f"Unknown target: {target}")
 
     if metric == "xent":
         return F.cross_entropy(logits, labels, reduction=reduction)
-    elif metric == "zeon":
-        zeon = logits.argmax(dim=-1).eq(labels).to(torch.get_default_dtype())
+    else:
+        if metric == "zeon":
+            out = logits.argmax(dim=-1).eq(labels).to(torch.get_default_dtype())
+        else:
+            predictions = logits.argmax(dim=-1)  # int tensor.
+            if metric == "false_positive":
+                out = (~labels.bool() & predictions.bool())
+            elif metric == "false_negative":
+                out = (labels.bool() & ~predictions.bool())
+            else:
+                raise ValueError(f"Unknown metric: {metric}")
+
+        out = out.to(torch.get_default_dtype())
         if reduction == 'mean':
-            return zeon.mean(dim=0)
+            return out.mean(dim=0)
         elif reduction == 'none':
-            return zeon
+            return out
         else:
             raise ValueError(f"Unknown reduction: {reduction}")
-    else:
-        raise ValueError(f"Unknown metric: {metric}")
 
 
 @torch.no_grad()
@@ -190,7 +213,7 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
             global_step += 1
 
             if global_step % save_steps == 0 and train_dir is not None:
-                ckpt_path = utils.join(train_dir, f'global_step_{global_step:06f}.ckpt')
+                ckpt_path = utils.join(train_dir, f'global_step_{global_step:06d}.ckpt')
                 utils.save_ckpt(
                     path=ckpt_path,
                     model=model,
@@ -273,22 +296,22 @@ def _check_labels(
     return confusion_mats
 
 
-# TODO: Grab the images confusion matrix; perhaps most useful for true blond but not classified
-# TODO: Anything in common for false predictions
 def _finetune_clip(
-    dataset_name="celeba",
     # openai/clip-vit-base-patch32 smallest 80m, openai/clip-vit-large-patch14 largest 304m.
     model_name="openai/clip-vit-base-patch32",  # base model patch size is 32 x 32.
+    linear_probe=False,
+    unfreeze_text_encoder=False,
+
+    dataset_name="celeba",
     train_batch_size=32,
     eval_batch_size=512,
+    target="blond hair",
     lr=1e-4,
     epochs=3,
     eval_steps=50,
     eval_batches=20,
     save_steps=200,
     train_dir: Optional[str] = None,
-    linear_probe=False,
-    unfreeze_text_encoder=False,
     eval_before_train=True,
     eval_after_train=True,
 ):
@@ -303,6 +326,7 @@ def _finetune_clip(
         epochs=epochs,
         model=model,
         optimizer=optimizer,
+        target=target,
         train_loader=train_loader,
         valid_loader=valid_loader,
         test_loader=test_loader,
@@ -315,11 +339,46 @@ def _finetune_clip(
     )
 
 
+def _analyze(
+    train_dir,  # Place to load checkpoint.
+    model_name="openai/clip-vit-base-patch32",
+    linear_probe=False,
+    unfreeze_text_encoder=False,
+
+    dataset_name="celeba",
+    train_batch_size=32,
+    eval_batch_size=512,
+    target="blond hair",
+    num_per_group=10,
+):
+    """Check the error blocks in the confusion matrix."""
+    train_loader, valid_loader, test_loader = _make_loaders(
+        dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
+    )
+    model = _make_model(model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder)
+    utils.load_ckpt(utils.latest_ckpt(train_dir), model=model, verbose=True)
+    model.eval()
+
+    for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
+        fps = []
+        fns = []
+        for tensors in loader:
+            tensors = tuple(t.to(device) for t in tensors)
+            images, labels = tensors
+
+            output = model(images)
+            logits = output.logits_per_image
+
+            zeon = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="zeon")
+
+
 def main(task="finetune_clip", **kwargs):
     if task == "finetune_clip":
         _finetune_clip(**kwargs)
     elif task == "check_labels":
         _check_labels(**kwargs)
+    elif task == "analyze":
+        _analyze(**kwargs)
 
 
 if __name__ == "__main__":
