@@ -17,8 +17,8 @@ def _get_command(linear_probe, model_name):
         --linear_probe {linear_probe} \
         --eval_batches 40 \
         --model_name {model_name} \
-        --eval_steps 3000 \
-        --save_steps 3000
+        --eval_steps 1000 \
+        --save_steps 10000
     '''
     return command
 
