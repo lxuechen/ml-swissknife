@@ -3,12 +3,12 @@ Closing the loop.
 
 celeba predict hair color. clip fine-tuning. check error.
 
-python -m explainx.loop --dataset_name celeba
+python -m explainx.loop --dataset_name celeba --save_steps 1 --train_dir "/nlp/scr/lxuechen/explainx/mar1022"
 """
 import collections
 import json
 import sys
-from typing import Sequence
+from typing import Sequence, Optional
 
 import fire
 import torch
@@ -19,13 +19,13 @@ from torchvision import datasets as D
 from torchvision import transforms as T
 import tqdm
 
+from swissknife import utils
 import transformers
 from .common import root
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-# TODO: Merge this into swissknife.
 def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=224, resize_size=256):
     clip_mean, clip_std = (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)
 
@@ -51,10 +51,12 @@ def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=22
         )
 
         train_loader = data.DataLoader(
-            train, batch_size=train_batch_size, drop_last=True, shuffle=True,
+            train, batch_size=train_batch_size, drop_last=True, shuffle=True, pin_memory=True, num_workers=4
         )
         valid_loader, test_loader = tuple(
-            data.DataLoader(d, batch_size=eval_batch_size, drop_last=False, shuffle=False)
+            data.DataLoader(
+                d, batch_size=eval_batch_size, drop_last=False, shuffle=False, pin_memory=True, num_workers=4
+            )
             for d in (valid, test)
         )
     elif dataset_name == "waterbirds":
@@ -64,54 +66,40 @@ def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=22
     return train_loader, valid_loader, test_loader
 
 
-def _make_model_and_optimizer(linear_probe=False, **optimizer_kwargs):
-    model = CLIP()
+def _make_model_and_optimizer(linear_probe=False, unfreeze_text_encoder=False, **optimizer_kwargs):
+    model = CLIP().to(device)
     optimizer = optim.Adam(params=model.parameters(), **optimizer_kwargs)
     if linear_probe:
         model.model.requires_grad_(False)
         model.model.visual_projection.requires_grad_(True)
         model.model.text_projection.requires_grad_(True)
+    model.model.text_model.requires_grad_(unfreeze_text_encoder)
     return model, optimizer
 
 
-class CLIP:
-    """CLIP model with no pain."""
+class CLIP(nn.Module):
 
     def __init__(
         self,
         model_name="openai/clip-vit-base-patch32",
         text_labels_raw: Sequence[str] = ('other hair color', 'blond hair'),
     ):
-        self.model: nn.Module = transformers.CLIPModel.from_pretrained(model_name).to(device)
+        super(CLIP, self).__init__()
+        self.model: nn.Module = transformers.CLIPModel.from_pretrained(model_name)
         self.tokenizer = transformers.CLIPTokenizer.from_pretrained(model_name)
 
         self.text_labels_raw = text_labels_raw
-        self.text_labels = self.tokenizer(text_labels_raw, return_tensors="pt", padding=True).to(device)
+        self.text_labels = self.tokenizer(text_labels_raw, return_tensors="pt", padding=True)
 
     def __call__(self, images):
-        return self.model(pixel_values=images, **self.text_labels)
-
-    def parameters(self):
-        return self.model.parameters()
-
-    def named_parameters(self):
-        return self.model.named_parameters()
-
-    def zero_grad(self):
-        self.model.zero_grad()
-
-    def train(self, mode=True):
-        self.model.train(mode=mode)
-
-    def eval(self):
-        self.model.eval()
+        return self.model(pixel_values=images, **self.text_labels.to(images.device))
 
 
 def _loss_fn(
     logits: torch.Tensor, labels: torch.Tensor, target: str,
     metric="xent", reduction: str = 'mean',
 ):
-    if target == "hair":
+    if target == "blond hair":
         labels = labels[:, 9]  # on is blond hair.
     else:
         raise ValueError(f"Unknown target: {target}")
@@ -119,7 +107,7 @@ def _loss_fn(
     if metric == "xent":
         return F.cross_entropy(logits, labels, reduction=reduction)
     elif metric == "zeon":
-        zeon = logits.argmax(dim=-1).eq(labels)
+        zeon = logits.argmax(dim=-1).eq(labels).to(torch.get_default_dtype())
         if reduction == 'mean':
             return zeon.mean(dim=0)
         elif reduction == 'none':
@@ -147,25 +135,44 @@ def evaluate(model, loader, target, eval_batches=sys.maxsize):
         zeon = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="zeon")
         xent = _loss_fn(logits=logits, labels=labels, target=target, reduction="none")
 
-        zeons.extend(zeon.cpu().tolist())
-        xents.extend(xent.cpu().tolist())
-    return tuple(sum(lst) / len(lst) for lst in (zeons, xents))
+        zeons.append(zeon)
+        xents.append(xent)
+    return tuple(torch.cat(lst).mean().cpu().item() for lst in (zeons, xents))
 
 
-def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="hair",
-          eval_steps=50, eval_batches=20, eval_before_train=True):
+def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, target="blond hair",
+          eval_steps=50, eval_batches=20, eval_before_train=True, eval_after_train=True,
+          save_steps=200, train_dir=None):
+    num_trainable_params = utils.count_parameters(model, only_differentiable=True)
+    print(model)
+    print(optimizer)
+    print(f'model has {num_trainable_params / 1e6:.4f} million trainable params')
+
     global_step = 0
+    record = dict(
+        global_step=[],
+        train=dict(zeon=[], xent=[]),
+        valid=dict(zeon=[], xent=[]),
+        test=dict(zeon=[], xent=[]),
+    )
 
     if eval_before_train:
         for loader_name, loader in zip(
             ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
         ):
-            avg_zeon, avg_xent = evaluate(model, loader, target, eval_batches=eval_batches)
+            zeon, xent = evaluate(model, loader, target, eval_batches=eval_batches)
             print(
-                f'loader: {loader_name}, global_step: {global_step}, '
-                f'avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}'
+                f'loader: {loader_name}, global_step: {global_step}, epoch: {0}, '
+                f'zeon: {zeon:.4f}, xent: {xent:.4f}'
             )
+            record["global_step"].append(global_step)
+            record[loader_name]["zeon"].append(zeon)
+            record[loader_name]["xent"].append(xent)
 
+        if train_dir is not None:
+            utils.jdump(record, utils.join(train_dir, 'record.json'))
+
+    print('start training')
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
         for tensors in tqdm.tqdm(train_loader, desc="batches"):
             tensors = tuple(t.to(device) for t in tensors)
@@ -180,15 +187,47 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
             optimizer.step()
             global_step += 1
 
+            if global_step % save_steps == 0 and train_dir is not None:
+                ckpt_path = utils.join(train_dir, f'global_step_{global_step:06f}.ckpt')
+                utils.save_ckpt(
+                    path=ckpt_path,
+                    model=model,
+                    optimizer=optimizer,
+                )
+
             if global_step % eval_steps == 0:
                 for loader_name, loader in zip(
                     ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
                 ):
-                    avg_zeon, avg_xent = evaluate(model, loader, target, eval_batches=eval_batches)
+                    zeon, xent = evaluate(model, loader, target, eval_batches=eval_batches)
                     print(
-                        f'loader: {loader_name}, global_step: {global_step}, '
-                        f'avg_zeon: {avg_zeon:.4f}, avg_xent: {avg_xent:.4f}'
+                        f'loader: {loader_name}, global_step: {global_step}, epoch: {epoch}, '
+                        f'zeon: {zeon:.4f}, xent: {xent:.4f}'
                     )
+                    record["global_step"].append(global_step)
+                    record[loader_name]["zeon"].append(zeon)
+                    record[loader_name]["xent"].append(xent)
+
+                if train_dir is not None:
+                    utils.jdump(record, utils.join(train_dir, 'record.json'))
+
+    print('end training')
+
+    if eval_after_train:
+        for loader_name, loader in zip(
+            ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
+        ):
+            zeon, xent = evaluate(model, loader, target, eval_batches=sys.maxsize)  # Full eval!
+            print(
+                f'final loader: {loader_name}, global_step: {global_step}, epoch: {0}, '
+                f'zeon: {zeon:.4f}, xent: {xent:.4f}'
+            )
+            record["global_step"].append(global_step)
+            record[loader_name]["zeon"].append(zeon)
+            record[loader_name]["xent"].append(xent)
+
+        if train_dir is not None:
+            utils.jdump(record, utils.join(train_dir, 'record.json'))
 
 
 def _check_labels(
@@ -232,19 +271,27 @@ def _check_labels(
     return confusion_mats
 
 
+# TODO: Grab the images confusion matrix; perhaps most useful for true blond but not classified
+# TODO: Anything in common for false predictions
 def _finetune_clip(
     dataset_name="celeba",
     train_batch_size=128,
     eval_batch_size=1024,
     lr=1e-4,
-    epochs=10,
+    epochs=3,
     eval_steps=50,
     eval_batches=20,
+    save_steps=200,
+    train_dir: Optional[str] = None,
+    linear_probe=False,
+    unfreeze_text_encoder=False,
 ):
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
-    model, optimizer = _make_model_and_optimizer(linear_probe=True, lr=lr)
+    model, optimizer = _make_model_and_optimizer(
+        lr=lr, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder
+    )
     train(
         epochs=epochs,
         model=model,
@@ -254,6 +301,8 @@ def _finetune_clip(
         test_loader=test_loader,
         eval_steps=eval_steps,
         eval_batches=eval_batches,
+        save_steps=save_steps,
+        train_dir=train_dir,
     )
 
 
