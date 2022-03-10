@@ -7,7 +7,6 @@ python -m explainx.loop --dataset_name celeba --save_steps 1 --train_dir "/nlp/s
 """
 import collections
 import json
-import os.path
 import sys
 from typing import Sequence, Optional
 
@@ -16,6 +15,7 @@ import torch
 from torch import optim, nn
 import torch.nn.functional as F
 from torch.utils import data
+import torchvision
 from torchvision import datasets as D
 from torchvision import transforms as T
 import tqdm
@@ -23,27 +23,26 @@ import tqdm
 from swissknife import utils
 import transformers
 from .common import root
+from .misc import CHANNEL_MEAN, CHANNEL_STD
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=224, resize_size=256):
-    clip_mean, clip_std = (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)
-
     if dataset_name == "celeba":
         train_transform = T.Compose([
             T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
             T.Resize(resize_size),  # Image might not be big enough.
             T.RandomCrop(image_size),  # Data augmentation.
             T.ToTensor(),
-            T.Normalize(clip_mean, clip_std),
+            T.Normalize(CHANNEL_MEAN, CHANNEL_STD),
         ])
         test_transform = T.Compose([
             T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
             T.Resize(resize_size),
             T.CenterCrop(image_size),
             T.ToTensor(),
-            T.Normalize(clip_mean, clip_std),
+            T.Normalize(CHANNEL_MEAN, CHANNEL_STD),
         ])
         train = D.CelebA(root=root, download=True, split='train', transform=train_transform)
         valid, test = tuple(
@@ -111,7 +110,7 @@ class CLIP(nn.Module):
 def _loss_fn(
     logits: torch.Tensor, labels: torch.Tensor, target: str,
     metric="xent", reduction: str = 'mean',
-):
+) -> torch.Tensor:
     if target == "blond hair":
         labels = labels[:, 9]  # on is blond hair.
     elif target == "black hair":
@@ -338,8 +337,10 @@ def _finetune_clip(
     )
 
 
+@torch.no_grad()
 def _analyze(
     train_dir,  # Place to load checkpoint.
+    ckpt_file=None,
     model_name="openai/clip-vit-base-patch32",
     linear_probe=False,
     unfreeze_text_encoder=False,
@@ -355,21 +356,44 @@ def _analyze(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
     model = _make_model(model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder)
-    ckpt_path = train_dir if os.path.isfile(train_dir) else utils.latest_ckpt(train_dir)
+    if ckpt_file is not None:
+        ckpt_path = utils.join(train_dir, ckpt_file)
+    else:
+        ckpt_path = utils.latest_ckpt(train_dir)
     utils.load_ckpt(ckpt_path, model=model, verbose=True)
-    model.eval()
 
     for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
+        # Collect the images!
         fps = []
         fns = []
         for tensors in loader:
+            if len(fps) >= num_per_group and len(fns) >= num_per_group:
+                break
+
+            model.eval()
+
             tensors = tuple(t.to(device) for t in tensors)
             images, labels = tensors
 
             output = model(images)
             logits = output.logits_per_image
 
-            zeon = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="zeon")
+            fp = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="false_positive")
+            fn = _loss_fn(logits=logits, labels=labels, target=target, reduction="none", metric="false_negative")
+
+            fp, fn = tuple(t.bool().cpu().tolist() for t in (fp, fn))
+            for fp_i, fn_i, image_i in zip(fp, fn, images):
+                if fp_i and len(fps) < num_per_group:
+                    fps.append(image_i)
+                if fn_i and len(fns) < num_per_group:
+                    fns.append(image_i)
+
+        for image_group, file_name in zip((fps, fns), ('fps.png', 'fns.png')):
+            torchvision.utils.save_image(
+                utils.denormalize(torch.cat(image_group, dim=0), mean=CHANNEL_MEAN, std=CHANNEL_STD),
+                fp=utils.join(train_dir, f"{loader_name}-{file_name}"),
+                nrow=5,
+            )
 
 
 def main(task="finetune_clip", **kwargs):

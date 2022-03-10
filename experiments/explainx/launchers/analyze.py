@@ -10,7 +10,8 @@ import fire
 def main():
     command = '''python -m explainx.loop \
         --task analyze \
-        --train_dir /nlp/scr/lxuechen/explainx/mar1022/linear_probe_True_model_name_openai_clip-vit-base-patch32/global_step_9800.000000.ckpt
+        --train_dir /nlp/scr/lxuechen/explainx/mar1022/linear_probe_True_model_name_openai_clip-vit-base-patch32 \
+        --ckpt_file global_step_9800.000000.ckpt
     '''
     os.system(command)
 
