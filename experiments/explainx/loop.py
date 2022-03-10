@@ -389,8 +389,12 @@ def _analyze(
                     fns.append(image_i)
 
         for image_group, file_name in zip((fps, fns), ('fps.png', 'fns.png')):
+            if len(image_group) > 0 and image_group[0].dim() == 3:
+                images = torch.stack(image_group, dim=0)
+            else:  # dim == 4.
+                images = torch.cat(image_group, dim=0)
             torchvision.utils.save_image(
-                utils.denormalize(torch.cat(image_group, dim=0), mean=CHANNEL_MEAN, std=CHANNEL_STD),
+                utils.denormalize(images, mean=CHANNEL_MEAN, std=CHANNEL_STD),
                 fp=utils.join(train_dir, f"{loader_name}-{file_name}"),
                 nrow=5,
             )
