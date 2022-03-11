@@ -160,10 +160,11 @@ def _loss_fn(
 @torch.no_grad()
 def evaluate(model, loader, target, eval_batches=sys.maxsize):
     xents, zeons = [], []
-    model.eval()
     for batch_idx, tensors in enumerate(loader):
         if batch_idx >= eval_batches:
             break
+
+        model.eval()
 
         tensors = tuple(t.to(device) for t in tensors)
         images, labels = tensors
@@ -334,7 +335,6 @@ def _finetune_clip(
 @torch.no_grad()
 def _analyze(
     train_dir,  # Place to load checkpoint.
-    ckpt_file=None,
     model_name="openai/clip-vit-base-patch32",
     linear_probe=False,
     unfreeze_text_encoder=False,
@@ -345,7 +345,10 @@ def _analyze(
     target="blond hair",
     num_per_group=50,
 ):
-    """Check the error blocks in the confusion matrix."""
+    """Check the error blocks in the confusion matrix.
+
+    Also report the number of 4 types of instances.
+    """
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
@@ -353,13 +356,12 @@ def _analyze(
     ckpt_path = utils.latest_ckpt(utils.join(train_dir, 'ckpts'))
     utils.load_ckpt(ckpt_path, model=model, verbose=True)
 
+    data_stats = dict()
     for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
         # Lists to collect the images!
         lsts = [[] for _ in range(4)]
+        num_tp = num_tn = num_fp = num_fn = 0
         for tensors in loader:
-            if all(len(lst) >= num_per_group for lst in lsts):
-                break
-
             model.eval()
 
             tensors = tuple(t.to(device) for t in tensors)
@@ -373,15 +375,27 @@ def _analyze(
                 for metric in ("true_positive", "true_negative", "false_positive", "false_negative")
             )
             tp, tn, fp, fn = tuple(t.bool().cpu().tolist() for t in (tp, tn, fp, fn))
+            num_tp += sum(tp)
+            num_tn += sum(tn)
+            num_fp += sum(fp)
+            num_fn += sum(fn)
 
             for items in utils.zip_(tp, tn, fp, fn, images):
                 quants = items[:4]
                 image = items[-1]
                 for quant, lst in utils.zip_(quants, lsts):
-                    if len(lst) < num_per_group and quant:
+                    if quant and len(lst) < num_per_group:
                         lst.append(image)
                         break
 
+        data_stats[loader_name] = {
+            "true positive": num_tp,
+            "true negative": num_tn,
+            "false positive": num_fp,
+            "false negative": num_fn,
+        }
+
+        # Show some.
         for image_group, file_name in zip(lsts, ('tps.png', 'tns.png', 'fps.png', 'fns.png')):
             if len(image_group) > 0 and image_group[0].dim() == 3:
                 images = torch.stack(image_group, dim=0)
@@ -392,6 +406,8 @@ def _analyze(
                 fp=utils.join(train_dir, f"{loader_name}-{file_name}"),
                 nrow=20,
             )
+
+    utils.jdump(data_stats, utils.join(train_dir, 'report.json'))
 
 
 def _check_data(
