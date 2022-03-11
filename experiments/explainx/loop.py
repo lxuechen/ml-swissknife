@@ -435,7 +435,6 @@ def _check_data(
         }
 
         # Show some.
-        blond, not_blond = tuple(lst[:num_per_group] for lst in (blond, not_blond))
         blond, not_blond = tuple(
             utils.denormalize(torch.stack(t), mean=CHANNEL_MEAN, std=CHANNEL_STD)
             for t in (blond, not_blond)
