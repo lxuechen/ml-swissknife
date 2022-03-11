@@ -2206,9 +2206,12 @@ class GenerationMixin:
                     next_token_scores = next_token_scores - contrastive_weight * all_neg_scores
                 elif contrastive_mode == "marginalization":
                     next_token_scores = next_token_scores - contrastive_weight * (
-                        torch.logsumexp(
-                            torch.stack([all_pos_scores, all_neg_scores + math.log(z0_div_z1)], dim=0), dim=0
-                        ) - math.log(2)
+                        (
+                            torch.logsumexp(
+                                torch.stack([all_pos_scores, all_neg_scores + math.log(z0_div_z1)], dim=0),
+                                dim=0
+                            ) - math.log(2)
+                        )
                     )
                 else:
                     raise ValueError(f"Unknown contrastive_mode: {contrastive_mode}")
