@@ -411,21 +411,26 @@ def _check_data(
         ('train', 'valid', 'test'),
         (train_loader, valid_loader, test_loader)
     ):
+        size = num_blond = num_not_blond = 0
         blond, not_blond = [], []
-        size = 0
         for tensors in tqdm.tqdm(loader, desc="batches"):
             images, labels = tensors
             labels = labels[:, 9]  # blond hair.
             labels = labels.bool().cpu().tolist()
+
+            size += images.size(0)
             for image, label in utils.zip_(images, labels):
                 if label:
-                    blond.append(image)
+                    num_blond += 1
+                    if len(blond) < num_per_group:  # Don't store too many.
+                        blond.append(image)
                 else:
-                    not_blond.append(image)
-            size += images.size(0)
+                    num_not_blond += 1
+                    if len(not_blond) < num_per_group:  # Don't store too many.
+                        not_blond.append(image)
         data_stats[loader_name] = {
-            'blond': len(blond),
-            'not blond': len(not_blond),
+            'blond': num_blond,
+            'not blond': num_not_blond,
             'size': size,
         }
 
