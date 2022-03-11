@@ -9,7 +9,7 @@ python -m explainx.loop --task check_data
 import collections
 import json
 import sys
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Union
 
 import fire
 import torch
@@ -98,11 +98,15 @@ class CLIP(nn.Module):
     def __init__(
         self,
         model_name: str,
-        text_labels_raw: Sequence[str],
+        text_labels_raw: Union[str, Sequence[str]],
     ):
         super(CLIP, self).__init__()
         self.model: nn.Module = transformers.CLIPModel.from_pretrained(model_name)
         self.tokenizer = transformers.CLIPTokenizer.from_pretrained(model_name)
+
+        if isinstance(text_labels_raw, str):
+            text_labels_raw = text_labels_raw.split(',')
+        print(f'text labels are: {repr(text_labels_raw)}')
 
         self.text_labels_raw = text_labels_raw
         self.text_labels = self.tokenizer(text_labels_raw, return_tensors="pt", padding=True)
@@ -283,7 +287,7 @@ def _finetune_clip(
     model_name="openai/clip-vit-base-patch32",  # base model patch size is 32 x 32.
     linear_probe=False,
     unfreeze_text_encoder=False,
-    text_labels_raw=('other hair color', 'blond hair'),
+    text_labels_raw: Union[str, Sequence[str]] = ('other hair color', 'blond hair'),
 
     dataset_name="celeba",
     train_batch_size=32,

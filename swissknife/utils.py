@@ -50,6 +50,11 @@ pathexists = os.path.exists
 makedirs = os.makedirs
 
 
+def set_trace():
+    import pdb
+    pdb.set_trace()
+
+
 def float2str(x, precision=8):
     return f"{x:.{precision}f}".replace('.', "_")
 
