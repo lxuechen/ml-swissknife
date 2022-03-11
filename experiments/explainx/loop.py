@@ -69,8 +69,9 @@ def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=22
 
 def _make_model(
     model_name="openai/clip-vit-base-patch32", linear_probe=False, unfreeze_text_encoder=False,
+    text_labels_raw=('other hair color', 'blond hair'),
 ):
-    model = CLIP(model_name=model_name).to(device)
+    model = CLIP(model_name=model_name, text_labels_raw=text_labels_raw).to(device)
     if linear_probe:
         model.model.requires_grad_(False)
         model.model.visual_projection.requires_grad_(True)
@@ -81,10 +82,12 @@ def _make_model(
 
 def _make_model_and_optimizer(
     model_name="openai/clip-vit-base-patch32", linear_probe=False, unfreeze_text_encoder=False,
+    text_labels_raw=('other hair color', 'blond hair'),
     **optimizer_kwargs,
 ):
     model = _make_model(
-        model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder
+        model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder,
+        text_labels_raw=text_labels_raw,
     )
     optimizer = optim.Adam(params=model.parameters(), **optimizer_kwargs)
     return model, optimizer
@@ -94,8 +97,8 @@ class CLIP(nn.Module):
 
     def __init__(
         self,
-        model_name="openai/clip-vit-base-patch32",
-        text_labels_raw: Sequence[str] = ('other hair color', 'blond hair'),
+        model_name: str,
+        text_labels_raw: Sequence[str],
     ):
         super(CLIP, self).__init__()
         self.model: nn.Module = transformers.CLIPModel.from_pretrained(model_name)
@@ -257,6 +260,8 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
         if train_dir is not None:
             utils.jdump(record, utils.join(train_dir, 'record.json'))
 
+    # TODO: Store checkpoint at the end.
+
 
 def _check_labels(
     dataset_name="celeba", train_batch_size=128, eval_batch_size=1024, eval_batches=sys.maxsize,
@@ -304,6 +309,7 @@ def _finetune_clip(
     model_name="openai/clip-vit-base-patch32",  # base model patch size is 32 x 32.
     linear_probe=False,
     unfreeze_text_encoder=False,
+    text_labels_raw=('other hair color', 'blond hair'),
 
     dataset_name="celeba",
     train_batch_size=32,
@@ -323,6 +329,7 @@ def _finetune_clip(
     )
     model, optimizer = _make_model_and_optimizer(
         model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder,
+        text_labels_raw=text_labels_raw,
         lr=lr,
     )
     train(
