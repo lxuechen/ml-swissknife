@@ -161,7 +161,6 @@ def consensus(
     dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
-    # TODO: There has to be a bug! so different from contrastive.
     captions = model.generate(
         images=group1,
         average_consensus=average_consensus,
