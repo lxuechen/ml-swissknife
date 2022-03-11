@@ -138,6 +138,7 @@ def consensus(
     model = _make_model(image_size=image_size).eval()
 
     beam_search_kwargs = dict(
+        sample=False,
         num_beams=num_beams,
         max_length=max_length,
         min_length=min_length,
@@ -148,11 +149,11 @@ def consensus(
     pairs = []
     for contrastive_weight in tqdm.tqdm(contrastive_weights):
         cap = model.generate(
-            images=group1, images2=group2, sample=False,
+            images=group1, images2=group2,
             contrastive_weight=contrastive_weight,
-            z0_div_z1=z0_div_z1,
             contrastive_mode=contrastive_mode,
             average_consensus=average_consensus,
+            z0_div_z1=z0_div_z1,
             **beam_search_kwargs
         )[0]
         pairs.append((contrastive_weight, cap))
@@ -162,7 +163,7 @@ def consensus(
 
     # TODO: There has to be a bug! so different from contrastive.
     captions = model.generate(
-        images=group1, sample=False,
+        images=group1,
         average_consensus=average_consensus,
         **beam_search_kwargs
     )
