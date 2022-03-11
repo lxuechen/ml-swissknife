@@ -1,0 +1,17 @@
+{
+    "train": {
+        "blond": 24267,
+        "not blond": 138503,
+        "size": 162770
+    },
+    "valid": {
+        "blond": 3056,
+        "not blond": 16811,
+        "size": 19867
+    },
+    "test": {
+        "blond": 2660,
+        "not blond": 17302,
+        "size": 19962
+    }
+}
