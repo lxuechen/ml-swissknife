@@ -218,7 +218,7 @@ def consensus(
             contrastive_mode=contrastive_mode,
             average_consensus=average_consensus,
             z0_div_z1=z0_div_z1,
-            **beam_search_kwargs,
+            **beam_search_kwargs
         )[0]
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
@@ -226,7 +226,7 @@ def consensus(
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
     captions = model.generate(
-        images=land_images,
+        images=water_images,
         average_consensus=average_consensus,
         **beam_search_kwargs,
     )
