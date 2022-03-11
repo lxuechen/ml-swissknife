@@ -179,21 +179,19 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
     print(optimizer)
     print(f'model has {num_trainable_params / 1e6:.4f} million trainable params')
 
+    epoch = 0
     global_step = 0
     record = dict(
-        global_step=[],
-        train=dict(zeon=[], xent=[]),
-        valid=dict(zeon=[], xent=[]),
-        test=dict(zeon=[], xent=[]),
+        global_step=[], train=dict(zeon=[], xent=[]), valid=dict(zeon=[], xent=[]), test=dict(zeon=[], xent=[]),
     )
 
-    if eval_before_train:
+    def eval_and_log():
         for loader_name, loader in zip(
             ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
         ):
             zeon, xent = evaluate(model, loader, target, eval_batches=eval_batches)
             print(
-                f'loader: {loader_name}, global_step: {global_step}, epoch: {0}, '
+                f'loader: {loader_name}, global_step: {global_step}, epoch: {epoch}, '
                 f'zeon: {zeon:.4f}, xent: {xent:.4f}'
             )
             record[loader_name]["zeon"].append(zeon)
@@ -202,6 +200,13 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
 
         if train_dir is not None:
             utils.jdump(record, utils.join(train_dir, 'record.json'))
+
+    def save_ckpt():
+        ckpt_path = utils.join(train_dir, 'ckpts', f'global_step_{global_step:06d}.ckpt')
+        utils.save_ckpt(path=ckpt_path, model=model, optimizer=optimizer)
+
+    if eval_before_train:
+        eval_and_log()
 
     print('start training')
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
@@ -218,49 +223,18 @@ def train(epochs, model, optimizer, train_loader, valid_loader, test_loader, tar
             optimizer.step()
             global_step += 1
 
-            if global_step % save_steps == 0 and train_dir is not None:
-                ckpt_path = utils.join(train_dir, f'global_step_{global_step:06d}.ckpt')
-                utils.save_ckpt(
-                    path=ckpt_path,
-                    model=model,
-                    optimizer=optimizer,
-                )
+            if train_dir is not None and global_step % save_steps == 0:
+                save_ckpt()
 
             if global_step % eval_steps == 0:
-                for loader_name, loader in zip(
-                    ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
-                ):
-                    zeon, xent = evaluate(model, loader, target, eval_batches=eval_batches)
-                    print(
-                        f'loader: {loader_name}, global_step: {global_step}, epoch: {epoch}, '
-                        f'zeon: {zeon:.4f}, xent: {xent:.4f}'
-                    )
-                    record[loader_name]["zeon"].append(zeon)
-                    record[loader_name]["xent"].append(xent)
-                record["global_step"].append(global_step)
-
-                if train_dir is not None:
-                    utils.jdump(record, utils.join(train_dir, 'record.json'))
+                eval_and_log()
 
     print('end training')
-
     if eval_after_train:
-        for loader_name, loader in zip(
-            ('train', 'valid', 'test'), (train_loader, valid_loader, test_loader)
-        ):
-            zeon, xent = evaluate(model, loader, target, eval_batches=eval_batches)
-            print(
-                f'final loader: {loader_name}, global_step: {global_step}, epoch: {0}, '
-                f'zeon: {zeon:.4f}, xent: {xent:.4f}'
-            )
-            record[loader_name]["zeon"].append(zeon)
-            record[loader_name]["xent"].append(xent)
-        record["global_step"].append(global_step)
+        eval_and_log()
 
-        if train_dir is not None:
-            utils.jdump(record, utils.join(train_dir, 'record.json'))
-
-    # TODO: Store checkpoint at the end.
+    if train_dir is not None:
+        save_ckpt()
 
 
 def _check_labels(
@@ -368,7 +342,7 @@ def _analyze(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
     model = _make_model(model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder)
-    ckpt_path = utils.join(train_dir, ckpt_file) if ckpt_file is not None else utils.latest_ckpt(train_dir)
+    ckpt_path = utils.latest_ckpt(utils.join(train_dir, 'ckpts'))
     utils.load_ckpt(ckpt_path, model=model, verbose=True)
 
     for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
