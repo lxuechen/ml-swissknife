@@ -406,7 +406,7 @@ def _check_data(
         drop_last=False,  # Don't drop training images.
     )
 
-    # CelebA has ~200k train data, ~20k test and val data.
+    # CelebA has ~160k train data, ~20k test and val data; total ~200k data.
     data_stats = dict()
     for loader_name, loader in utils.zip_(
         ('train', 'valid', 'test'),
