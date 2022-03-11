@@ -2163,7 +2163,7 @@ def latest_ckpt(dir_, prefix="global_step_", suffix=".ckpt"):
         print(f'Did not find any checkpoints in: {dir_}')
         return None
 
-    latest_path = os.path.join(dir_, f'{prefix}{max(idx)}{suffix}')
+    latest_path = os.path.join(dir_, f'{prefix}{max(idx):06d}{suffix}')
     return latest_path
 
 
