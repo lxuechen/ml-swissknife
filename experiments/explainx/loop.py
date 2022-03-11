@@ -72,8 +72,7 @@ def _make_loaders(
 
 
 def _make_model(
-    model_name="openai/clip-vit-base-patch32", linear_probe=False, unfreeze_text_encoder=False,
-    text_labels_raw=('other hair color', 'blond hair'),
+    model_name, linear_probe, unfreeze_text_encoder, text_labels_raw,
 ):
     model = CLIP(model_name=model_name, text_labels_raw=text_labels_raw).to(device)
     if linear_probe:
@@ -85,8 +84,7 @@ def _make_model(
 
 
 def _make_model_and_optimizer(
-    model_name="openai/clip-vit-base-patch32", linear_probe=False, unfreeze_text_encoder=False,
-    text_labels_raw=('other hair color', 'blond hair'),
+    model_name, linear_probe, unfreeze_text_encoder, text_labels_raw,
     **optimizer_kwargs,
 ):
     model = _make_model(
@@ -338,6 +336,7 @@ def _analyze(
     model_name="openai/clip-vit-base-patch32",
     linear_probe=False,
     unfreeze_text_encoder=False,
+    text_labels_raw=('other hair color', 'blond hair'),
 
     dataset_name="celeba",
     train_batch_size=32,
@@ -352,7 +351,10 @@ def _analyze(
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size,
     )
-    model = _make_model(model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder)
+    model = _make_model(
+        model_name=model_name, linear_probe=linear_probe, unfreeze_text_encoder=unfreeze_text_encoder,
+        text_labels_raw=text_labels_raw,
+    )
     ckpt_path = utils.latest_ckpt(utils.join(train_dir, 'ckpts'))
     utils.load_ckpt(ckpt_path, model=model, verbose=True)
 
