@@ -26,7 +26,7 @@ def main():
                 contrastive_mode=contrastive_mode,
             )
         )
-    utils.gpu_scheduler(commands=commands, maxMemory=1e-4, maxLoad=1e-4)
+    utils.gpu_scheduler(commands=commands, maxMemory=0.3, maxLoad=1e-4)
 
 
 if __name__ == "__main__":
