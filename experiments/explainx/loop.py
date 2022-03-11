@@ -29,7 +29,10 @@ from .misc import CHANNEL_MEAN, CHANNEL_STD
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=224, resize_size=256, num_workers=4):
+def _make_loaders(
+    dataset_name, train_batch_size, eval_batch_size, image_size=224, resize_size=256, num_workers=4,
+    drop_last=True,  # Only useful for train.
+):
     if dataset_name == "celeba":
         train_transform = T.Compose([
             T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
@@ -52,7 +55,8 @@ def _make_loaders(dataset_name, train_batch_size, eval_batch_size, image_size=22
         )
 
         train_loader = data.DataLoader(
-            train, batch_size=train_batch_size, drop_last=True, shuffle=True, pin_memory=True, num_workers=num_workers
+            train, batch_size=train_batch_size, drop_last=drop_last, shuffle=True, pin_memory=True,
+            num_workers=num_workers
         )
         valid_loader, test_loader = tuple(
             data.DataLoader(
@@ -394,62 +398,70 @@ def _check_data(
     dataset_name="celeba",
     train_batch_size=32,
     eval_batch_size=512,
-    target="blond hair",
-    num_per_group=500,
+    num_per_group=200,
 ):
     """Check if the data is mislabeled."""
     train_loader, valid_loader, test_loader = _make_loaders(
-        dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size, num_workers=0
-    )
-    blond = []
-    not_blond = []
-    for tensors in test_loader:
-        if len(blond) >= num_per_group:
-            break
-        if len(not_blond) >= num_per_group:
-            break
-
-        images, labels = tensors
-
-        labels = labels[:, 9]  # blond hair.
-        labels = labels.bool().cpu().tolist()
-        for image, label in utils.zip_(images, labels):
-            if label and len(blond) < num_per_group:
-                blond.append(image)
-            elif len(not_blond) < num_per_group:
-                not_blond.append(image)
-        del images, labels
-
-    blond, not_blond = tuple(
-        utils.denormalize(torch.stack(t), mean=CHANNEL_MEAN, std=CHANNEL_STD)
-        for t in (blond, not_blond)
+        dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size, num_workers=0,
+        drop_last=False,  # Don't drop training images.
     )
 
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import torchvision.transforms.functional as tvF
+    data_stats = dict()
+    for loader_name, loader in utils.zip_(
+        ('train', 'valid', 'test'),
+        (train_loader, valid_loader, test_loader)
+    ):
+        blond, not_blond = [], []
+        size = 0
+        for tensors in tqdm.tqdm(loader, desc="batches"):
+            images, labels = tensors
+            labels = labels[:, 9]  # blond hair.
+            labels = labels.bool().cpu().tolist()
+            for image, label in utils.zip_(images, labels):
+                if label:
+                    blond.append(image)
+                else:
+                    not_blond.append(image)
+            size += images.size(0)
+        data_stats[loader_name] = {
+            'blond': len(blond),
+            'not blond': len(not_blond),
+            'size': size,
+        }
 
-    def show(imgs):
-        if not isinstance(imgs, list):
-            imgs = [imgs]
-        fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
-        for i, img in enumerate(imgs):
-            img = img.detach()
-            img = tvF.to_pil_image(img)
-            axs[0, i].imshow(np.asarray(img))
-            axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-        plt.show()
-        plt.close()
+        # Show some.
+        blond, not_blond = tuple(lst[:num_per_group] for lst in (blond, not_blond))
+        blond, not_blond = tuple(
+            utils.denormalize(torch.stack(t), mean=CHANNEL_MEAN, std=CHANNEL_STD)
+            for t in (blond, not_blond)
+        )
 
-    torchvision.utils.save_image(
-        blond,
-        utils.join('.', 'explainx', 'plots', 'blond.png'),
-        nrow=20,
-    )
-    torchvision.utils.save_image(
-        not_blond,
-        utils.join('.', 'explainx', 'plots', 'not_blond.png'),
-        nrow=20,
+        # def show(imgs):
+        #     if not isinstance(imgs, list):
+        #         imgs = [imgs]
+        #     fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
+        #     for i, img in enumerate(imgs):
+        #         img = img.detach()
+        #         img = tvF.to_pil_image(img)
+        #         axs[0, i].imshow(np.asarray(img))
+        #         axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+        #     plt.show()
+        #     plt.close()
+
+        torchvision.utils.save_image(
+            blond,
+            utils.join('.', 'explainx', 'plots', 'blond.png'),
+            nrow=20,
+        )
+        torchvision.utils.save_image(
+            not_blond,
+            utils.join('.', 'explainx', 'plots', 'not_blond.png'),
+            nrow=20,
+        )
+
+    utils.jdump(
+        data_stats,
+        utils.join('.', 'explainx', 'data_stats', 'blond_not_blond.json'),
     )
 
 
