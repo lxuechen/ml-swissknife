@@ -1,5 +1,5 @@
 """
-train black hair models
+black vs not black
 python -m explainx.launchers.mar1122
 """
 
@@ -41,7 +41,7 @@ def main(
                     date=date,
                 )
             )
-    utils.gpu_scheduler(commands, log=False)
+    utils.gpu_scheduler(commands, log=True)
 
 
 if __name__ == "__main__":
