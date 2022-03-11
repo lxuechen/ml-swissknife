@@ -32,7 +32,7 @@ def main():
                         gender_target=gender_target,
                     )
                 )
-    utils.gpu_scheduler(commands=commands, maxMemory=0.3, maxLoad=0.3)
+    utils.gpu_scheduler(commands=commands, maxMemory=0.2, maxLoad=1e-4)
 
 
 if __name__ == "__main__":
