@@ -2143,7 +2143,7 @@ def sort_ckpts(file_names: Union[map, filter, list]):
     return file_names_copy
 
 
-def latest_ckpt(dir_, prefix="global_step_", suffix=".ckpt"):
+def latest_ckpt(dir_, prefix="global_step_", suffix=".ckpt", num_digits=6):
     # Returns the path towards the latest ckpt. Returns `None` if no ckpt is found.
     # Assumes names are of the format `./parent_dir/global_step_i.ckpt`, where i is the index.
     # The prefix "global_step_" and suffix ".ckpt" must *both* be present in the path.
@@ -2163,7 +2163,7 @@ def latest_ckpt(dir_, prefix="global_step_", suffix=".ckpt"):
         print(f'Did not find any checkpoints in: {dir_}')
         return None
 
-    latest_path = os.path.join(dir_, f'{prefix}{max(idx):06d}{suffix}')
+    latest_path = os.path.join(dir_, f'{prefix}{max(idx):0{num_digits}d}{suffix}')
     return latest_path
 
 
