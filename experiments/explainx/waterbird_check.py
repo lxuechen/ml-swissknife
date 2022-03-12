@@ -1,8 +1,7 @@
 """
 Check captioner says something about background for waterbirds.
 
-To run
-    python -m explainx.waterbird_check
+python -m explainx.waterbird_check
 """
 
 import os
@@ -161,6 +160,7 @@ def consensus(
     num_beams=20,
     max_length=50,
     min_length=3,
+    water_first=True,
 ):
     """Check consensus beam search works.
 
@@ -200,6 +200,11 @@ def consensus(
     model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
     model.to(device).eval()
 
+    if water_first:
+        group1, group2 = water_images, land_images
+    else:
+        group2, group1 = water_images, land_images
+
     beam_search_kwargs = dict(
         sample=False,
         num_beams=num_beams,
@@ -213,7 +218,7 @@ def consensus(
     pairs = []
     for contrastive_weight in tqdm.tqdm(contrastive_weights):
         cap = model.generate(
-            images=water_images, images2=land_images,
+            images=group1, images2=group2,
             contrastive_weight=contrastive_weight,
             contrastive_mode=contrastive_mode,
             average_consensus=average_consensus,
@@ -226,7 +231,7 @@ def consensus(
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
     captions = model.generate(
-        images=water_images,
+        images=group1,
         average_consensus=average_consensus,
         **beam_search_kwargs,
     )
