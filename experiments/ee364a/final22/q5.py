@@ -1,12 +1,4 @@
-"""
-"""
-
 import fire
-
-### THIS FILE GENERATES d, K, N, N_test, TRAINING DATA X_train, pi_train, TEST DATA X_test, pi_test AND
-### THE PROJECTION FUNCTION Pi()
-### YOU DO NOT NEED TO READ THIS FILE TO DO THE PROBLEM
-
 
 import numpy as np
 
