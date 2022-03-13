@@ -31,6 +31,7 @@ def main():
         c <= c_max,
         p <= p_max,
         sum(c) <= B,
+        c >= 0., d >= 0., p >= 0., n >= 0., u >= 0.
     ]
     cp.Problem(constraints=con, objective=obj).solve()
     print(compute_rms(n.value))
