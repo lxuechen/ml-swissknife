@@ -55,6 +55,7 @@ def main():
 
     def compute_avg_dist(inp, tar):
         pre = Pi(inp @ theta.value.T)
+        assert pre.shape == tar.shape
         return .5 * np.mean(np.sum(np.abs(pre - tar), axis=1), axis=0)
 
     tr_loss = compute_avg_dist(X_train, pi_train)
