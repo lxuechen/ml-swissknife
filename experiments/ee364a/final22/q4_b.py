@@ -18,6 +18,7 @@ def main():
     def compute_rms(_n):
         return np.sqrt(np.mean((_n - n_des) ** 2.))
 
+    css = (gamma_dist - r) * n_des
     c, d, p = tuple(cp.Variable(T) for _ in range(3))
     n, u = tuple(cp.Variable(T + 1) for _ in range(2))
     obj = cp.Minimize(sum(cp.square(n - n_des)) / (T + 1) + lamb * sum(cp.square(c[1:] - c[:-1])) / (T - 1))
@@ -31,6 +32,7 @@ def main():
         c <= c_max,
         p <= p_max,
         sum(c) <= B,
+        c == css,
         c >= 0., d >= 0., p >= 0., n >= 0., u >= 0.
     ]
     cp.Problem(constraints=con, objective=obj).solve()
