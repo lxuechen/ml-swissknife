@@ -53,7 +53,7 @@ def _make_loaders(
     return train_loader, valid_loader, test_loader
 
 
-def _make_datasets(dataset_name, image_size=224, resize_size=256):
+def _make_datasets(dataset_name, _root=root, image_size=224, resize_size=256):
     if dataset_name == "celeba":
         train_transform = T.Compose([
             T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
@@ -70,9 +70,9 @@ def _make_datasets(dataset_name, image_size=224, resize_size=256):
             T.Normalize(CHANNEL_MEAN, CHANNEL_STD),
         ])
 
-        train = D.CelebA(root=root, download=True, split='train', transform=train_transform)
+        train = D.CelebA(root=_root, download=True, split='train', transform=train_transform)
         valid, test = tuple(
-            D.CelebA(root=root, download=True, split=split, transform=test_transform)
+            D.CelebA(root=_root, download=True, split=split, transform=test_transform)
             for split in ('valid', 'test')
         )
         return train, valid, test
