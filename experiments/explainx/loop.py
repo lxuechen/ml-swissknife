@@ -9,7 +9,7 @@ python -m explainx.loop --task check_data
 import collections
 import json
 import sys
-from typing import Sequence, Optional, Union, List
+from typing import Sequence, Optional, Union
 
 import fire
 import torch
@@ -386,17 +386,23 @@ def _analyze(
             num_fp += sum(fp)
             num_fn += sum(fn)
 
+            # e.g., items = (0, 0, 1, 0, image).
             for idx_offset, items in enumerate(utils.zip_(tp, tn, fp, fn, images)):
                 quants = items[:4]
                 image = items[-1]
-                for quant, lst in utils.zip_(quants, lsts):  # e.g., tp, tp_lst.
+                for quant, lst, idx_lst in utils.zip_(quants, lsts, idx_lsts):  # e.g., tp, tp_lst.
                     if quant and len(lst) < num_per_group:
                         lst.append(image)
-                        # Don't break here!
-
+                        idx_lst.append(start_idx + idx_offset)
+                        break
             start_idx += images.size(0)
 
         data_stats[loader_name] = {
+            "tp_idx": idx_lsts[0],
+            "tn_idx": idx_lsts[1],
+            "fp_idx": idx_lsts[2],
+            "fn_idx": idx_lsts[3],
+
             "true positive": num_tp,
             "true negative": num_tn,
             "false positive": num_fp,
