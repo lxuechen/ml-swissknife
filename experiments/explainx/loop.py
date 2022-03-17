@@ -3,7 +3,7 @@ Closing the loop.
 
 celeba predict hair color. clip fine-tuning. check error.
 
-python -m explainx.loop --dataset_name celeba --save_steps 1 --train_dir "/nlp/scr/lxuechen/explainx/mar1022"
+python -m explainx.loop --dataset_name celeba --save_steps 1 --train_dir "/nlp/scr/lxuechen/explainx/test"
 python -m explainx.loop --task check_data
 """
 import collections
@@ -110,6 +110,7 @@ class CLIP(nn.Module):
             text_labels_raw = text_labels_raw.split(',')
         print(f'text labels are: {repr(text_labels_raw)}')
 
+        # TODO: record `input_ids` and `attention_mask`.
         self.text_labels_raw = text_labels_raw
         self.text_labels = self.tokenizer(text_labels_raw, return_tensors="pt", padding=True)
 
