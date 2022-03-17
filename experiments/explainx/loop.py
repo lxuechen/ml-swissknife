@@ -9,7 +9,7 @@ python -m explainx.loop --task check_data
 import collections
 import json
 import sys
-from typing import Sequence, Optional, Union
+from typing import Sequence, Optional, Union, List
 
 import fire
 import torch
@@ -363,7 +363,10 @@ def _analyze(
     for loader_name, loader in zip(('valid', 'test'), (valid_loader, test_loader)):
         # Lists to collect the images!
         lsts = [[] for _ in range(4)]
+        # Record the image ids for later manual inspection. Works if there's no shuffling.
+        idx_lsts = [[] for _ in range(4)]
         num_tp = num_tn = num_fp = num_fn = 0
+        start_idx = 0
         for tensors in loader:
             model.eval()
 
@@ -383,13 +386,15 @@ def _analyze(
             num_fp += sum(fp)
             num_fn += sum(fn)
 
-            for items in utils.zip_(tp, tn, fp, fn, images):
+            for idx_offset, items in enumerate(utils.zip_(tp, tn, fp, fn, images)):
                 quants = items[:4]
                 image = items[-1]
-                for quant, lst in utils.zip_(quants, lsts):
+                for quant, lst in utils.zip_(quants, lsts):  # e.g., tp, tp_lst.
                     if quant and len(lst) < num_per_group:
                         lst.append(image)
-                        break
+                        # Don't break here!
+
+            start_idx += images.size(0)
 
         data_stats[loader_name] = {
             "true positive": num_tp,
