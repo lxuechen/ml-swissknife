@@ -438,7 +438,8 @@ def _analyze(
 def _check_data(
     dataset_name="celeba", train_batch_size=32, eval_batch_size=512, num_per_group=200,
 ):
-    """Check if the data is mislabeled."""
+    """Check the blond vs non-blond number of images."""
+    # TODO: Support black hair.
     train_loader, valid_loader, test_loader = _make_loaders(
         dataset_name, train_batch_size=train_batch_size, eval_batch_size=eval_batch_size, num_workers=0,
         drop_last=False,  # Don't drop training images.
@@ -508,10 +509,41 @@ def _check_data(
     )
 
 
-def _check_by_id(dataset_name="celeba", num_per_group=200,
-                 **unused_kwargs):
-    """Check if the data is mislabeled."""
+def _check_by_id(
+    dataset_name="celeba",
+    data_stats_path=utils.join(
+        utils.home,
+        "Desktop/dump_a100",
+        "explainx/mar1022/linear_probe_True_model_name_openai_clip-vit-base-patch32/report.json"
+    ),
+    **unused_kwargs,
+):
+    """Check if the data is mislabeled.
+
+    python -m explainx.loop --task check_by_id --dataset_name celeba
+    """
     train, valid, test = _make_datasets(dataset_name=dataset_name)
+
+    data_stats = utils.jload(data_stats_path)
+
+    for dt, stats, tag in utils.zip_(
+        (valid, test), (data_stats['valid'], data_stats['test']), ('valid', 'test'),
+    ):
+        idx_lst = set(stats['fp_idx'])
+        num_pos = 0
+        imgs = []
+        for idx, (img, label) in enumerate(dt):  # Don't use loader.
+            if idx in idx_lst:
+                num_pos += label.item()
+                imgs.append(img)
+        imgs = torch.stack(imgs, dim=0)
+        print(f'num positives: {num_pos}')
+        torchvision.utils.save_image(
+            utils.denormalize(imgs, mean=CHANNEL_MEAN, std=CHANNEL_STD),
+            fp="/Users/xuechenli/Desktop/dump_a100/explainx/mar1022/linear_probe_True_model_name_openai_clip-vit-base"
+               f"-patch32/sanity-{tag}-fps.png",
+            nrow=20,
+        )
 
 
 def main(task="finetune_clip", **kwargs):
