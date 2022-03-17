@@ -34,25 +34,7 @@ def _make_loaders(
     drop_last=True,  # Only useful for train.
 ):
     if dataset_name == "celeba":
-        train_transform = T.Compose([
-            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
-            T.Resize(resize_size),  # Image might not be big enough.
-            T.RandomCrop(image_size),  # Data augmentation.
-            T.ToTensor(),
-            T.Normalize(CHANNEL_MEAN, CHANNEL_STD),
-        ])
-        test_transform = T.Compose([
-            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
-            T.Resize(resize_size),
-            T.CenterCrop(image_size),
-            T.ToTensor(),
-            T.Normalize(CHANNEL_MEAN, CHANNEL_STD),
-        ])
-        train = D.CelebA(root=root, download=True, split='train', transform=train_transform)
-        valid, test = tuple(
-            D.CelebA(root=root, download=True, split=split, transform=test_transform)
-            for split in ('valid', 'test')
-        )
+        train, valid, test = _make_datasets(dataset_name=dataset_name, image_size=image_size, resize_size=resize_size)
 
         train_loader = data.DataLoader(
             train, batch_size=train_batch_size, drop_last=drop_last, shuffle=True, pin_memory=True,
@@ -69,6 +51,35 @@ def _make_loaders(
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
     return train_loader, valid_loader, test_loader
+
+
+def _make_datasets(dataset_name, image_size=224, resize_size=256):
+    if dataset_name == "celeba":
+        train_transform = T.Compose([
+            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+            T.Resize(resize_size),  # Image might not be big enough.
+            T.RandomCrop(image_size),  # Data augmentation.
+            T.ToTensor(),
+            T.Normalize(CHANNEL_MEAN, CHANNEL_STD),
+        ])
+        test_transform = T.Compose([
+            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+            T.Resize(resize_size),
+            T.CenterCrop(image_size),
+            T.ToTensor(),
+            T.Normalize(CHANNEL_MEAN, CHANNEL_STD),
+        ])
+
+        train = D.CelebA(root=root, download=True, split='train', transform=train_transform)
+        valid, test = tuple(
+            D.CelebA(root=root, download=True, split=split, transform=test_transform)
+            for split in ('valid', 'test')
+        )
+        return train, valid, test
+    elif dataset_name == "waterbirds":
+        raise NotImplemented
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
 
 
 def _make_model(
@@ -425,10 +436,7 @@ def _analyze(
 
 
 def _check_data(
-    dataset_name="celeba",
-    train_batch_size=32,
-    eval_batch_size=512,
-    num_per_group=200,
+    dataset_name="celeba", train_batch_size=32, eval_batch_size=512, num_per_group=200,
 ):
     """Check if the data is mislabeled."""
     train_loader, valid_loader, test_loader = _make_loaders(
@@ -500,6 +508,12 @@ def _check_data(
     )
 
 
+def _check_by_id(dataset_name="celeba", num_per_group=200,
+                 **unused_kwargs):
+    """Check if the data is mislabeled."""
+    train, valid, test = _make_datasets(dataset_name=dataset_name)
+
+
 def main(task="finetune_clip", **kwargs):
     if task == "finetune_clip":
         _finetune_clip(**kwargs)
@@ -509,6 +523,8 @@ def main(task="finetune_clip", **kwargs):
         _analyze(**kwargs)
     elif task == "check_data":
         _check_data(**kwargs)
+    elif task == "check_by_id":
+        _check_by_id(**kwargs)
 
 
 if __name__ == "__main__":
