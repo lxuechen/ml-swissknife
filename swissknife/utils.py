@@ -1058,11 +1058,20 @@ class AveragedModel(nn.Module):
 def denormalize(x: torch.Tensor, mean: Sequence[float], std: Sequence[float]) -> torch.Tensor:
     """Unnormalize image for `torchvision.utils.save_image`."""
     # (bsz, n_channels, nh, hw) -> (n_channels, nh, nw, bsz).
+    is_single_example = x.dim() == 3
+    if is_single_example:
+        x = x[None, ...]
+
     ten = x.clone().permute(1, 2, 3, 0)
     for t, m, s in zip(ten, mean, std):
         t.mul_(s).add_(m)
     # (n_channels, nh, nw, bsz) -> (bsz, n_channels, nh, hw).
-    return torch.clamp(ten, 0, 1).permute(3, 0, 1, 2)
+    out = torch.clamp(ten, 0, 1).permute(3, 0, 1, 2)
+
+    if is_single_example:
+        return out[0]
+    else:
+        return out
 
 
 # Plotting.
