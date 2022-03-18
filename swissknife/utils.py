@@ -412,7 +412,7 @@ def download_file_from_google_drive(id, destination):
         CHUNK_SIZE = 32768
 
         with open(destination, "wb") as f:
-            for chunk in response.iter_content(CHUNK_SIZE):
+            for chunk in tqdm.tqdm(response.iter_content(CHUNK_SIZE), desc="chunks"):
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
 
