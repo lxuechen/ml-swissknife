@@ -197,7 +197,7 @@ class DictAvgMeter(object):
             for key, old in self._val.items():  # Metric name.
                 new = x[key]
                 if isinstance(new, (list, tuple)):
-                    self._val[key] = (
+                    self._val[key] = tuple(
                         old_i * (self._count / (self._count + 1)) + new_i / (self._count + 1)  # Numerical stability.
                         for old_i, new_i in utils.zip_(old, new)
                     )
