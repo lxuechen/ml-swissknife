@@ -166,6 +166,7 @@ def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str,
         if global_step % pause_steps == 0:
             print(f'global_step: {global_step}, metric_name: {metric_name}, avg result: {result.item()}')
 
+    print(f'final, metric_name: {metric_name}, avg result: {result.item()}')
     return result.item()
 
 
