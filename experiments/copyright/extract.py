@@ -86,8 +86,17 @@ def _make_data(dest_path: str):
     return data
 
 
-def _make_decoding_kwargs():
-    pass
+def _make_decoding_kwargs(decoding_mode="beam"):
+    if decoding_mode == "beam":
+        return dict(num_beams=5)
+    elif decoding_mode == "sample":
+        return dict(top_p=0.9)  # Nucleus.
+    elif decoding_mode == "sample_temp":
+        return dict(top_p=0.9, temperature=0.7)
+    elif decoding_mode == "sample_temp_decay":
+        raise NotImplementedError
+    else:
+        raise NotImplementedError
 
 
 def _decode(
@@ -159,7 +168,7 @@ class AvgAccumulatedResult(Result):
 
 
 @torch.no_grad()
-def _eval(dest_path, model_name, metric_name, pause_steps=100):
+def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str, pause_steps=100):
     """Loop over examples in the training data and check metric.
 
     The evaluation is intentionally not batched, since the beam search implementation in Huggingface uses a for-loop
@@ -171,6 +180,7 @@ def _eval(dest_path, model_name, metric_name, pause_steps=100):
 
     result = AvgAccumulatedResult()
     for global_step, (prompt, reference) in tqdm.tqdm(enumerate(data["data"].items(), 1), desc="examples"):
+        decoding_kwargs = _make_decoding_kwargs(decoding_mode)
         completions = _decode(pair=pair, prompt=prompt)
 
         this_result = MaxAccumulatedResult()
@@ -205,14 +215,15 @@ def main(
     dest_path=utils.join(data_root, 'data.json'),
     model_name="distilgpt2",
     metric_name="edit_distance",
-    task="eval"
+    task="eval",
+    decoding_mode="beam",
 ):
     if task == "test":
         # python -m copyright.extract --task test
         _test()
     elif task == "eval":
         # python -m copyright.extract --task eval
-        _eval(dest_path, model_name, metric_name)
+        _eval(dest_path, model_name, metric_name, decoding_mode)
 
 
 if __name__ == "__main__":
