@@ -662,7 +662,7 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     return convert_none_to_zeros(_jvp, dummy_outputs)
 
 
-def to_numpy(*possibly_tensors: Union[torch.Tensor, np.ndarray]):
+def to_numpy(*possibly_tensors: Union[torch.Tensor, np.ndarray, float]):
     arrays = possibly_tensors
     arrays = [t.item() if isinstance(t, torch.Tensor) and t.numel() == 1 else t for t in arrays]
     arrays = [t.detach().cpu().numpy() if isinstance(t, torch.Tensor) else t for t in arrays]
@@ -1828,15 +1828,20 @@ def _make_scalar_valued_func(func, inputs, modules):
 
 # Meters.
 class Meter(abc.ABC):
+    def __init__(self, init_val: Optional[float] = None, store_history=False):
+        self._val = init_val
+        self._his = []
+        self._store_history = store_history
 
     @abc.abstractmethod
-    def step(self, curr):
-        raise NotImplementedError
+    def step(self, x: Union[torch.Tensor, np.ndarray, float]):
+        x = to_numpy(x)
+        if self._store_history:
+            self._his.append(x)
+        return x
 
-    @property
-    @abc.abstractmethod
-    def val(self):
-        raise NotImplementedError
+    def item(self) -> float:
+        return self._val
 
 
 class EMAMeter(Meter):
@@ -1844,55 +1849,57 @@ class EMAMeter(Meter):
 
     def __init__(self, gamma: Optional[float] = .99):
         super(EMAMeter, self).__init__()
-        self._val = None
         self._gamma = gamma
-        self._history = []
 
-    def step(self, x: Union[torch.Tensor, np.ndarray]):
-        x = to_numpy(x)
-        self._history.append(x)
-        self._val = x if self._val is None else self._gamma * self._val + (1 - self._gamma) * x
+    def step(self, x: Union[torch.Tensor, np.ndarray, float]):
+        x = super(EMAMeter, self).step(x)
+        if self._val is None:
+            self._val = x
+        else:
+            self._val = self._gamma * self._val + (1 - self._gamma) * x
         return self._val
 
-    @property
-    def val(self):
-        return self._val
 
-    @property
-    def history(self):
-        return self._history
-
-
-class AverageMeter(Meter):
+class AvgMeter(Meter):
     """Exact online averaging."""
 
     def __init__(self):
-        super(AverageMeter, self).__init__()
-        self._val = 0.
-        self.i = 0
+        super(AvgMeter, self).__init__()
+        self._count = 0
 
-    def step(self, x: Union[torch.Tensor, np.ndarray]):
-        self._val = to_numpy(x) if self.i == 0 else self._val * self.i / (self.i + 1) + to_numpy(x) / (self.i + 1)
-        self.i += 1
-        return self._val
-
-    @property
-    def val(self):
+    def step(self, x: Union[torch.Tensor, np.ndarray, float]):
+        x = super(AvgMeter, self).step(x)
+        if self._val is None:
+            self._val = x
+        else:
+            self._val = self._val * self._count / (self._count + 1) + x / (self._count + 1)
+        self._count += 1
         return self._val
 
 
 class SumMeter(Meter):
     def __init__(self):
         super(SumMeter, self).__init__()
-        self._val = None
 
-    def step(self, x: Union[torch.Tensor, np.ndarray]):
-        x = to_numpy(x)
-        self._val = x if self._val is None else (self._val + x)
+    def step(self, x: Union[torch.Tensor, np.ndarray, float]):
+        x = super(SumMeter, self).step(x)
+        if self._val is None:
+            self._val = x
+        else:
+            self._val = self._val + x
         return self._val
 
-    @property
-    def val(self):
+
+class MaxMeter(Meter):
+    def __init__(self):
+        super(MaxMeter, self).__init__()
+
+    def step(self, x: Union[torch.Tensor, np.ndarray, float]):
+        x = super(MaxMeter, self).step(x)
+        if self._val is None:
+            self._val = x
+        elif x > self._val:
+            self._val = x
         return self._val
 
 

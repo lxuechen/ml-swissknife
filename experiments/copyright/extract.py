@@ -1,4 +1,3 @@
-import abc
 import dataclasses
 import os
 from typing import List, Dict, Callable
@@ -136,37 +135,6 @@ def _decode(
     return completions
 
 
-class Result(abc.ABC):
-    def __init__(self, init_val=0.):
-        self._val = init_val
-
-    @abc.abstractmethod
-    def step(self, new_val):
-        raise NotImplemented
-
-    def item(self):
-        return self._val
-
-
-class MaxAccumulatedResult(Result):
-    def __init__(self, init_val=0.):
-        super(MaxAccumulatedResult, self).__init__(init_val)
-
-    def step(self, new_val):
-        self._val = new_val if new_val > self._val else self._val
-        return self._val
-
-
-class AvgAccumulatedResult(Result):
-    def __init__(self, init_val=0.):
-        super(AvgAccumulatedResult, self).__init__(init_val)
-        self.count = 0
-
-    def step(self, new_val):
-        self._val = self._val * self.count / (self.count + 1) + new_val / (self.count + 1)
-        self.count += 1
-
-
 @torch.no_grad()
 def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str, pause_steps=100):
     """Loop over examples in the training data and check metric.
@@ -178,12 +146,12 @@ def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str,
     pair: GenerativePair = _make_generative_components(model_name)
     metric_fn: Callable = METRIC_FNS[metric_name]
 
-    result = AvgAccumulatedResult()
+    result = utils.AvgMeter()
     for global_step, (prompt, reference) in tqdm.tqdm(enumerate(data["data"].items(), 1), desc="examples"):
         decoding_kwargs = _make_decoding_kwargs(decoding_mode)
-        completions = _decode(pair=pair, prompt=prompt)
+        completions = _decode(pair=pair, prompt=prompt, **decoding_kwargs)
 
-        this_result = MaxAccumulatedResult()
+        this_result = utils.MaxMeter()
         for completion in completions:
             completion = completion[len(prompt):]  # Omit the prompt component.
 
