@@ -86,7 +86,7 @@ def _make_data(dest_path: str):
 
 
 def _make_decoding_kwargs(decoding_mode="beam"):
-    if decoding_mode == "beam":
+    if decoding_mode == "beam":  # This is very slow.
         return dict(num_beams=5)
     elif decoding_mode == "sample":
         return dict(top_p=0.9)  # Nucleus.
@@ -98,6 +98,7 @@ def _make_decoding_kwargs(decoding_mode="beam"):
         raise NotImplementedError
 
 
+@torch.no_grad()
 def _decode(
     pair: GenerativePair, prompt: str,
     # Decoding kwargs.
@@ -135,13 +136,15 @@ def _decode(
     return completions
 
 
-@torch.no_grad()
-def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str, pause_steps=100):
+def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str, pause_steps=100, seed=42, dtype='float32'):
     """Loop over examples in the training data and check metric.
 
     The evaluation is intentionally not batched, since the beam search implementation in Huggingface uses a for-loop
     anyway.
     """
+    utils.manual_seed(seed)
+    utils.manual_dtype(dtype)
+
     data = _make_data(dest_path)
     pair: GenerativePair = _make_generative_components(model_name)
     metric_fn: Callable = METRIC_FNS[metric_name]
