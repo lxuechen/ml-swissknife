@@ -188,17 +188,21 @@ class DictAvgMeter(object):
         self._count = 0
 
     def step(self, x: Dict):
+        if 'hashcode' in x:
+            x.pop('hashcode')
+
         if self._val is None:
             self._val = x
         else:
-            for key in x:
-                if isinstance(self._val[key], (list, tuple)):
+            for key, old in self._val:  # Metric name.
+                new = x[key]
+                if isinstance(new, (list, tuple)):
                     self._val[key] = (
-                        i * (self._count / (self._count + 1)) + j / (self._count + 1)
-                        for i, j in utils.zip_(self._val[key], x[key])
+                        old_i * (self._count / (self._count + 1)) + new_i / (self._count + 1)  # Numerical stability.
+                        for old_i, new_i in utils.zip_(old, new)
                     )
                 else:
-                    self._val[key] = self._val[key] * (self._count / (self._count + 1)) + x[key] / (self._count + 1)
+                    self._val[key] = old * (self._count / (self._count + 1)) + new / (self._count + 1)
         self._count += 1
 
     def item(self):
