@@ -1,6 +1,7 @@
+import abc
 import dataclasses
 import os
-from typing import List, Dict, Callable
+from typing import List, Dict
 
 import fire
 from nltk.tokenize.treebank import TreebankWordTokenizer
@@ -23,44 +24,95 @@ MODELS = (
 )
 
 
-def _longest_common_prefix_length(s1: List[str], s2: List[str]) -> int:
-    min_len = min(len(s1), len(s2))
-    for i in range(min_len):
-        if s1[i] != s2[i]:
-            return len(s1[:i])
-    return min_len
+class Metric(abc.ABC):
+    @abc.abstractmethod
+    def process(self, completions: List[str], reference: str, prompt: str) -> Dict[str, float]:
+        raise NotImplementedError
 
 
-def _edit_distance(s1: List[str], s2: List[str]) -> int:
-    """Compute the Levenshtein distance between two sequences of tokens.
-    Edit distance is really an umbrella term. We focus on the Levenshtein distance.
-    Dynamic programming implementation with memoization.
-    """
-    l1, l2 = len(s1), len(s2)
-    distance_grid = [[0 for _ in range(l2 + 1)] for _ in range(l1 + 1)]  # l1 x l2 grid.
+class LongestCommonPrefixLengthMetric(Metric):
+    def _metric_fn(self, s1: List[str], s2: List[str]):  # noqa
+        min_len = min(len(s1), len(s2))
+        for i in range(min_len):
+            if s1[i] != s2[i]:
+                return len(s1[:i])
+        return min_len
 
-    for i in range(l1 + 1):
-        distance_grid[i][0] = i
+    def process(self, completions: List[str], reference: str, prompt: str) -> Dict:
+        results = []
+        for completion in completions:
+            completion = completion[len(prompt):]  # Omit the prompt component.
 
-    for j in range(l2 + 1):
-        distance_grid[0][j] = j
+            reference = reference[len(prompt):]
+            reference = reference[: len(completion)]
 
-    for i in range(1, l1 + 1):
-        for j in range(1, l2 + 1):
-            if s1[i - 1] == s2[j - 1]:  # Don't get bitten by off-by-one!
-                distance_grid[i][j] = distance_grid[i - 1][j - 1]
-            else:
-                distance_grid[i][j] = 1 + min(
-                    distance_grid[i][j - 1],  # Remove from s1.
-                    distance_grid[i - 1][j],  # Remove from s2.
-                    distance_grid[i - 1][j - 1],  # Replace.
-                )
-    return distance_grid[l1][l2]
+            completion_tokens = tokenizer.tokenize(completion)
+            reference_tokens = tokenizer.tokenize(reference)
+            results.append(self._metric_fn(completion_tokens, reference_tokens))
+        result = max(results)  # Worst-case is max.
+        return dict(longest_common_prefix_length=result)
+
+
+class EditDistanceMetric(Metric):
+
+    def _metric_fn(self, s1: List[str], s2: List[str]) -> int:  # noqa
+        """Compute the Levenshtein distance between two sequences of tokens.
+        Edit distance is really an umbrella term. We focus on the Levenshtein distance.
+        Dynamic programming implementation with memoization.
+        """
+        l1, l2 = len(s1), len(s2)
+        distance_grid = [[0 for _ in range(l2 + 1)] for _ in range(l1 + 1)]  # l1 x l2 grid.
+
+        for i in range(l1 + 1):
+            distance_grid[i][0] = i
+
+        for j in range(l2 + 1):
+            distance_grid[0][j] = j
+
+        for i in range(1, l1 + 1):
+            for j in range(1, l2 + 1):
+                if s1[i - 1] == s2[j - 1]:  # Don't get bitten by off-by-one!
+                    distance_grid[i][j] = distance_grid[i - 1][j - 1]
+                else:
+                    distance_grid[i][j] = 1 + min(
+                        distance_grid[i][j - 1],  # Remove from s1.
+                        distance_grid[i - 1][j],  # Remove from s2.
+                        distance_grid[i - 1][j - 1],  # Replace.
+                    )
+        return distance_grid[l1][l2]
+
+    def process(self, completions: List[str], reference: str, prompt: str) -> Dict:
+        results = []
+        for completion in completions:
+            completion = completion[len(prompt):]  # Omit the prompt component.
+
+            reference = reference[len(prompt):]
+            reference = reference[: len(completion)]
+
+            completion_tokens = tokenizer.tokenize(completion)
+            reference_tokens = tokenizer.tokenize(reference)
+            results.append(self._metric_fn(completion_tokens, reference_tokens))
+        result = min(results)  # Worst-case is min.
+        return dict(edit_distance=result)
+
+
+class BertScoreMetric(Metric):
+    def __init__(self):
+        import datasets
+        self._bertscore = datasets.load_metric('bertscore')
+
+    def process(self, completions: List[str], reference: str, prompt: str) -> Dict:
+        completions = [sent[len(prompt):] for sent in completions]
+        max_completion_length = max(len(sent) for sent in completions)
+        reference = reference[len(prompt):]
+        reference = reference[:max_completion_length]  # Rather hacky truncation.
+        return self._bertscore.compute(predictions=completions, references=[reference], lang="en")
 
 
 METRIC_FNS = {
-    "edit_distance": _edit_distance,
-    "longest_common_prefix_length": _longest_common_prefix_length
+    "edit_distance": EditDistanceMetric,
+    "longest_common_prefix_length": LongestCommonPrefixLengthMetric,
+    "bertscore": BertScoreMetric
 }
 
 
@@ -136,7 +188,26 @@ def _decode(
     return completions
 
 
-def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str, pause_steps=100, seed=42, dtype='float32'):
+class DictAvgMeter(object):
+    def __init__(self):
+        self._val = None
+        self._count = 0
+
+    def step(self, x: Dict):
+        if self._val is None:
+            self._val = x
+        else:
+            for key in x:
+                self._val[key] = self._val[key] * (self._count / (self._count + 1)) + x[key] / (self._count + 1)
+        self._count += 1
+
+    def item(self):
+        return self._val
+
+
+def _eval(
+    dest_path: str, model_name: str, metric_name: str, decoding_mode: str, pause_steps=100, seed=42, dtype='float32'
+):
     """Loop over examples in the training data and check metric.
 
     The evaluation is intentionally not batched, since the beam search implementation in Huggingface uses a for-loop
@@ -147,24 +218,12 @@ def _eval(dest_path: str, model_name: str, metric_name: str, decoding_mode: str,
 
     data = _make_data(dest_path)
     pair: GenerativePair = _make_generative_components(model_name)
-    metric_fn: Callable = METRIC_FNS[metric_name]
+    metric: Metric = METRIC_FNS[metric_name]()
+    result = DictAvgMeter()
 
-    result = utils.AvgMeter()
     for global_step, (prompt, reference) in tqdm.tqdm(enumerate(data["data"].items(), 1), desc="examples"):
-        decoding_kwargs = _make_decoding_kwargs(decoding_mode)
-        completions = _decode(pair=pair, prompt=prompt, **decoding_kwargs)
-
-        this_result = utils.MaxMeter()
-        for completion in completions:
-            completion = completion[len(prompt):]  # Omit the prompt component.
-
-            reference = reference[len(prompt):]
-            reference = reference[: len(completion)]
-
-            completion_tokens = tokenizer.tokenize(completion)
-            reference_tokens = tokenizer.tokenize(reference)
-            this_result.step(metric_fn(completion_tokens, reference_tokens))
-        result.step(this_result.item())
+        completions = _decode(pair=pair, prompt=prompt, **_make_decoding_kwargs(decoding_mode))
+        result.step(metric.process(completions=completions, reference=reference, prompt=prompt))
 
         if global_step % pause_steps == 0:
             print(f'global_step: {global_step}, metric_name: {metric_name}, avg result: {result.item()}')
