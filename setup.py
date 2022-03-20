@@ -10,7 +10,9 @@ setuptools.setup(
     description="Reusable ML research primitives for fast prototyping. ",
     url="https://github.com/lxuechen/swissknife",
     packages=setuptools.find_packages(exclude=['experiments']),
-    install_requires=['torch', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk'],
+    install_requires=[
+        'torch', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers', 'datasets'
+    ],
     python_requires='~=3.8',
     classifiers=[
         "Programming Language :: Python :: 3",

@@ -3,6 +3,7 @@ import dataclasses
 import os
 from typing import List, Dict
 
+import datasets
 import fire
 from nltk.tokenize.treebank import TreebankWordTokenizer
 import torch
@@ -16,12 +17,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 tokenizer = TreebankWordTokenizer()  # Standardized across all models.
 
 full_data_id = "1lJS5LQmaj3R5WVwzbNQdl8I4U1tf266t"  # ~2.9G
-pilot_data_id = "1NwzDx19uzIwBuw7Lq5CSytG7jIth2wJ-"
-
-MODELS = (
-    'distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large',
-    "EleutherAI/gpt-neo-125M", "EleutherAI/gpt-neo-1.3B", "EleutherAI/gpt-j-6B", "EleutherAI/gpt-neo-2.7B"
-)
+pilot_data_id = "1NwzDx19uzIwBuw7Lq5CSytG7jIth2wJ-"  # Very small; 10 examples.
 
 
 class Metric(abc.ABC):
@@ -48,13 +44,12 @@ class LongestCommonPrefixLengthMetric(Metric):
 
             completion_tokens = tokenizer.tokenize(completion)
             reference_tokens = tokenizer.tokenize(reference)
+
             results.append(self._metric_fn(completion_tokens, reference_tokens))
-        result = max(results)  # Worst-case is max.
-        return dict(longest_common_prefix_length=result)
+        return dict(longest_common_prefix_length=max(results))  # Worst-case is max.
 
 
 class EditDistanceMetric(Metric):
-
     def _metric_fn(self, s1: List[str], s2: List[str]) -> int:  # noqa
         """Compute the Levenshtein distance between two sequences of tokens.
         Edit distance is really an umbrella term. We focus on the Levenshtein distance.
@@ -91,14 +86,13 @@ class EditDistanceMetric(Metric):
 
             completion_tokens = tokenizer.tokenize(completion)
             reference_tokens = tokenizer.tokenize(reference)
+
             results.append(self._metric_fn(completion_tokens, reference_tokens))
-        result = min(results)  # Worst-case is min.
-        return dict(edit_distance=result)
+        return dict(edit_distance=min(results))  # Worst-case is min.
 
 
 class BertScoreMetric(Metric):
     def __init__(self):
-        import datasets
         self._bertscore = datasets.load_metric('bertscore')
 
     def process(self, completions: List[str], reference: str, prompt: str) -> Dict:
@@ -198,7 +192,13 @@ class DictAvgMeter(object):
             self._val = x
         else:
             for key in x:
-                self._val[key] = self._val[key] * (self._count / (self._count + 1)) + x[key] / (self._count + 1)
+                if isinstance(self._val[key], (list, tuple)):
+                    self._val[key] = (
+                        i * (self._count / (self._count + 1)) + j / (self._count + 1)
+                        for i, j in utils.zip_(self._val[key], x[key])
+                    )
+                else:
+                    self._val[key] = self._val[key] * (self._count / (self._count + 1)) + x[key] / (self._count + 1)
         self._count += 1
 
     def item(self):
@@ -210,8 +210,7 @@ def _eval(
 ):
     """Loop over examples in the training data and check metric.
 
-    The evaluation is intentionally not batched, since the beam search implementation in Huggingface uses a for-loop
-    anyway.
+    The evaluation is intentionally not batched, since the beam search implementation in Huggingface isn't batched.
     """
     utils.manual_seed(seed)
     utils.manual_dtype(dtype)
@@ -223,23 +222,14 @@ def _eval(
 
     for global_step, (prompt, reference) in tqdm.tqdm(enumerate(data["data"].items(), 1), desc="examples"):
         completions = _decode(pair=pair, prompt=prompt, **_make_decoding_kwargs(decoding_mode))
-        result.step(metric.process(completions=completions, reference=reference, prompt=prompt))
+        this_result = metric.process(completions=completions, reference=reference, prompt=prompt)
+        result.step(this_result)
 
         if global_step % pause_steps == 0:
             print(f'global_step: {global_step}, metric_name: {metric_name}, avg result: {result.item()}')
 
     print(f'final, metric_name: {metric_name}, avg result: {result.item()}')
     return result.item()
-
-
-def _test():
-    """Run basic tests for (model, tokenizer) pairs.
-
-    - Check if the context window size is correct.
-    """
-    for model_name in MODELS:
-        tok = transformers.AutoTokenizer.from_pretrained(model_name)
-        print(f"model: {model_name}, context window size: {tok.model_max_length}")
 
 
 def main(
@@ -249,11 +239,7 @@ def main(
     task="eval",
     decoding_mode="beam",
 ):
-    if task == "test":
-        # python -m copyright.extract --task test
-        _test()
-    elif task == "eval":
-        # python -m copyright.extract --task eval
+    if task == "eval":  # python -m copyright.extract --task eval
         _eval(dest_path, model_name, metric_name, decoding_mode)
 
 
