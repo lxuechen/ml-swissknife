@@ -5,9 +5,10 @@ Fixes:
     - replace `_DOWNLOAD_URL` in `bookcorpusopen.py` with https://t.co/J3EaSEgwW0
         - you may need to change the source code in the cache file
     - disable the checksum via `ignore_verifications=False`
+
+python -m copyright.main
 """
 import abc
-import math
 from typing import Tuple, List, Union
 
 import fire
@@ -34,13 +35,10 @@ class BookSampler(abc.ABC):
 
 
 class RandomBookSampler(BookSampler):
+    """Sample without replacement."""
+
     def sample(self, n_samples, n_total):
         return np.random.permutation(n_total)[:n_samples]
-
-
-class SequentialBookSampler(BookSampler):
-    def sample(self, n_samples, n_total):
-        return tuple(range(n_total))[:n_samples]
 
 
 class PrefixSampler(abc.ABC):
@@ -115,9 +113,7 @@ class Retriever(object):
         super(Retriever, self).__init__()
         if dataset is None:
             # Original bookcorpus https://huggingface.co/datasets/bookcorpusopen
-            dataset = load_dataset(
-                'bookcorpusopen', split='train', ignore_verifications=ignore_verifications,
-            )
+            dataset = load_dataset('bookcorpusopen', split='train', ignore_verifications=ignore_verifications)
         if prefix_sampler is None:
             if prefix_sampler_kwargs is None:
                 prefix_sampler_kwargs = dict()
@@ -132,21 +128,16 @@ class Retriever(object):
         self.book_sampler = book_sampler
         self.extractions_per_book = extractions_per_book
 
-    def retrieve(self, n, extractions_per_book=None) -> List[Tuple[str, str]]:
+    def retrieve(self, n_books, extractions_per_book=None) -> List[Tuple[str, str]]:
         if extractions_per_book is None:
             extractions_per_book = self.extractions_per_book
 
-        n_books = math.ceil(n / extractions_per_book)
         book_indices = self.book_sampler.sample(n_samples=n_books, n_total=len(self.dataset))
-
         books: dict = self.dataset[book_indices]
         books = books.get("text")
         pairs = []
         for book in tqdm.tqdm(books, desc="books"):
             for _ in range(extractions_per_book):
-                if len(pairs) >= n:
-                    break
-
                 pair = self.prefix_sampler.sample(book=book)
                 pairs.append(pair)
         return pairs
@@ -168,17 +159,20 @@ def test_book_heads():
         pdb.set_trace()
 
 
-def test_retriever(n=17868, extractions_per_book=1):
+def run_retriever(n_books=17868, extractions_per_book=1, prefix_length=10):
     """Test by sequentially getting 1 prefix per book for all books."""
+    utils.manual_seed(42)
+
     retriever = Retriever(
         prefix_sampler_kwargs=dict(
-            prefix_length=10,
+            prefix_length=prefix_length,
+            # Skip front and end of each book.
             front_sent_offset=100,
             tail_sent_offset=200,
         ),
-        book_sampler=SequentialBookSampler()
+        book_sampler=RandomBookSampler(),
     )
-    pairs = retriever.retrieve(n=n, extractions_per_book=extractions_per_book)
+    pairs = retriever.retrieve(n_books=n_books, extractions_per_book=extractions_per_book)
     sanitized_pairs = [
         pair for pair in pairs
         if (
@@ -191,7 +185,7 @@ def test_retriever(n=17868, extractions_per_book=1):
     data = {pair[0]: pair[1] for pair in sanitized_pairs}
     out_path = utils.join(
         '/home/lxuechen_stanford_edu/software/swissknife/experiments/copyright',
-        f'seq-full-{n}-total-{extractions_per_book}-per-book.json'
+        f'n_books_{n_books}-extractions_per_book_{extractions_per_book}-prefix_length_{prefix_length}.json'
     )
     utils.jdump(
         {
@@ -205,8 +199,15 @@ def test_retriever(n=17868, extractions_per_book=1):
     )
 
 
-def main(**kwargs):
-    test_retriever(**kwargs)
+def main():
+    for n_books in (1000, 5000, 10000):
+        for extractions_per_book in (1, 3, 5, 10):
+            for prefix_length in (5, 10, 25, 50, 125, 250):
+                run_retriever(
+                    n_books=n_books,
+                    extractions_per_book=extractions_per_book,
+                    prefix_length=prefix_length,
+                )
 
 
 if __name__ == "__main__":
