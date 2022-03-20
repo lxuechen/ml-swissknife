@@ -398,7 +398,7 @@ def show_env(args_or_device=None):
     logging.warning(f"Running six: {six.__version__}")
 
 
-def download_file_from_google_drive(id, destination):
+def download_file_from_google_drive(id, destination, timeout=120):
     """Download a file hosted on Google drive with the id extracted from a sharable link."""
 
     def get_confirm_token(response):
@@ -418,12 +418,12 @@ def download_file_from_google_drive(id, destination):
 
     URL = "https://docs.google.com/uc?export=download"
     session = requests.Session()
-    response = session.get(URL, params={'id': id}, stream=True)
+    response = session.get(URL, params={'id': id}, stream=True, timeout=timeout)
     token = get_confirm_token(response)
 
     if token:
         params = {'id': id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
+        response = session.get(URL, params=params, stream=True, timeout=timeout)
 
     os.makedirs(os.path.dirname(destination), exist_ok=True)
     save_response_content(response, destination)
