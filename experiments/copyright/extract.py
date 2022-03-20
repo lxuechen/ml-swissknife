@@ -194,7 +194,7 @@ class DictAvgMeter(object):
         if self._val is None:
             self._val = x
         else:
-            for key, old in self._val:  # Metric name.
+            for key, old in self._val.items():  # Metric name.
                 new = x[key]
                 if isinstance(new, (list, tuple)):
                     self._val[key] = (
