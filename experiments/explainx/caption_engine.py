@@ -16,7 +16,7 @@ from transformers.generation_utils import (
 )
 
 
-def _logmeanexp(x: Union[Sequence[torch.Tensor], torch.Tensor], keepdim=False):
+def _logmeanexp(x: Union[Sequence[torch.Tensor], torch.Tensor], keepdim=False, dim=0):
     if isinstance(x, (tuple, list)):
         elem0 = x[0]
         if elem0.dim() == 0:
@@ -25,10 +25,26 @@ def _logmeanexp(x: Union[Sequence[torch.Tensor], torch.Tensor], keepdim=False):
             x = torch.cat(x, dim=0)
         else:
             raise ValueError
-    return torch.logsumexp(x, dim=0, keepdim=keepdim) - math.log(x.size(0))
+    return torch.logsumexp(x, dim=dim, keepdim=keepdim) - math.log(x.size(dim))
 
 
 class MixtureSampler(transformers.generation_utils.GenerationMixin):
+
+    def _compute_log_q_c_given_x(self, image, caption, **model_kwargs):
+        this_model_kwargs = copy.deepcopy(model_kwargs)
+        items_to_replace = (
+            ("encoder_hidden_states", image[0]),
+            ("encoder_attention_mask", image[1])
+        )
+        for key, value in items_to_replace:
+            this_model_kwargs[key] = value
+        model_inputs = self.prepare_inputs_for_generation(caption, **this_model_kwargs)
+
+        outputs = self(**model_inputs, return_dict=True)  # noqa
+
+        logprob = -F.cross_entropy(outputs.logits[:-1], caption[1:], reduction="none")
+        logprob = logprob.sum(dim=1).mean(dim=0)  # Sum over tokens, mean over dummy batch dim.
+        return logprob
 
     def _compute_log_q_c(self, ambient_images, captions: List[torch.LongTensor], **model_kwargs) -> torch.Tensor:
         """Compute log q(c_k) for all captions c_k.
@@ -41,37 +57,52 @@ class MixtureSampler(transformers.generation_utils.GenerationMixin):
             captions: a list of K tensors.
 
         Returns:
-            Tensor of size (num_captions,).
+            Tensor of size (K,).
         """
         log_q_c = []
         for caption in captions:
             this_log_q_c = []
             for ambient_image in ambient_images:
-                this_model_kwargs = copy.deepcopy(model_kwargs)
-                items_to_replace = (
-                    ("encoder_hidden_states", ambient_image[0]),
-                    ("encoder_attention_mask", ambient_image[1])
+                this_log_q_c.append(
+                    self._compute_log_q_c_given_x(
+                        image=ambient_image, caption=caption, **model_kwargs
+                    )
                 )
-                for key, value in items_to_replace:
-                    this_model_kwargs[key] = value
-                model_inputs = self.prepare_inputs_for_generation(caption, **this_model_kwargs)
-
-                outputs = self(**model_inputs, return_dict=True)  # noqa
-                logprob = -F.cross_entropy(outputs.logits[:-1], caption[1:], reduction="none")
-                logprob = logprob.sum(dim=1).mean(dim=0)  # Sum over tokens, mean over dummy batch dim.
-                this_log_q_c.append(logprob)
-
             log_q_c.append(_logmeanexp(this_log_q_c))
         return torch.stack(log_q_c)
 
-    def _m_step(self):
+    def _m_step(self, ambient_images, captions, log_r_k_given_x):
         # p(k) = average over sample dimension r(k|x)
-        # captions c_1, ..., c_k run weighted consensus beam search.
-        pass
+        log_p_k = _logmeanexp(log_r_k_given_x, dim=1)
 
-    def _e_step(self):
-        # \log r(k | x) = \log p(x | c_k) p(k) = \log q(c_k | x) p(k) - \log q(c_k)
-        pass
+        # TODO: captions c_1, ..., c_k run weighted consensus beam search.
+        #  heavy-lifting happens here...
+
+    def _e_step(
+        self, priority_images, ambient_images, captions: List[torch.LongTensor],
+        log_p_k: torch.Tensor, log_r_given_x: torch.Tensor,
+        **model_kwargs
+    ):
+        """Perform E-step to estimate log r(k | x).
+
+        Math formulation:
+            For each priority image
+                log r(k | x) = log p(x | c_k) + log p(k) + C1
+                             = log q(c_k | x) + log p(x) + log p(k) - log q(c_k) + C1
+                             = log q(c_k | x) + log p(k) - log q(c_k) + C2
+        """
+        log_r_given_x = torch.zeros_like(log_r_given_x)
+        log_q_c = self._compute_log_q_c(
+            ambient_images=ambient_images, captions=captions, **model_kwargs
+        )
+        for k, caption in enumerate(captions):
+            for i, priority_image in enumerate(priority_images):
+                log_q_c_given_x = self._compute_log_q_c_given_x(
+                    image=priority_image, caption=caption, **model_kwargs
+                )
+                log_r_given_x[k, i] = log_q_c_given_x + log_p_k[k] - log_q_c[k]
+        log_r_given_x = log_r_given_x.log_softmax(dim=0)
+        return log_r_given_x
 
     def beam_search(
         self,
@@ -90,14 +121,23 @@ class MixtureSampler(transformers.generation_utils.GenerationMixin):
         consensus_fn: Optional[Callable] = None,  # lxuechen: Callable that aggregates two sets of log-probs.
         # lxuechen: in model_kwargs -- `encoder_hidden_states`, `encoder_attention_mask`,
         #   `encoder_hidden_states2`, `encoder_attention_mask2`,
-        #   `average_consensus`, `num_clusters`.
+        #   `average_consensus`, `K`.
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
-        # TODO: record p(k), r(k|x)
-        # Priority set has M images, ambient set has N images
-        # p(k): (num_clusters,).
-        # r(k|x): (M, num_clusters).
-        raise None
+        # Priority set has M images, ambient set has N images, K clusters.
+        # log p(k) tensor of size (K,); log r(k|x) tensor of size (K, M).
+        device = input_ids.device
+
+        # TODO: Current ambient images contain priority images; prune redundant computation later on.
+        M = len(model_kwargs.get("encoder_hidden_states", [None]))
+        N = len(model_kwargs.get("encoder_hidden_states2", [None]))
+        K = model_kwargs.get('K', 1)
+
+        # Initialize as uniform distribution.
+        log_p_k = torch.zeros(K).to(device) - math.log(K)
+        log_r_given_x = torch.zeros(K, M).to(device) - math.log(K)
+
+        # TODO: Alternate between E and M step. Lots of work here.
 
     def sample(
         self,
