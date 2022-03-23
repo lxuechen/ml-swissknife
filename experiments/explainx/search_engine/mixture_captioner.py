@@ -75,7 +75,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
 
     def _e_step(
         self, priority_images, ambient_images, captions: List[torch.LongTensor],
-        log_p_k: torch.Tensor, log_r_given_x: torch.Tensor,
+        log_p_k: torch.Tensor, log_r_k_given_x: torch.Tensor,
         **model_kwargs
     ):
         """Perform E-step to estimate log r(k | x).
@@ -86,7 +86,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
                              = log q(c_k | x) + log p(x) + log p(k) - log q(c_k) + C1
                              = log q(c_k | x) + log p(k) - log q(c_k) + C2
         """
-        log_r_given_x = torch.zeros_like(log_r_given_x)
+        log_r_k_given_x = torch.zeros_like(log_r_k_given_x)
         log_q_c = self._compute_log_q_c(
             ambient_images=ambient_images, captions=captions, **model_kwargs
         )
@@ -95,9 +95,9 @@ class MixtureGenerationMixin(CustomGenerationMixin):
                 log_q_c_given_x = self._compute_log_q_c_given_x(
                     image=priority_image, caption=caption, **model_kwargs
                 )
-                log_r_given_x[k, i] = log_q_c_given_x + log_p_k[k] - log_q_c[k]
-        log_r_given_x = log_r_given_x.log_softmax(dim=0)
-        return log_r_given_x
+                log_r_k_given_x[k, i] = log_q_c_given_x + log_p_k[k] - log_q_c[k]
+        log_r_k_given_x = log_r_k_given_x.log_softmax(dim=0)
+        return log_r_k_given_x
 
     def beam_search(
         self,
@@ -130,7 +130,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
 
         # Initialize as uniform distribution.
         log_p_k = torch.zeros(K).to(device) - math.log(K)
-        log_r_given_x = torch.zeros(K, M).to(device) - math.log(K)
+        log_r_k_given_x = torch.zeros(K, M).to(device) - math.log(K)
 
         # TODO: Alternate between E and M step. Lots of work here.
 
