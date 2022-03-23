@@ -83,6 +83,7 @@ class BLIP_Decoder(nn.Module):
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
                  prompt='a picture of ',
+                 beam_search_mode="regular",
                  ):
         """
         Args:
@@ -96,7 +97,20 @@ class BLIP_Decoder(nn.Module):
         self.tokenizer = init_tokenizer()
         med_config = BertConfig.from_json_file(med_config)
         med_config.encoder_width = vision_width
-        self.text_decoder = BertLMHeadModel(config=med_config)
+
+        if beam_search_mode == "regular":
+            self.text_decoder = BertLMHeadModel(config=med_config)
+
+        # --- lxuechen: Support new decoding.
+        elif beam_search_mode == "contrastive":
+            from .med import BertLMHeadModelWithContrastiveGenerationMixin
+            self.text_decoder = BertLMHeadModelWithContrastiveGenerationMixin(config=med_config)
+        elif beam_search_mode == "mixture":
+            from .med import BertLMHeadModelWithMixtureGenerationMixin
+            self.text_decoder = BertLMHeadModelWithMixtureGenerationMixin(config=med_config)
+        else:
+            raise ValueError(f"Unknown beam_search_mode: {beam_search_mode}")
+        # ---
 
         self.prompt = prompt
         self.prompt_length = len(self.tokenizer(self.prompt).input_ids) - 1

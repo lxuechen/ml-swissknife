@@ -31,7 +31,8 @@ from transformers.modeling_utils import (
 )
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.utils import logging
-from ...search_engine.captioner import ContrastiveGenerationMixin, MixtureGenerationMixin
+from ...search_engine.contrastive_captioner import ContrastiveGenerationMixin
+from ...search_engine.mixture_captioner import MixtureGenerationMixin
 
 logger = logging.get_logger(__name__)
 

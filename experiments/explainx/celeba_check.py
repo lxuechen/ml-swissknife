@@ -96,7 +96,10 @@ def _make_image_tensors(
 def _make_model(image_size):
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
+    model = blip.blip_decoder(
+        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config,
+        beam_search_mode="contrastive",  # Most important thing!
+    )
     model.to(device)
     return model
 

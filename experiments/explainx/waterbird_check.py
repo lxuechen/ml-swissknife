@@ -53,10 +53,12 @@ def caption(
     num_instances=500,  # How many instances to label.
     image_size=384
 ):
+    # TODO: Helper
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
     model = blip.blip_decoder(
-        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config
+        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config,
+        beam_search_mode="contrastive",  # Most important thing!
     )
     model.to(device)
 
@@ -103,6 +105,7 @@ def vqa(
     image_size=480,
     num_instances=500,  # How many instances to label.
 ):
+    # Nothing about contrastive decoder here.
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_vqa.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
     model = blip_vqa.blip_vqa(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
@@ -195,9 +198,13 @@ def consensus(
                 continue
             else:
                 land_images.append(image)
+    # TODO: Helper
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
+    model = blip.blip_decoder(
+        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config,
+        beam_search_mode="contrastive",  # Most important thing!
+    )
     model.to(device).eval()
 
     if water_first:

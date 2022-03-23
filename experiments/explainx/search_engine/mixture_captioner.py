@@ -19,7 +19,7 @@ logger = logging.get_logger(__name__)
 
 
 class MixtureBeamSearchScorer(BeamSearchScorer):
-    raise NotImplemented
+    pass
 
 
 class MixtureGenerationMixin(CustomGenerationMixin):
