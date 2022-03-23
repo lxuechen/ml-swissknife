@@ -4,7 +4,6 @@ Check captioner says something about background for waterbirds.
 python -m explainx.waterbird_check
 """
 
-import os
 from typing import List
 
 import fire
@@ -13,7 +12,7 @@ import torch
 import tqdm
 
 from swissknife import utils
-from .BLIP.models import blip, blip_vqa
+from .common import make_image2text_model, make_vqa_model
 from .misc import load_image_tensor
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -51,16 +50,10 @@ def get_captions(
 def caption(
     sample=False,
     num_instances=500,  # How many instances to label.
-    image_size=384
+    image_size=384,
+    beam_search_mode="contrastive",
 ):
-    # TODO: Helper
-    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
-    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip.blip_decoder(
-        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config,
-        beam_search_mode="contrastive",  # Most important thing!
-    )
-    model.to(device)
+    model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode).to(device).eval()
 
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
     metadata = utils.read_csv(metadata_path, delimiter=",")
@@ -105,11 +98,8 @@ def vqa(
     image_size=480,
     num_instances=500,  # How many instances to label.
 ):
-    # Nothing about contrastive decoder here.
-    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_vqa.pth'
-    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip_vqa.blip_vqa(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
-    model.to(device)
+    """Check vqa performance; nothing contrastive."""
+    model = make_vqa_model(image_size=image_size).to(device).eval()
 
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
     metadata = utils.read_csv(metadata_path, delimiter=",")
@@ -164,12 +154,15 @@ def consensus(
     max_length=50,
     min_length=3,
     water_first=True,
+    beam_search_mode="contrastive",
 ):
     """Check consensus beam search works.
 
     Give some images of waterbird on water vs land,
     see if it's possible for the model to generate the difference.
     """
+    model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode).to(device).eval()
+
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
     metadata = utils.read_csv(metadata_path, delimiter=",")
     rows = metadata["rows"]
@@ -198,14 +191,6 @@ def consensus(
                 continue
             else:
                 land_images.append(image)
-    # TODO: Helper
-    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
-    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip.blip_decoder(
-        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config,
-        beam_search_mode="contrastive",  # Most important thing!
-    )
-    model.to(device).eval()
 
     if water_first:
         group1, group2 = water_images, land_images
