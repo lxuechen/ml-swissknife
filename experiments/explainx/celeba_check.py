@@ -19,8 +19,7 @@ import tqdm
 
 from swissknife import utils
 from . import misc
-from .BLIP.models import blip
-from .common import root
+from .common import make_image2text_model, root
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -93,17 +92,6 @@ def _make_image_tensors(
     return group1, group2
 
 
-def _make_model(image_size):
-    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
-    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip.blip_decoder(
-        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config,
-        beam_search_mode="contrastive",  # Most important thing!
-    )
-    model.to(device)
-    return model
-
-
 @torch.no_grad()
 def consensus(
     num_per_group=10,
@@ -123,6 +111,9 @@ def consensus(
     num_beams=20,
     max_length=50,
     min_length=3,
+
+    beam_search_mode="contrastive",
+    vit="base",
 ):
     """Run consensus beam search with contrastive image grouups."""
     if gender_target not in (0, 1):
@@ -138,7 +129,8 @@ def consensus(
         image_size=image_size,
         dump_dir=dump_dir,
     )
-    model = _make_model(image_size=image_size).eval()
+
+    model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode, vit=vit).to(device).eval()
 
     beam_search_kwargs = dict(
         sample=False,
@@ -192,6 +184,9 @@ def check_score(
 
     dump_dir="/nlp/scr/lxuechen/explainx/celeba",
     dump_file: str = 'score-check.json',
+
+    beam_search_mode="contrastive",
+    vit="base",
 ):
     """Check caption scores for two groups of images; a sanity check."""
     if gender_target not in (0, 1):
@@ -207,7 +202,7 @@ def check_score(
         image_size=image_size,
         dump_dir=dump_dir,
     )
-    model = _make_model(image_size=image_size).eval()
+    model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode, vit=vit).to(device).eval()
 
     setup = (
         f"group1={'black hair' if black_first else 'blond hair'}; " +

@@ -1,8 +1,17 @@
 import os
 
+import torch
+
+from swissknife import utils
 from .BLIP.models import blip, blip_vqa
 
+# Constants.
+root = "/home/lxuechen_stanford_edu/data" if torch.cuda.is_available() else "/Users/xuechenli/data"
+celeba_data_path = utils.join(root, "img_align_celeba")
+metadata_path = utils.join(root, "list_attr_celeba.txt")
 
+
+# Make model helpers.
 def make_image2text_model(image_size, beam_search_mode="contrastive", vit="base"):
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
