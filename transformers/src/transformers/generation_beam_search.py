@@ -235,6 +235,7 @@ class BeamSearchScorer(BeamScorer):
         next_beam_scores = torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
+        # --- lxuechen:
         has_auxiliary_scores = jointly_evolving_scores is not None
         if has_auxiliary_scores:
             new_jointly_evolving_scores = {
@@ -243,6 +244,7 @@ class BeamSearchScorer(BeamScorer):
             }
         else:
             new_jointly_evolving_scores = {}
+        # ---
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -253,11 +255,12 @@ class BeamSearchScorer(BeamScorer):
                 next_beam_scores[batch_idx, :] = 0
                 next_beam_tokens[batch_idx, :] = pad_token_id
                 next_beam_indices[batch_idx, :] = 0
-                # lxuechen: Joint scores.
+                # --- lxuechen: Joint scores.
                 if has_auxiliary_scores:
                     for key in jointly_evolving_scores:
                         new_value = new_jointly_evolving_scores[key]
                         new_value[batch_idx, :] = 0
+                # ---
                 continue
 
             # next tokens for this sentence
@@ -281,12 +284,13 @@ class BeamSearchScorer(BeamScorer):
                     next_beam_scores[batch_idx, beam_idx] = next_score
                     next_beam_tokens[batch_idx, beam_idx] = next_token
                     next_beam_indices[batch_idx, beam_idx] = batch_beam_idx
-                    # lxuechen: Joint scores.
+                    # -- lxuechen: Joint scores.
                     if has_auxiliary_scores:
                         for key in jointly_evolving_scores:
                             value = jointly_evolving_scores[key]
                             new_value = new_jointly_evolving_scores[key]
                             new_value[batch_idx, beam_idx] = value[batch_idx, beam_token_rank]
+                    # ---
                     beam_idx += 1
 
                 # once the beam for next step is full, don't add more tokens to it.
@@ -309,9 +313,11 @@ class BeamSearchScorer(BeamScorer):
                 "next_beam_scores": next_beam_scores.view(-1),
                 "next_beam_tokens": next_beam_tokens.view(-1),
                 "next_beam_indices": next_beam_indices.view(-1),
+                # --- lxuechen: Return new scores
                 "jointly_evolving_scores": {
                     key: value.view(-1) for key, value in new_jointly_evolving_scores.items()
                 },
+                # ---
             }
         )
 
