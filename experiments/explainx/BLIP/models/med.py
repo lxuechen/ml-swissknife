@@ -16,6 +16,7 @@ from torch import Tensor, device
 from torch import nn
 from torch.nn import CrossEntropyLoss
 import torch.utils.checkpoint
+
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -30,6 +31,7 @@ from transformers.modeling_utils import (
 )
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.utils import logging
+from ...search_engine.captioner import ContrastiveGenerationMixin, MixtureGenerationMixin
 
 logger = logging.get_logger(__name__)
 
@@ -943,3 +945,13 @@ class BertLMHeadModel(BertPreTrainedModel):
         for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+
+# --- lxuechen: Subclass to get the right functions for beam search.
+class BertLMHeadModelWithContrastiveGenerationMixin(BertLMHeadModel, ContrastiveGenerationMixin):
+    pass
+
+
+class BertLMHeadModelWithMixtureGenerationMixin(BertLMHeadModel, MixtureGenerationMixin):
+    pass
+# ---
