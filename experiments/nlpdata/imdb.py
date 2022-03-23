@@ -1,3 +1,5 @@
+# imdb data has long sentences -- outside roberta context window.
+
 import datasets
 import fire
 import numpy as np
@@ -6,6 +8,9 @@ import transformers
 
 
 def main():
+    data = datasets.load_dataset('yelp_review_full')
+    print(data)
+
     data = datasets.load_dataset('imdb')
     tokenizer = transformers.AutoTokenizer.from_pretrained('roberta-base')
     lens = []
