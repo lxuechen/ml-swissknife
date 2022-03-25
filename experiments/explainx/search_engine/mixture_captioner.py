@@ -21,10 +21,10 @@ from .. import numerical
 logger = logging.get_logger(__name__)
 
 
-# TODO: Fix global naming.
 # TODO: beamsearchscorer, beam_search, initialization issue.
 class MixtureBeamSearchScorer(BeamSearchScorer):
     # TODO: Evolve score for all examples in process.
+    # TODO: need to change both `process` and `finalize`
     pass
 
 
@@ -261,30 +261,6 @@ class MixtureGenerationMixin(CustomGenerationMixin):
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         raise NotImplementedError
 
-    def _compute_caption_score(
-        self,
-        caption: torch.LongTensor,
-        r_k_given_x: torch.Tensor,  # (M,).
-        ambient_images: List[Dict],
-        priority_images: List[Dict],
-        **model_kwargs,
-    ):
-        """Get the score of a given caption.
-
-        Used in M-step caption search.
-
-        Math formulation:
-            \E_{priority images} [ r(k | x) \log q(c_k | x) ] - \log \E_{ambient images} [ q(c_k | x) ]
-        """
-        log_q_c_given_x_priority = []
-        for image in priority_images:
-            log_q_c_given_x_priority.append(
-                self._compute_log_q_c_given_x(image=image, caption=caption, **model_kwargs)
-            )
-        term1 = (r_k_given_x * torch.stack(log_q_c_given_x_priority)).mean(dim=0)
-        term2 = self._compute_log_q_c(caption=caption, images=ambient_images, **model_kwargs)
-        return term1 - term2
-
     def _mixture_setup(
         self,
         captions: List[torch.LongTensor],
@@ -460,6 +436,30 @@ class MixtureGenerationMixin(CustomGenerationMixin):
                 new_caption_scores.append(caption_score)
 
         return new_captions, new_caption_scores, log_p_k
+
+    def _compute_caption_score(
+        self,
+        caption: torch.LongTensor,
+        r_k_given_x: torch.Tensor,  # (M,).
+        ambient_images: List[Dict],
+        priority_images: List[Dict],
+        **model_kwargs,
+    ):
+        """Get the score of a given caption.
+
+        Used in M-step caption search.
+
+        Math formulation:
+            \E_{priority images} [ r(k | x) \log q(c_k | x) ] - \log \E_{ambient images} [ q(c_k | x) ]
+        """
+        log_q_c_given_x_priority = []
+        for image in priority_images:
+            log_q_c_given_x_priority.append(
+                self._compute_log_q_c_given_x(image=image, caption=caption, **model_kwargs)
+            )
+        term1 = (r_k_given_x * torch.stack(log_q_c_given_x_priority)).mean(dim=0)
+        term2 = self._compute_log_q_c(caption=caption, images=ambient_images, **model_kwargs)
+        return term1 - term2
 
     def _compute_log_q_c_given_x(self, caption: torch.LongTensor, image: Dict, **model_kwargs) -> torch.Tensor:
         # --- sanity check
@@ -686,9 +686,11 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             max_length=max_length, max_time=max_time, stopping_criteria=stopping_criteria
         )
 
-        return (bos_token_id, num_beams, length_penalty, early_stopping, num_beam_groups, num_return_sequences,
-                pad_token_id, eos_token_id, batch_size, model_kwargs, input_ids, max_length,
-                logits_processor, stopping_criteria)
+        return (
+            bos_token_id, num_beams, length_penalty, early_stopping, num_beam_groups, num_return_sequences,
+            pad_token_id, eos_token_id, batch_size, model_kwargs, input_ids, max_length,
+            logits_processor, stopping_criteria
+        )
 
     def sample(self, *args, **kwargs) -> Union[SampleOutput, torch.LongTensor]:
         raise NotImplementedError
