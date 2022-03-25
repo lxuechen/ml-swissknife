@@ -23,13 +23,7 @@ def main():
     sequences_scores = outputs.sequences_scores
     scores = outputs.scores
     beam_indices = outputs.beam_indices
-
-    beam_scores = model.compute_transition_beam_scores(
-        sequences=outputs.sequences, scores=outputs.scores, beam_indices=outputs.beam_indices
-    )
-    print(f'beam_scores sum: {beam_scores.sum()}')
-    print(f'beam_scores mean: {beam_scores.mean()}')
-    print(f'sequences_scores: {sequences_scores}')
+    beam_scores = model.compute_transition_beam_scores(sequences=sequences, scores=scores, beam_indices=beam_indices)
 
     term1 = beam_scores.sum() / (sequences[0] != 50256).sum()
     term2 = sequences_scores[0]
@@ -38,6 +32,11 @@ def main():
     #  If the comparison metric is per-token logprob, you should either
     #  1) include the logprobs of prefix in the sum, or 2) divide by the correct shape
     torch.testing.assert_allclose(term1, term2, atol=1e-4, rtol=0)
+
+    # Expected actual sequences_scores
+    exp1 = beam_scores.sum() / (beam_scores != 0.).sum()
+    exp2 = beam_scores.mean()
+    print(f'expected sequences_scores: {exp1} or {exp2}')
 
     import pdb;
     pdb.set_trace()
