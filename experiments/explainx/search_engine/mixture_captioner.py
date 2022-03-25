@@ -1,18 +1,18 @@
 import copy
 import inspect
 import math
-from typing import Callable, List, Optional, Union, Iterable
+from typing import Callable, List, Optional, Union, Iterable, Tuple, Dict
 import warnings
 
 import torch
 import torch.nn.functional as F
 
-import transformers
 from transformers.generation_beam_search import BeamSearchScorer
 from transformers.generation_stopping_criteria import StoppingCriteriaList
 from transformers.generation_utils import (
     LogitsProcessorList, BeamScorer,
-    SampleOutput, BeamSearchOutput, Constraint
+    SampleOutput, BeamSearchOutput, BeamSearchDecoderOnlyOutput,
+    Constraint
 )
 from transformers.utils import logging
 from .base import CustomGenerationMixin
@@ -21,8 +21,10 @@ from .. import numerical
 logger = logging.get_logger(__name__)
 
 
+# TODO: Fix global naming.
+# TODO: Make ambient images and priority images special kwargs
 class MixtureBeamSearchScorer(BeamSearchScorer):
-    # TODO: Evolve score for all examples.
+    # TODO: Evolve score for all examples in process.
     pass
 
 
@@ -31,6 +33,14 @@ class MixtureGenerationMixin(CustomGenerationMixin):
     @torch.no_grad()
     def generate(
         self,
+
+        # --- lxuechen: new arguments
+        captions: List[torch.LongTensor],  # List of k LongTensors.
+        priority_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
+        ambient_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
+        num_em_rounds: int,
+        # ---
+
         inputs: Optional[torch.Tensor] = None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
@@ -68,11 +78,6 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
-
-        text_captions: Optional[List[str]] = None,
-        num_em_rounds=1,
-        tokenizer=None,
-
         **model_kwargs,
     ) -> Union[BeamSearchOutput]:
         # 1. Set generation parameters if not already defined
@@ -213,52 +218,30 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-            assert text_captions is not None and tokenizer is not None
-            ambient_images = (model_kwargs.get("encoder_hidden_states2"), model_kwargs.get("encoder_attention_mask2"))
-            priority_images = (model_kwargs.get("encoder_hidden_states2"), model_kwargs.get("encoder_attention_mask2"))
-            tensor_captions, log_p_k, log_r_k_given_x = self.mixture_setup(
-                text_captions, ambient_images, priority_images, tokenizer
+            # TODO: above initialization is wrong.
+            # a) Compute the scores for initial captions; initialize the distributions p(k) and r(k | x).
+            caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup(
+                captions=captions, ambient_images=ambient_images, priority_images=priority_images, **model_kwargs,
             )
 
-            for em_step_idx in range(num_em_rounds):
-                # TODO: model_kwargs could be wrong!
-                (tensor_captions, log_p_k, log_r_k_given_x) = self.mixture_em(
-                    tensor_captions=tensor_captions,
+            # b) Alternate between E and M.
+            for em_round_idx in range(num_em_rounds):
+                # c, p(k), and r(k|x) are the main variables; they get updated in each round.
+                (captions, caption_scores, log_p_k, log_r_k_given_x) = self._mixture_em(
+                    captions=captions,
+                    caption_scores=caption_scores,
                     log_p_k=log_p_k,
                     log_r_k_given_x=log_r_k_given_x,
                     ambient_images=ambient_images,
                     priority_images=priority_images,
                     **model_kwargs,
                 )
-
-            # 10. prepare beam search scorer
-            beam_scorer = self.beam_search_scorer_cls(
-                batch_size=batch_size,
-                num_beams=num_beams,
-                device=self.device,
-                length_penalty=length_penalty,
-                do_early_stopping=early_stopping,
-                num_beam_hyps_to_keep=num_return_sequences,
-            )
-            # 11. interleave input_ids with `num_beams` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
-            )
-            # 12. run beam search
-            return self.beam_search(
-                input_ids,
-                beam_scorer,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                output_scores=output_scores,
-                return_dict_in_generate=return_dict_in_generate,
-                synced_gpus=synced_gpus,
-                **model_kwargs,
+            return BeamSearchDecoderOnlyOutput(
+                sequences=captions,
+                sequences_scores=caption_scores,
             )
         else:
-            raise ValueError
+            raise NotImplementedError
 
     def beam_search(
         self,
@@ -278,30 +261,66 @@ class MixtureGenerationMixin(CustomGenerationMixin):
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         raise NotImplementedError
 
-    def mixture_setup(
+    def _compute_caption_score(
         self,
-        text_captions: List[str],
-        ambient_images,
-        priority_images,
-        tokenizer: transformers.PreTrainedTokenizer,
+        caption: torch.LongTensor,
+        r_k_given_x: torch.Tensor,  # (M,).
+        ambient_images: List[Dict],
+        priority_images: List[Dict],
+        **model_kwargs,
     ):
-        # Priority set has M images, ambient set has N images, K clusters.
-        # log_p_k tensor of size (K,); log_r_k_given_x tensor of size (K, M).
+        """Get the score of a given caption.
 
-        device = ambient_images[0][0].device
+        Used in M-step caption search.
 
-        M = len(priority_images[0])
-        N = len(ambient_images[0])
-        K = len(text_captions)
+        Math formulation:
+            \E_{priority images} [ r(k | x) \log q(c_k | x) ] - \log \E_{ambient images} [ q(c_k | x) ]
+        """
+        log_q_c_given_x_priority = []
+        for image in priority_images:
+            log_q_c_given_x_priority.append(
+                self._compute_log_q_c_given_x(image=image, caption=caption, **model_kwargs)
+            )
+        term1 = (r_k_given_x * torch.stack(log_q_c_given_x_priority)).mean(dim=0)
+        term2 = self._compute_log_q_c(caption=caption, images=ambient_images, **model_kwargs)
+        return term1 - term2
 
-        tensor_captions = [tokenizer.encode(text_caption, return_tensors="pt") for text_caption in text_captions]
-        log_p_k = torch.zeros(K).to(device) - math.log(K)  # Uniform.
-        log_r_k_given_x = torch.zeros(K, M).to(device) - math.log(K)  # Uniform.
-        return tensor_captions, log_p_k, log_r_k_given_x
-
-    def mixture_em(
+    def _mixture_setup(
         self,
-        tensor_captions,
+        captions: List[torch.LongTensor],
+        ambient_images: List[Dict],
+        priority_images: List[Dict],
+        caption_scores=None,
+        **model_kwargs,
+    ) -> Tuple[List[torch.Tensor], torch.Tensor, torch.Tensor]:
+        device = captions[0].device
+        M = len(priority_images)
+        K = len(captions)
+
+        log_p_k = torch.zeros(K, device=device) - math.log(K)
+        log_r_k_given_x = torch.zeros((K, M), device=device) - math.log(K)
+
+        r_k_given_x = log_r_k_given_x.softmax(dim=0)  # Normalize over k's.
+        if caption_scores is None:
+            caption_scores = [
+                self._compute_caption_score(
+                    caption=captions[k],
+                    r_k_given_x=r_k_given_x[k],
+                    ambient_images=ambient_images,
+                    priority_images=priority_images,
+                    **model_kwargs,
+                )
+                for k in range(K)
+            ]
+
+        # caption_scores is a list of tensors, each of size ().
+        # log_p_k tensor of size (K,); log_r_k_given_x tensor of size (K, M).
+        return caption_scores, log_p_k, log_r_k_given_x
+
+    def _mixture_em(
+        self,
+        captions,
+        caption_scores,
         log_p_k,
         log_r_k_given_x,
         ambient_images,
@@ -309,30 +328,31 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         **model_kwargs,
     ):
         log_r_k_given_x = self._e_step(
-            tensor_captions=tensor_captions,
+            captions=captions,
             log_p_k=log_p_k,
             log_r_k_given_x=log_r_k_given_x,
             ambient_images=ambient_images,
             priority_images=priority_images,
             **model_kwargs,
         )
-        log_p_k, tensor_captions = self._m_step(
-            tensor_captions=tensor_captions,
+        captions, caption_scores, log_p_k = self._m_step(
+            captions=captions,
+            caption_scores=caption_scores,
             log_p_k=log_p_k,
             log_r_k_given_x=log_r_k_given_x,
             ambient_images=ambient_images,
             priority_images=priority_images,
             **model_kwargs,
         )
-        return tensor_captions, log_p_k, log_r_k_given_x
+        return captions, caption_scores, log_p_k, log_r_k_given_x
 
     def _e_step(
         self,
-        tensor_captions: List[torch.LongTensor],
+        captions: List[torch.LongTensor],
         log_p_k: torch.Tensor,
         log_r_k_given_x: torch.Tensor,
-        priority_images,
         ambient_images,
+        priority_images,
         **model_kwargs,
     ):
         """Perform E-step to estimate log r(k | x).
@@ -340,17 +360,20 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         Math formulation:
             For each priority image
                 log r(k | x) = log p(x | c_k) + log p(k) + C1
-                             = log q(c_k | x) + log p(x) + log p(k) - log q(c_k) + C1
+                             = log q(c_k | x) + log p(x) - log q(c_k) + log p(k) + C1
                              = log q(c_k | x) + log p(k) - log q(c_k) + C2
         """
         log_r_k_given_x = torch.zeros_like(log_r_k_given_x)
-        log_q_c = self._compute_log_q_c(
-            ambient_images=ambient_images, tensor_captions=tensor_captions, **model_kwargs
-        )
-        for k, caption in enumerate(tensor_captions):
+        log_q_c = torch.zeros(log_r_k_given_x.size(0), device=log_r_k_given_x.device)
+
+        for k, caption in enumerate(captions):
+            log_q_c[k] = self._compute_log_q_c(
+                caption=caption, images=ambient_images, **model_kwargs
+            )
+
             for i, priority_image in enumerate(priority_images):
                 log_q_c_given_x = self._compute_log_q_c_given_x(
-                    image=priority_image, caption=caption, **model_kwargs
+                    caption=caption, image=priority_image, **model_kwargs
                 )
                 log_r_k_given_x[k, i] = log_q_c_given_x + log_p_k[k] - log_q_c[k]
         log_r_k_given_x = log_r_k_given_x.log_softmax(dim=0)
@@ -358,7 +381,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
 
     def _m_step(
         self,
-        tensor_captions, log_p_k, log_r_k_given_x, ambient_images, priority_images,
+        captions, caption_scores, log_p_k, log_r_k_given_x, ambient_images, priority_images,
 
         max_length=None,
         min_length=None,
@@ -378,15 +401,16 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
 
-        **model_kwargs,  # arguments that forward takes in.
+        **model_kwargs,
     ):
         log_p_k = numerical.logmeanexp(log_r_k_given_x, dim=1)
 
-        new_tensor_captions = []
+        new_captions = []
+        new_caption_scores = []
 
         (bos_token_id, num_beams, length_penalty, early_stopping, num_beam_groups, num_return_sequences,
          pad_token_id, eos_token_id, batch_size, model_kwargs, input_ids, max_length,
-         logits_processor, stopping_criteria) = self._wrap_hf_shit_code(
+         logits_processor, stopping_criteria) = self._hf_preprocess_wrapper(
             max_length=max_length, min_length=min_length, early_stopping=early_stopping, num_beams=num_beams,
             repetition_penalty=repetition_penalty,
             bad_words_ids=bad_words_ids,
@@ -394,9 +418,10 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             length_penalty=length_penalty, no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size, num_return_sequences=num_return_sequences,
             num_beam_groups=num_beam_groups, diversity_penalty=diversity_penalty,
-            logits_processor=logits_processor, stopping_criteria=stopping_criteria,
+            logits_processor=logits_processor, stopping_criteria=stopping_criteria, **model_kwargs,
         )
-        for tensor_caption in tensor_captions:
+
+        for caption, caption_score in zip(captions, caption_scores):
             beam_scorer = self.beam_search_scorer_cls(
                 batch_size=batch_size,
                 num_beams=num_beams,
@@ -405,66 +430,83 @@ class MixtureGenerationMixin(CustomGenerationMixin):
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
             )
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+            this_model_kwargs = copy.deepcopy(model_kwargs)
+            input_ids, this_model_kwargs = self._expand_inputs_for_generation(
+                input_ids,
+                expand_size=num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **this_model_kwargs,
             )
-            new_tensor_caption = self.beam_search(
+            outputs = self.beam_search(
                 input_ids,
                 beam_scorer,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                output_scores=True,
                 return_dict_in_generate=True,
-                **model_kwargs,
+                output_scores=True,
+                priority_images=priority_images,
+                ambient_images=ambient_images,
+                **this_model_kwargs,
             )
-            # TODO: Compare scores.
-            new_tensor_captions.append()
-        return new_tensor_captions, log_p_k
+            new_caption, new_caption_score = outputs.sequences, outputs.sequences_scores
+            # Ensure monotonicity!
+            if all(new_caption_score > caption_score):
+                new_captions.append(new_caption)
+                new_caption_scores.append(new_caption_score)
+            else:
+                new_captions.append(caption)
+                new_caption_scores.append(caption_score)
 
-    def _compute_log_q_c_given_x(self, image, tensor_caption, **model_kwargs):
+        return new_captions, new_caption_scores, log_p_k
+
+    def _compute_log_q_c_given_x(self, caption: torch.LongTensor, image: Dict, **model_kwargs) -> torch.Tensor:
+        # --- sanity check
+        keys_to_replace = ("encoder_hidden_states", "encoder_attention_mask")
+        for key in keys_to_replace:
+            assert key in image
+        # ---
+
         this_model_kwargs = copy.deepcopy(model_kwargs)
-        items_to_replace = (
-            ("encoder_hidden_states", image[0]),
-            ("encoder_attention_mask", image[1])
-        )
-        for key, value in items_to_replace:
-            this_model_kwargs[key] = value
-        model_inputs = self.prepare_inputs_for_generation(tensor_caption, **this_model_kwargs)
-
+        this_model_kwargs.update(image)
+        model_inputs = self.prepare_inputs_for_generation(caption, **this_model_kwargs)
         outputs = self(**model_inputs, return_dict=True)  # noqa
 
-        logprob = -F.cross_entropy(outputs.logits[:-1], tensor_caption[1:], reduction="none")
+        shifted_logits = outputs.logits[:, :-1].permute(0, 2, 1)
+        shifted_label = caption[:, 1:]
+        logprob = -F.cross_entropy(shifted_logits, shifted_label, reduction="none")
         logprob = logprob.sum(dim=1).mean(dim=0)  # Sum over tokens, mean over dummy batch dim.
         return logprob
 
-    def _compute_log_q_c(self, tensor_captions: List[torch.LongTensor], ambient_images, **model_kwargs) -> torch.Tensor:
+    def _compute_log_q_c(
+        self,
+        caption: torch.LongTensor,
+        images: List[Dict],
+        **model_kwargs
+    ) -> torch.Tensor:
         """Compute log q(c_k) for all captions c_k.
 
-        This computation is needed in E-step.
+        This computation is needed in E-step and M-step beam search.
         Given that we can't really marginalize, the result is a biased Monte Carlo estimate.
 
         Args:
-            captions: a list of K LongTensor.
-            ambient_images: a tuple of 2 lists of tensors.
+            tensor_caption: a LongTensor of size (1, T).
+            images: a tuple of 2 lists of tensors.
 
         Returns:
-            Tensor of size (K,).
+            Tensor of size ().
         """
-        log_q_c = []
-        for tensor_caption in tensor_captions:
-            this_log_q_c = []
-            for ambient_image in ambient_images:
-                this_log_q_c.append(
-                    self._compute_log_q_c_given_x(
-                        image=ambient_image, tensor_caption=tensor_caption, **model_kwargs
-                    )
-                )
-            log_q_c.append(numerical.logmeanexp(this_log_q_c))
-        return torch.stack(log_q_c)
+        # TODO: Try other approximation of log to get a proper lower bound for maximization.
+        # TODO: Try variance reduction techniques.
+        log_q_c_given_x = []
+        for image in images:
+            log_q_c_given_x.append(
+                self._compute_log_q_c_given_x(image=image, caption=caption, **model_kwargs)
+            )
+        return numerical.logmeanexp(log_q_c_given_x)
 
-    def _wrap_hf_shit_code(
+    def _hf_preprocess_wrapper(
         self,
         inputs: Optional[torch.Tensor] = None,
         max_length: Optional[int] = None,
