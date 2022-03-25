@@ -9,7 +9,9 @@ import torch.testing
 import transformers
 
 
-def main():
+def gpt2():
+    print('test gpt2')
+
     tokenizer = transformers.GPT2Tokenizer.from_pretrained('gpt2')
     model = transformers.GPT2LMHeadModel.from_pretrained('gpt2')
     inputs = tokenizer.encode('Tom is ', return_tensors='pt', add_special_tokens=False)
@@ -40,6 +42,66 @@ def main():
 
     import pdb;
     pdb.set_trace()
+
+
+def t5():
+    model_name = "t5-small"
+    encoding_hyperparameters = {
+        "padding": "max_length",
+        "max_length": 512,
+        "truncation": True,
+        "add_special_tokens": True,
+        "return_attention_mask": True,
+        "return_tensors": "pt",
+    }
+
+    tokenizer = transformers.T5TokenizerFast.from_pretrained(model_name)
+    model = transformers.T5ForConditionalGeneration.from_pretrained(model_name)
+
+    EXAMPLE = ["question: How are you? \n context: I had a long day, she said. I am so exhausted.",
+               "question: What did the fox do? \n context: The fox jumped over the fence into a very green lawn."]
+
+    BEAM_SEARCH_KWARGS = {
+        "num_beams": 4,
+        "do_sample": False,
+        "num_return_sequences": 1,
+    }
+
+    # Encode inputs
+    inputs_ids = tokenizer(EXAMPLE, **encoding_hyperparameters)
+
+    # Generate using beam search
+    beamsearch_results = model.generate(
+        input_ids=inputs_ids["input_ids"],
+        attention_mask=inputs_ids["attention_mask"],
+        max_length=10,
+        return_dict_in_generate=True,
+        output_scores=True,
+        # the id of the token to force as the last generated token when max_length is reached
+        forced_eos_token_id=tokenizer.eos_token_id,
+        **BEAM_SEARCH_KWARGS
+    )
+
+    trs_bs = model.compute_transition_beam_scores(
+        sequences=beamsearch_results.sequences,
+        scores=beamsearch_results.scores,
+        beam_indices=beamsearch_results.beam_indices
+    )
+
+    print("Summ:", torch.sum(trs_bs, dim=1), "Expected:", beamsearch_results.sequences_scores)
+    print("Sum/length:", torch.sum(trs_bs, dim=1) / beamsearch_results.beam_indices.shape[-1], "Expected:",
+          beamsearch_results.sequences_scores)
+    # output
+    # Sum: tensor([-1.5411, -0.3851]) Expected: tensor([-0.1712, -0.0428])
+    # Sum/length: tensor([-0.1712, -0.0428]) Expected: tensor([-0.1712, -0.0428])
+
+    import pdb;
+    pdb.set_trace()
+
+
+def main():
+    t5()
+    gpt2()
 
 
 if __name__ == "__main__":
