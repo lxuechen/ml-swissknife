@@ -45,6 +45,8 @@ def gpt2():
 
 
 def t5():
+    print('test t5-small')
+
     model_name = "t5-small"
     encoding_hyperparameters = {
         "padding": "max_length",
@@ -81,6 +83,13 @@ def t5():
         forced_eos_token_id=tokenizer.eos_token_id,
         **BEAM_SEARCH_KWARGS
     )
+    sequences = beamsearch_results.sequences
+    sequences_scores = beamsearch_results.sequences_scores
+    scores = beamsearch_results.scores
+    beam_indices = beamsearch_results.beam_indices
+    beam_scores = model.compute_transition_beam_scores(sequences=sequences, scores=scores, beam_indices=beam_indices)
+    import pdb;
+    pdb.set_trace()
 
     trs_bs = model.compute_transition_beam_scores(
         sequences=beamsearch_results.sequences,
@@ -88,9 +97,11 @@ def t5():
         beam_indices=beamsearch_results.beam_indices
     )
 
-    print("Summ:", torch.sum(trs_bs, dim=1), "Expected:", beamsearch_results.sequences_scores)
-    print("Sum/length:", torch.sum(trs_bs, dim=1) / beamsearch_results.beam_indices.shape[-1], "Expected:",
-          beamsearch_results.sequences_scores)
+    print("Sum:", torch.sum(trs_bs, dim=1), "Expected:", beamsearch_results.sequences_scores)
+    print(
+        "Sum/length:", torch.sum(trs_bs, dim=1) / torch.tensor([len(seq) for seq in beamsearch_results.beam_indices]),
+        "Expected:", beamsearch_results.sequences_scores
+    )
     # output
     # Sum: tensor([-1.5411, -0.3851]) Expected: tensor([-0.1712, -0.0428])
     # Sum/length: tensor([-0.1712, -0.0428]) Expected: tensor([-0.1712, -0.0428])
