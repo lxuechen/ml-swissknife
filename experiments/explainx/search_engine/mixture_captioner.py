@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 
 # TODO: Fix global naming.
-# TODO: Make ambient images and priority images special kwargs
+# TODO: beamsearchscorer, beam_search, initialization issue.
 class MixtureBeamSearchScorer(BeamSearchScorer):
     # TODO: Evolve score for all examples in process.
     pass
