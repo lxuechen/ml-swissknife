@@ -18,7 +18,7 @@ def gpt2():
 
     outputs = model.generate(
         inputs=inputs, output_scores=True,
-        num_beams=3, num_return_sequences=1, return_dict_in_generate=True, max_length=10, do_sample=False,
+        num_beams=3, num_return_sequences=1, return_dict_in_generate=True, max_length=15, do_sample=False,
         forced_eos_token_id=tokenizer.eos_token_id, length_penalty=1
     )
     sequences = outputs.sequences
