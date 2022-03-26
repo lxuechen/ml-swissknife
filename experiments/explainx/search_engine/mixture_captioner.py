@@ -5,14 +5,15 @@ from typing import Callable, List, Optional, Union, Iterable, Tuple, Dict
 import warnings
 
 import torch
+from torch import nn
 import torch.nn.functional as F
 
 from transformers.generation_beam_search import BeamSearchScorer
 from transformers.generation_stopping_criteria import StoppingCriteriaList
 from transformers.generation_utils import (
     LogitsProcessorList, BeamScorer,
-    SampleOutput, BeamSearchOutput, BeamSearchDecoderOnlyOutput,
-    Constraint
+    SampleOutput, BeamSearchOutput, BeamSearchDecoderOnlyOutput, Constraint,
+    validate_stopping_criteria, torch_int_div
 )
 from transformers.utils import logging
 from .base import CustomGenerationMixin
@@ -21,7 +22,10 @@ from .. import numerical
 logger = logging.get_logger(__name__)
 
 
-# TODO: beamsearchscorer, beam_search, initialization issue.
+# TODO:
+#  1) beamsearchscorer,
+#  2) beam_search,
+#  3) initialization issue.
 class MixtureBeamSearchScorer(BeamSearchScorer):
     # TODO: Evolve score for all examples in process.
     # TODO: need to change both `process` and `finalize`
@@ -243,23 +247,181 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         else:
             raise NotImplementedError
 
-    def beam_search(
+    # TODO: record partial score for each example in ambient images and priority images.
+    def beam_search(  # noqa
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
+        ambient_images: List[Dict],
+        priority_images: List[Dict],
+        r_k_given_x: torch.Tensor,  # (K, M).
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_scores: Optional[bool] = None,
-        return_dict_in_generate: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        output_attentions=False,  # Don't use.
+        output_hidden_states=False,  # Don't use.
+        output_scores=False,
+        return_dict_in_generate=False,
+        synced_gpus=False,  # Don't use.
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
-        raise NotImplementedError
+        if synced_gpus or output_attentions or output_hidden_states or self.config.is_encoder_decoder:
+            raise NotImplementedError
+
+        # init values
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
+        if max_length is not None:
+            warnings.warn(
+                "`max_length` is deprecated in this function, "
+                "use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
+                UserWarning,
+            )
+            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
+        if len(stopping_criteria) == 0:
+            warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        batch_size = len(beam_scorer._beam_hyps)
+        num_beams = beam_scorer.num_beams
+
+        batch_beam_size, cur_len = input_ids.shape
+
+        if num_beams * batch_size != batch_beam_size:
+            raise ValueError(
+                f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
+            )
+
+        # init attention / hidden states / scores tuples
+        scores = () if (return_dict_in_generate and output_scores) else None
+        beam_indices = (
+            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
+        )
+
+        def _init_scores():
+            _scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
+            _scores[:, 1:] = -1e9
+            _scores = _scores.view((batch_size * num_beams,))
+            return _scores
+
+        ambient_scores = [_init_scores() for _ in ambient_images]
+        priority_scores = [_init_scores() for _ in priority_images]
+
+        while True:
+            # TODO:
+            #   loop over images,
+            #   copy model_kwargs
+            #   add image to model_kwargs
+            #   forward model
+            #   get the next token scores
+
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            outputs = self(  # noqa
+                **model_inputs, return_dict=True, output_attentions=False, output_hidden_states=False
+            )
+
+            next_token_logits = outputs.logits[:, -1, :]
+            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
+            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
+            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
+            next_token_scores = nn.functional.log_softmax(
+                next_token_logits, dim=-1
+            )  # (batch_size * num_beams, vocab_size)
+
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+            # TODO: extend the score for each image.
+            # TODO: get the score for beam search through the objective -- uses r(k|x)!
+
+            # TODO: avoid bad subtraction.
+            # TODO: add coeffiecient for negative term.
+
+            # Store scores, attentions and hidden_states when required
+            if return_dict_in_generate:
+                if output_scores:
+                    scores += (next_token_scores_processed,)
+
+            # reshape for beam search
+            vocab_size = next_token_scores.shape[-1]
+            next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
+
+            next_token_scores, next_tokens = torch.topk(
+                next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
+            )
+
+            next_indices = torch_int_div(next_tokens, vocab_size)
+            next_tokens = next_tokens % vocab_size
+
+            # stateless
+            beam_outputs = beam_scorer.process(
+                input_ids,
+                next_token_scores,
+                next_tokens,
+                next_indices,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+            )
+
+            beam_scores = beam_outputs["next_beam_scores"]
+            beam_next_tokens = beam_outputs["next_beam_tokens"]
+            beam_idx = beam_outputs["next_beam_indices"]
+            # TODO: Get the per image partial scores as well.
+
+            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+
+            # lxuechen: Line below is crucial to avoid last sequence bias!!!
+            model_kwargs = self._update_model_kwargs_for_generation(
+                dict(), model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
+            if model_kwargs["past"] is not None:
+                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+
+            if return_dict_in_generate and output_scores:
+                beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
+
+            # increase cur_len
+            cur_len = cur_len + 1
+
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+                break
+
+        sequence_outputs = beam_scorer.finalize(
+            input_ids,
+            beam_scores,  # lxuechen: Must be joint score!
+            None,  # lxuechen: This argument not really used.
+            None,  # lxuechen: This argument not really used.
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            max_length=stopping_criteria.max_length,
+        )
+
+        if return_dict_in_generate:
+            if not output_scores:
+                sequence_outputs["sequence_scores"] = None
+            else:
+                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
+                # return only as many indices as sequences
+                beam_indices = tuple(
+                    (beam_indices[i * num_beams: i * num_beams + num_return_sequences] for i in range(batch_size))
+                )
+                beam_indices = sum(beam_indices, ())
+
+                return BeamSearchDecoderOnlyOutput(
+                    sequences=sequence_outputs["sequences"],
+                    sequences_scores=sequence_outputs["sequence_scores"],
+                    scores=scores,
+                    beam_indices=beam_indices,
+                )
+        else:
+            return sequence_outputs["sequences"]
 
     def _mixture_setup(
         self,
@@ -416,14 +578,14 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             outputs = self.beam_search(
                 input_ids,
                 beam_scorer,
+                ambient_images,
+                priority_images,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
                 return_dict_in_generate=True,
                 output_scores=True,
-                priority_images=priority_images,
-                ambient_images=ambient_images,
                 **this_model_kwargs,
             )
             new_caption, new_caption_score = outputs.sequences, outputs.sequences_scores
