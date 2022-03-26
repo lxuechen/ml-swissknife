@@ -22,14 +22,19 @@ from .. import numerical
 logger = logging.get_logger(__name__)
 
 
-# TODO:
-#  1) beamsearchscorer,
-#  2) beam_search,
-#  3) initialization issue.
+# TODO: Fix initialization in MixtureMixin::generate.
 class MixtureBeamSearchScorer(BeamSearchScorer):
-    # TODO: Evolve score for all examples in process.
-    # TODO: need to change both `process` and `finalize`
-    pass
+    def process(
+        self,
+        input_ids: torch.LongTensor,
+        next_scores: torch.FloatTensor,
+        next_tokens: torch.LongTensor,
+        next_indices: torch.LongTensor,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+    ) -> Tuple[torch.Tensor]:
+        # TODO: Evolve score for all examples in process.
+        raise NotImplementedError
 
 
 class MixtureGenerationMixin(CustomGenerationMixin):
@@ -43,6 +48,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         priority_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
         ambient_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
         num_em_rounds: int,
+        contrastive_weight: float,
         # ---
 
         inputs: Optional[torch.Tensor] = None,
@@ -215,37 +221,35 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             max_length=max_length, max_time=max_time, stopping_criteria=stopping_criteria
         )
 
-        if is_beam_gen_mode:
-            if num_return_sequences > num_beams:
-                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
+        if num_return_sequences > num_beams:
+            raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
-            if stopping_criteria.max_length is None:
-                raise ValueError("`max_length` needs to be a stopping_criteria for now.")
+        if stopping_criteria.max_length is None:
+            raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-            # TODO: above initialization is wrong.
-            # a) Compute the scores for initial captions; initialize the distributions p(k) and r(k | x).
-            caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup(
-                captions=captions, ambient_images=ambient_images, priority_images=priority_images, **model_kwargs,
+        # a) Compute the scores for initial captions; initialize the distributions p(k) and r(k | x).
+        caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup(
+            captions=captions, ambient_images=ambient_images, priority_images=priority_images, **model_kwargs,
+        )
+
+        # b) Alternate between E and M.
+        for em_round_idx in range(num_em_rounds):
+            # c, p(k), and r(k|x) are the main variables; they get updated in each round.
+            (captions, caption_scores, log_p_k, log_r_k_given_x) = self._mixture_em(
+                captions=captions,
+                caption_scores=caption_scores,
+                log_p_k=log_p_k,
+                log_r_k_given_x=log_r_k_given_x,
+                ambient_images=ambient_images,
+                priority_images=priority_images,
+                contrastive_weight=contrastive_weight,
+                **model_kwargs,
+                # TODO: other args needed!
             )
-
-            # b) Alternate between E and M.
-            for em_round_idx in range(num_em_rounds):
-                # c, p(k), and r(k|x) are the main variables; they get updated in each round.
-                (captions, caption_scores, log_p_k, log_r_k_given_x) = self._mixture_em(
-                    captions=captions,
-                    caption_scores=caption_scores,
-                    log_p_k=log_p_k,
-                    log_r_k_given_x=log_r_k_given_x,
-                    ambient_images=ambient_images,
-                    priority_images=priority_images,
-                    **model_kwargs,
-                )
-            return BeamSearchDecoderOnlyOutput(
-                sequences=captions,
-                sequences_scores=caption_scores,
-            )
-        else:
-            raise NotImplementedError
+        return BeamSearchDecoderOnlyOutput(
+            sequences=captions,
+            sequences_scores=caption_scores,
+        )
 
     def _extend_next_token_scores(
         self, image, beam_scores, input_ids, logits_processor, cur_len, **model_kwargs,
@@ -307,7 +311,8 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         beam_scorer: BeamScorer,
         ambient_images: List[Dict],  # Special.
         priority_images: List[Dict],  # Special.
-        r_k_given_x: torch.Tensor,  # Special; size (K, M).
+        r_k_given_x: torch.Tensor,  # Special; size (M,).
+        contrastive_weight: float,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
@@ -341,19 +346,23 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         priority_scores = [_init_scores() for _ in priority_images]
 
         while True:
-            # Expand the partial scores for each image, i.e.,
-            # get distribution q(c_{t+1}, c_{1:t} | x) where c_{1:t} is an existing beam,
-            # and c_{t+1} ranges over whole vocab.
+            # lxuechen: Expand the partial scores for each image, i.e.,
+            #   get distribution q(c_{t+1}, c_{1:t} | x) where c_{1:t} is an existing beam,
+            #   and c_{t+1} ranges over whole vocab.
             ambient_next_token_scores, priority_next_token_scores = self._extend_next_token_scores_all(
                 ambient_images=ambient_images, priority_images=priority_images,
                 ambient_scores=ambient_scores, priority_scores=priority_scores,
                 input_ids=input_ids, logits_processor=logits_processor, cur_len=cur_len,
                 **model_kwargs,
             )
-            # TODO: get the score for beam search through the objective -- uses r(k|x)!
-
-            # TODO: avoid bad subtraction caused by -1e9.
-            # TODO: add coeffiecient for negative term.
+            # lxuechen: Get the score used in beam search: \E_{p_err}[r(k | x) \log q(c | x)] - \log \E_{p}[ q(c | x) ].
+            term1 = (torch.stack(ambient_next_token_scores) * r_k_given_x[:, None, None]).mean(dim=0)
+            term2 = numerical.logmeanexp(
+                torch.stack(priority_next_token_scores), dim=0
+            )
+            next_token_scores = term1 - contrastive_weight * term2
+            # TODO: Check if there's bad subtraction bug caused by -1e9.
+            # TODO: Check if next_token_scores has the right shape?
 
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
@@ -379,7 +388,9 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
-            # TODO: Get the per image partial scores as well.
+            # lxuechen: Get the per image partial scores as well.
+            ambient_scores = beam_scores["ambient_scores"]
+            priority_scores = beam_scores["priority_scores"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
@@ -452,6 +463,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         log_r_k_given_x,
         ambient_images,
         priority_images,
+        contrastive_weight,
         **model_kwargs,
     ):
         log_r_k_given_x = self._e_step(
@@ -469,6 +481,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             log_r_k_given_x=log_r_k_given_x,
             ambient_images=ambient_images,
             priority_images=priority_images,
+            contrastive_weight=contrastive_weight,
             **model_kwargs,
         )
         return captions, caption_scores, log_p_k, log_r_k_given_x
@@ -508,7 +521,10 @@ class MixtureGenerationMixin(CustomGenerationMixin):
 
     def _m_step(
         self,
-        captions, caption_scores, log_p_k, log_r_k_given_x, ambient_images, priority_images,
+        captions, caption_scores,
+        log_p_k, log_r_k_given_x,
+        ambient_images, priority_images,
+        contrastive_weight,
 
         max_length=None,
         min_length=None,
@@ -531,6 +547,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
         **model_kwargs,
     ):
         log_p_k = numerical.logmeanexp(log_r_k_given_x, dim=1)
+        r_k_given_x = log_r_k_given_x.softmax(dim=0)
 
         new_captions = []
         new_caption_scores = []
@@ -548,7 +565,7 @@ class MixtureGenerationMixin(CustomGenerationMixin):
             logits_processor=logits_processor, stopping_criteria=stopping_criteria, **model_kwargs,
         )
 
-        for caption, caption_score in zip(captions, caption_scores):
+        for k, (caption, caption_score) in enumerate(zip(captions, caption_scores)):
             beam_scorer = self.beam_search_scorer_cls(
                 batch_size=batch_size,
                 num_beams=num_beams,
@@ -569,6 +586,8 @@ class MixtureGenerationMixin(CustomGenerationMixin):
                 beam_scorer,
                 ambient_images,
                 priority_images,
+                r_k_given_x[k],
+                contrastive_weight,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
