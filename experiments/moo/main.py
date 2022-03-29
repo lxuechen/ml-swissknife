@@ -83,10 +83,10 @@ def main(n_train=40, n_test=300, d=10, lr=1e-1, train_steps=5000):
 
     losses1, losses2 = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-        etas=np.linspace(0, 1, num=21),
-        lr=lr, train_steps=train_steps
+        etas=np.linspace(0.3, 0.8, num=21),
+        lr=lr, train_steps=train_steps,
     )
-    plots = [dict(x=losses1, y=losses2)]
+    plots = [dict(x=losses1, y=losses2, marker='x')]
     utils.plot_wrapper(
         plots=plots,
         options=dict(xlabel='group1 loss', ylabel='group2 loss')
