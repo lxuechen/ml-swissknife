@@ -11,9 +11,9 @@ from swissknife import utils
 
 
 def make_data(n_train, n_test, d, obs_noise_std=1):
+    """Mixture of Gaussian features; two clusters have different mean and covariance."""
     beta = torch.randn(d, 1).abs() * torch.randn(d, 1).sign()
 
-    # TODO: Is mean shift really a problem?
     mu1 = torch.full(size=(d,), fill_value=-0.4)
     mu2 = torch.full(size=(d,), fill_value=0.4)
     std1 = torch.cat([torch.randn(d // 2) * .3, torch.randn(d // 2) * 3.])
@@ -156,7 +156,8 @@ def first_order(
 ):
     delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 3.  # How far to interpolate.
 
-    losses1, losses2 = [], []
+    centroids = dict(x=[], y=[], marker='x', label='centroids')
+    expansions = []
     for eta in etas:
         model, _ = train(
             x1_train, y1_train, x2_train, y2_train,
@@ -179,22 +180,20 @@ def first_order(
         query_eta[1] -= delta
         query_etas.append(query_eta)
 
+        # TODO: Take more examples left and right!
         interps = _first_order_helper(
             model,
             x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-            eta=eta, query_etas=query_etas
+            eta=eta, query_etas=query_etas,
         )
-        losses1.extend(
-            [loss1] + [interp[0] for interp in interps]
+        expansions.append(
+            dict(x=[interp[0] for interp in interps], y=[interp[1] for interp in interps])
         )
-        losses2.extend(
-            [loss2] + [interp[1] for interp in interps]
-        )
+        centroids['x'].append(loss1)
+        centroids['y'].append(loss2)
     # Mark the original points.
     utils.plot_wrapper(
-        plots=[
-            dict(x=losses1, y=losses2, marker='x')
-        ]
+        plots=[centroids] + expansions
     )
 
 
