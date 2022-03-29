@@ -38,8 +38,9 @@ def compute_mse(x, y, model):
     return .5 * ((model(x) - y) ** 2.).sum(1).mean(0)
 
 
-def compute_covar(x):
-    x = torch.cat([x, torch.ones(size=(x.size(0), 1), dtype=x.dtype, device=x.device)], dim=1)
+def compute_covar(x, bias=False):
+    if bias:
+        x = torch.cat([x, torch.ones(size=(x.size(0), 1), dtype=x.dtype, device=x.device)], dim=1)
     return x.t() @ x / x.size(0)
 
 
@@ -49,7 +50,7 @@ def train(
     model=None, optimizer=None,
 ):
     if model is None:
-        model = nn.Linear(x1_train.size(1), 1)
+        model = nn.Linear(x1_train.size(1), 1, bias=False)
     if optimizer is None:
         optimizer = optim.SGD(params=model.parameters(), lr=lr)
     for global_step in range(train_steps):
@@ -134,10 +135,7 @@ def _first_order_helper(
         h = eta[0] * h1 + eta[1] * h2
         h_inv = torch.inverse(h.to(torch.float64)).float()
         h_inv_vjp = (h_inv @ vjp).detach()
-
-        # TODO: Verify this is correct!
-        h_inv_vjp = list(torch.split(h_inv_vjp, split_size_or_sections=(20, 1)))
-        h_inv_vjp[0] = h_inv_vjp[0].reshape(1, 20)
+        h_inv_vjp = (h_inv_vjp.reshape(1, 20),)
 
         model.zero_grad()
         te_loss1 = compute_mse(x1_test, y1_test, model)
