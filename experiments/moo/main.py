@@ -147,14 +147,15 @@ def _first_order_helper(
         new_te_loss = te_loss - delta
 
         outs.append(new_te_loss.tolist())
-    return outs
+    return [out[0] for out in outs], [out[1] for out in outs]
 
 
 def first_order(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-    etas: torch.Tensor, lr, train_steps
+    etas: torch.Tensor, lr, train_steps,
 ):
     delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 3.  # How far to interpolate.
+    num_pts = 10
 
     centroids = dict(x=[], y=[], marker='x', label='centroids')
     expansions = []
@@ -168,29 +169,42 @@ def first_order(
             x1_test, y1_test, x2_test, y2_test
         )
 
-        query_etas = []
-
-        query_eta = eta.clone()
-        query_eta[0] -= delta
-        query_eta[1] += delta
-        query_etas.append(query_eta)
-
-        query_eta = eta.clone()
-        query_eta[0] += delta
-        query_eta[1] -= delta
-        query_etas.append(query_eta)
-
-        # TODO: Take more examples left and right!
-        interps = _first_order_helper(
+        query_etas_left = []
+        for idx in range(num_pts):
+            query_eta = eta.clone()
+            query_eta[0] -= (1 - idx / num_pts) * delta
+            query_eta[1] += (1 - idx / num_pts) * delta
+            query_etas_left.append(query_eta)
+        interps_left = _first_order_helper(
             model,
             x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-            eta=eta, query_etas=query_etas,
+            eta=eta, query_etas=query_etas_left,
         )
+        del query_etas_left
+
+        query_etas_right = []
+        for idx in range(num_pts):
+            query_eta = eta.clone()
+            query_eta[0] -= (1 - idx / num_pts) * delta
+            query_eta[1] += (1 - idx / num_pts) * delta
+            query_etas_right.append(query_eta)
+        interps_right = _first_order_helper(
+            model,
+            x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+            eta=eta, query_etas=query_etas_right,
+        )
+        del query_etas_right
+
         expansions.append(
-            dict(x=[interp[0] for interp in interps], y=[interp[1] for interp in interps])
+            dict(
+                x=interps_left[0] + [loss1] + interps_right[0],
+                y=interps_left[1] + [loss2] + interps_left[1],
+                marker='o'
+            )
         )
         centroids['x'].append(loss1)
         centroids['y'].append(loss2)
+
     # Mark the original points.
     utils.plot_wrapper(
         plots=[centroids] + expansions
