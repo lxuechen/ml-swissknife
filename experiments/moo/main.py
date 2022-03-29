@@ -102,7 +102,12 @@ def brute_force(
         )
         losses1.append(loss1)
         losses2.append(loss2)
-    return losses1, losses2
+    plots = [dict(x=losses1, y=losses2, marker='x')]
+    utils.plot_wrapper(
+        plots=plots,
+        options=dict(xlabel='group1 loss', ylabel='group2 loss')
+    )
+    return plots
 
 
 def _first_order_helper(
@@ -199,7 +204,8 @@ def first_order(
             dict(
                 x=interps_left[0] + [loss1] + interps_right[0],
                 y=interps_left[1] + [loss2] + interps_left[1],
-                marker='+', s=1.
+                marker='+',
+                markersize=0.5,
             )
         )
         centroids['x'].append(loss1)
@@ -222,23 +228,21 @@ def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=20000):
 
     etas = torch.linspace(0.3, 0.7, steps=5)
     etas = torch.stack([etas, 1 - etas], dim=1)
-    first_order(
+    first_order_plots = first_order(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
         etas=etas, lr=lr, train_steps=train_steps,
     )
-    exit()
 
     etas = torch.linspace(0.3, 0.7, steps=31)
     etas = torch.stack([etas, 1 - etas], dim=1)
-    losses1, losses2 = brute_force(
+    brute_force_plots = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
         etas=etas,
         lr=lr, train_steps=train_steps,
     )
-    plots = [dict(x=losses1, y=losses2, marker='x')]
     utils.plot_wrapper(
-        plots=plots,
-        options=dict(xlabel='group1 loss', ylabel='group2 loss')
+        plots=first_order_plots + brute_force_plots,
+        options=dict(xlabel='group1 loss', ylabel='group2 loss'),
     )
 
 
