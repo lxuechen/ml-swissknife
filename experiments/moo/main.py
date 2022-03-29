@@ -3,8 +3,10 @@ python -m moo.main
 """
 
 import fire
+import numpy as np
 import torch
 from torch import nn, optim
+import tqdm
 
 from swissknife import utils
 
@@ -33,9 +35,9 @@ def make_data(n_train, n_test, d, obs_noise_std=1):
 
 def train_and_eval(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-    d, eta, lr, train_steps,
+    eta, lr, train_steps,
 ):
-    model = nn.Linear(d, 1)
+    model = nn.Linear(x1_train.size(1), 1)
     optimizer = optim.SGD(params=model.parameters(), lr=lr)
     for global_step in range(train_steps):
         optimizer.zero_grad()
@@ -48,21 +50,47 @@ def train_and_eval(
     with torch.no_grad():
         loss1 = ((model(x1_test) - y1_test) ** 2.).sum(dim=1).mean(dim=0)
         loss2 = ((model(x2_test) - y2_test) ** 2.).sum(dim=1).mean(dim=0)
-    return torch.stack([loss1, loss2])
+    return loss1.item(), loss2.item()
 
 
-def main(n_train=40, n_test=300, d=10, lr=1e-1, train_steps=10000):
+def brute_force(
+    x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+    etas, lr, train_steps
+):
+    losses1 = []
+    losses2 = []
+    for eta in tqdm.tqdm(etas):
+        eta = torch.tensor([eta, 1. - eta])
+        loss1, loss2 = train_and_eval(
+            x1_train, y1_train, x2_train, y2_train,
+            x1_test, y1_test, x2_test, y2_test,
+            eta=eta, lr=lr, train_steps=train_steps,
+        )
+        losses1.append(loss1)
+        losses2.append(loss2)
+    return losses1, losses2
+
+
+def first_order():
+    pass
+
+
+def main(n_train=40, n_test=300, d=10, lr=1e-1, train_steps=5000):
     utils.manual_seed(42)
 
     (x1_train, y1_train, x2_train, y2_train,
      x1_test, y1_test, x2_test, y2_test) = make_data(n_train=n_train, n_test=n_test, d=d)
 
-    res = train_and_eval(
-        x1_train, y1_train, x2_train, y2_train,
-        x1_test, y1_test, x2_test, y2_test,
-        d=d, eta=torch.tensor([0.5, 0.5]), lr=lr, train_steps=train_steps,
+    losses1, losses2 = brute_force(
+        x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+        etas=np.linspace(0, 1, num=21),
+        lr=lr, train_steps=train_steps
     )
-    print(res)
+    plots = [dict(x=losses1, y=losses2)]
+    utils.plot_wrapper(
+        plots=plots,
+        option=dict(xlabel='group1 loss', ylabel='group2 loss')
+    )
 
 
 if __name__ == "__main__":
