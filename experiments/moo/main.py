@@ -91,7 +91,8 @@ def train_and_evaluate(
 
 def brute_force(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-    etas, lr, train_steps, show_plots=False,
+    etas, lr, train_steps,
+    show_plots=False,
 ):
     losses1 = []
     losses2 = []
@@ -158,10 +159,11 @@ def _first_order_helper(
 
 def first_order(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-    etas: torch.Tensor, lr, train_steps, show_plots=False,
+    etas: torch.Tensor, lr, train_steps,
+    show_plots=False,
+    num_pts=5
 ):
     delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 2.  # How far to interpolate.
-    num_pts = 10
 
     centroids = dict(x=[], y=[], marker='x', label='centroids')
     expansions = []
