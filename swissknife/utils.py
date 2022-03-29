@@ -669,7 +669,7 @@ def to_numpy(*possibly_tensors: Union[torch.Tensor, np.ndarray, float]):
     return arrays[0] if len(arrays) == 1 else arrays
 
 
-def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True):
+def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True, disable_tf=True):
     if hasattr(args_or_seed, 'seed'):
         args_or_seed = args_or_seed.seed
     random.seed(args_or_seed)
@@ -681,11 +681,12 @@ def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         os.environ['PYTHONHASHSEED'] = str(args_or_seed)
-    try:
-        import tensorflow as tf
-        tf.random.set_seed(args_or_seed)
-    except ModuleNotFoundError:
-        logging.warning('Tensorflow not installed; ignoring set seed for tf.')
+    if not disable_tf:
+        try:
+            import tensorflow as tf
+            tf.random.set_seed(args_or_seed)
+        except ModuleNotFoundError:
+            logging.warning('Tensorflow not installed; ignoring set seed for tf.')
 
 
 def manual_dtype(args_or_dtype: Union[str, argparse.Namespace]):
