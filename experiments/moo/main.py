@@ -43,12 +43,15 @@ def compute_covar(x):
     return x.t() @ x / x.size(0)
 
 
-def train_and_eval(
-    x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+def train(
+    x1_train, y1_train, x2_train, y2_train,
     eta, lr, train_steps,
+    model=None, optimizer=None,
 ):
-    model = nn.Linear(x1_train.size(1), 1)
-    optimizer = optim.SGD(params=model.parameters(), lr=lr)
+    if model is None:
+        model = nn.Linear(x1_train.size(1), 1)
+    if optimizer is None:
+        optimizer = optim.SGD(params=model.parameters(), lr=lr)
     for global_step in range(train_steps):
         model.train()
         model.zero_grad()
@@ -58,12 +61,32 @@ def train_and_eval(
         loss.backward()
         optimizer.step()
         print(loss1, loss2, loss, eta)  # Sanity check loss stabilizes.
+    return model, optimizer
 
-    with torch.no_grad():
-        model.eval()
-        loss1 = compute_mse(x1_test, y1_test, model)
-        loss2 = compute_mse(x2_test, y2_test, model)
+
+@torch.no_grad()
+def evaluate(
+    model,
+    x1_test, y1_test, x2_test, y2_test,
+):
+    model.eval()
+    loss1 = compute_mse(x1_test, y1_test, model)
+    loss2 = compute_mse(x2_test, y2_test, model)
     return loss1.item(), loss2.item()
+
+
+def train_and_evaluate(
+    x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+    eta, lr, train_steps,
+):
+    model, _ = train(
+        x1_train, y1_train, x2_train, y2_train,
+        eta, lr, train_steps,
+    )
+    return evaluate(
+        model,
+        x1_test, y1_test, x2_test, y2_test,
+    )
 
 
 def brute_force(
@@ -73,7 +96,7 @@ def brute_force(
     losses1 = []
     losses2 = []
     for eta in tqdm.tqdm(etas):
-        loss1, loss2 = train_and_eval(
+        loss1, loss2 = train_and_evaluate(
             x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
             eta=eta, lr=lr, train_steps=train_steps,
         )
@@ -123,7 +146,7 @@ def _first_order_helper(
         te_loss = torch.stack([te_loss1, te_loss2])
         new_te_loss = te_loss - delta
 
-        outs.append(new_te_loss)
+        outs.append(new_te_loss.tolist())
     return outs
 
 
@@ -131,18 +154,48 @@ def first_order(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
     etas: torch.Tensor, lr, train_steps
 ):
-    delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 3.
-    model = nn.Linear(x1_train.size(1), 1)
+    delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 3.  # How far to interpolate.
 
+    losses1, losses2 = [], []
     for eta in etas:
+        model, _ = train(
+            x1_train, y1_train, x2_train, y2_train,
+            eta, lr, train_steps,
+        )
+        loss1, loss2 = evaluate(
+            model,
+            x1_test, y1_test, x2_test, y2_test
+        )
+
+        query_etas = []
+
         query_eta = eta.clone()
         query_eta[0] -= delta
         query_eta[1] += delta
-        _first_order_helper(
+        query_etas.append(query_eta)
+
+        query_eta = eta.clone()
+        query_eta[0] += delta
+        query_eta[1] -= delta
+        query_etas.append(query_eta)
+
+        interps = _first_order_helper(
             model,
             x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-            eta=eta, query_etas=[query_eta]
+            eta=eta, query_etas=query_etas
         )
+        losses1.extend(
+            [loss1] + [interp[0] for interp in interps]
+        )
+        losses2.extend(
+            [loss2] + [interp[1] for interp in interps]
+        )
+    # Mark the original points.
+    utils.plot_wrapper(
+        plots=[
+            dict(x=losses1, y=losses2, marker='x')
+        ]
+    )
 
 
 def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=20000):
