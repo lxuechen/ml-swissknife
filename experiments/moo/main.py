@@ -88,6 +88,7 @@ def _first_order_helper(
     eta, query_etas,
 ):
     """Approximate left and right function values at eta_l and eta_r with first-order expansion."""
+    outs = []
     for query_eta in query_etas:
         model.zero_grad()
         tr_loss1 = compute_mse(x1_train, y1_train, model)
@@ -102,7 +103,28 @@ def _first_order_helper(
         h2 = compute_covar(x2_train)
         h = eta[0] * h1 + eta[1] * h2
         h_inv = torch.inverse(h.to(torch.float64)).float()
-        h_inv_vjp = h_inv @ vjp
+        h_inv_vjp = (h_inv @ vjp).detach()
+
+        # TODO: Verify this is correct!
+        h_inv_vjp = list(torch.split(h_inv_vjp, split_size_or_sections=(20, 1)))
+        h_inv_vjp[0] = h_inv_vjp[0].reshape(1, 20)
+
+        model.zero_grad()
+        te_loss1 = compute_mse(x1_test, y1_test, model)
+        delta1, = utils.jvp(te_loss1, tuple(model.parameters()), grad_inputs=h_inv_vjp, create_graph=True)
+        delta1 = delta1.detach()
+
+        model.zero_grad()
+        te_loss2 = compute_mse(x2_test, y2_test, model)
+        delta2, = utils.jvp(te_loss2, tuple(model.parameters()), grad_inputs=h_inv_vjp, create_graph=True)
+        delta2 = delta2.detach()
+        delta = torch.stack([delta1, delta2])
+
+        te_loss = torch.stack([te_loss1, te_loss2])
+        new_te_loss = te_loss - delta
+
+        outs.append(new_te_loss)
+    return outs
 
 
 def first_order(
