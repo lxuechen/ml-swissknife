@@ -27,8 +27,6 @@ def make_data(n_train, n_test, d, obs_noise_std=1):
 
     y1_train.add_(torch.randn_like(y1_train) * obs_noise_std)
     y2_train.add_(torch.randn_like(y2_train) * obs_noise_std)
-    y1_test.add_(torch.randn_like(y1_test) * obs_noise_std)
-    y2_test.add_(torch.randn_like(y2_test) * obs_noise_std)
 
     return x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test
 
@@ -46,6 +44,7 @@ def train_and_eval(
         loss = (torch.stack([loss1, loss2]) * eta).sum()
         loss.backward()
         optimizer.step()
+        print(loss1, loss2, loss, eta)
 
     with torch.no_grad():
         loss1 = ((model(x1_test) - y1_test) ** 2.).sum(dim=1).mean(dim=0)
@@ -60,6 +59,7 @@ def brute_force(
     losses1 = []
     losses2 = []
     for eta in tqdm.tqdm(etas):
+        eta = float(eta)
         eta = torch.tensor([eta, 1. - eta])
         loss1, loss2 = train_and_eval(
             x1_train, y1_train, x2_train, y2_train,
@@ -83,7 +83,7 @@ def main(n_train=40, n_test=300, d=10, lr=1e-1, train_steps=5000):
 
     losses1, losses2 = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-        etas=np.linspace(0.3, 0.8, num=21),
+        etas=np.linspace(0.4, 0.6, num=11),
         lr=lr, train_steps=train_steps,
     )
     plots = [dict(x=losses1, y=losses2, marker='x')]
