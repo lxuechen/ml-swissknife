@@ -165,7 +165,7 @@ def first_order(
 ):
     delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 2.  # How far to interpolate.
 
-    centroids = dict(x=[], y=[], marker='x', label='centroids')
+    centroids = dict(x=[], y=[], marker='^', label='centroids')
     expansions = []
     for eta in etas:
         model, _ = train(
