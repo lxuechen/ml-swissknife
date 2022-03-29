@@ -38,6 +38,11 @@ def compute_mse(x, y, model):
     return .5 * ((model(x) - y) ** 2.).sum(1).mean(0)
 
 
+def compute_covar(x):
+    x = torch.cat([x, torch.ones(size=(x.size(0), 1), dtype=x.dtype, device=x.device)], dim=1)
+    return x.t() @ x / x.size(0)
+
+
 def train_and_eval(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
     eta, lr, train_steps,
@@ -83,7 +88,6 @@ def _first_order_helper(
     eta, query_etas,
 ):
     """Approximate left and right function values at eta_l and eta_r with first-order expansion."""
-
     for query_eta in query_etas:
         model.zero_grad()
         tr_loss1 = compute_mse(x1_train, y1_train, model)
@@ -92,14 +96,31 @@ def _first_order_helper(
         vjp = utils.vjp(
             outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta,
         )
+        vjp = utils.flatten(vjp)
         # Hessian is weighted uncentered empirical covariances.
+        h1 = compute_covar(x1_train)
+        h2 = compute_covar(x2_train)
+        h = eta[0] * h1 + eta[1] * h2
+        h_inv = torch.inverse(h.to(torch.float64)).float()
+        h_inv_vjp = h_inv @ vjp
 
 
 def first_order(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
     etas: torch.Tensor, lr, train_steps
 ):
-    delta = torch.mean(etas[0, 1:] - etas[0, :-1]) / 3.
+    delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 3.
+    model = nn.Linear(x1_train.size(1), 1)
+
+    for eta in etas:
+        query_eta = eta.clone()
+        query_eta[0] -= delta
+        query_eta[1] += delta
+        _first_order_helper(
+            model,
+            x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+            eta=eta, query_etas=[query_eta]
+        )
 
 
 def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=20000):
@@ -108,7 +129,15 @@ def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=20000):
     (x1_train, y1_train, x2_train, y2_train,
      x1_test, y1_test, x2_test, y2_test) = make_data(n_train=n_train, n_test=n_test, d=d)
 
-    etas = torch.linspace(0.2, 0.8, steps=31)
+    etas = torch.linspace(0.3, 0.7, steps=5)
+    etas = torch.stack([etas, 1 - etas], dim=1)
+    first_order(
+        x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+        etas=etas, lr=lr, train_steps=train_steps,
+    )
+    exit()
+
+    etas = torch.linspace(0.3, 0.7, steps=31)
     etas = torch.stack([etas, 1 - etas], dim=1)
     losses1, losses2 = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
