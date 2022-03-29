@@ -91,7 +91,7 @@ def train_and_evaluate(
 
 def brute_force(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-    etas, lr, train_steps
+    etas, lr, train_steps, show_plots=False,
 ):
     losses1 = []
     losses2 = []
@@ -103,10 +103,11 @@ def brute_force(
         losses1.append(loss1)
         losses2.append(loss2)
     plots = [dict(x=losses1, y=losses2, marker='x')]
-    utils.plot_wrapper(
-        plots=plots,
-        options=dict(xlabel='group1 loss', ylabel='group2 loss')
-    )
+    if show_plots:
+        utils.plot_wrapper(
+            plots=plots,
+            options=dict(xlabel='group1 loss', ylabel='group2 loss')
+        )
     return plots
 
 
@@ -157,7 +158,7 @@ def _first_order_helper(
 
 def first_order(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-    etas: torch.Tensor, lr, train_steps,
+    etas: torch.Tensor, lr, train_steps, show_plots=False,
 ):
     delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 2.  # How far to interpolate.
     num_pts = 10
@@ -190,8 +191,8 @@ def first_order(
         query_etas_right = []
         for idx in range(num_pts):
             query_eta = eta.clone()
-            query_eta[0] -= (1 - idx / num_pts) * delta
-            query_eta[1] += (1 - idx / num_pts) * delta
+            query_eta[0] += (1 - idx / num_pts) * delta
+            query_eta[1] -= (1 - idx / num_pts) * delta
             query_etas_right.append(query_eta)
         interps_right = _first_order_helper(
             model,
@@ -213,10 +214,11 @@ def first_order(
 
     # Mark the original points.
     plots = [centroids] + expansions
-    utils.plot_wrapper(
-        plots=plots,
-        options=dict(xlabel='group1 loss', ylabel='group2 loss')
-    )
+    if show_plots:
+        utils.plot_wrapper(
+            plots=plots,
+            options=dict(xlabel='group1 loss', ylabel='group2 loss')
+        )
     return plots
 
 
