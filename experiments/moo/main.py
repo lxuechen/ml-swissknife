@@ -118,13 +118,12 @@ def _first_order_helper(
     """Approximate left and right function values at eta_l and eta_r with first-order expansion."""
     outs = []
     for query_eta in query_etas:
+        # vjp
         model.zero_grad()
         tr_loss1 = compute_mse(x1_train, y1_train, model)
         tr_loss2 = compute_mse(x2_train, y2_train, model)
         tr_loss = torch.stack([tr_loss1, tr_loss2])
-        vjp = utils.vjp(
-            outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta,
-        )
+        vjp = utils.vjp(outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta)
         vjp = utils.flatten(vjp)
         del tr_loss
 
@@ -136,20 +135,25 @@ def _first_order_helper(
         h_inv_vjp = (h_inv @ vjp).detach()
         h_inv_vjp = (h_inv_vjp.reshape(1, 20),)
 
+        # vjp
+        te_loss = []
         delta = []
+
         model.zero_grad()
         te_loss1 = compute_mse(x1_test, y1_test, model)
         delta1, = utils.jvp(te_loss1, tuple(model.parameters()), grad_inputs=h_inv_vjp, create_graph=True)
+        te_loss.append(te_loss1.detach())
         delta.append(delta1.detach())
-        del delta1
+        del delta1, te_loss1
 
         model.zero_grad()
         te_loss2 = compute_mse(x2_test, y2_test, model)
         delta2, = utils.jvp(te_loss2, tuple(model.parameters()), grad_inputs=h_inv_vjp, create_graph=True)
+        te_loss.append(te_loss2.detach())
         delta.append(delta2.detach())
-        del delta2
+        del delta2, te_loss2
 
-        te_loss = torch.stack([te_loss1, te_loss2])
+        te_loss = torch.stack(te_loss)
         delta = torch.stack(delta)
         new_te_loss = te_loss - delta
 
