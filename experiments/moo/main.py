@@ -89,7 +89,7 @@ def main(n_train=40, n_test=300, d=10, lr=1e-1, train_steps=5000):
     plots = [dict(x=losses1, y=losses2)]
     utils.plot_wrapper(
         plots=plots,
-        option=dict(xlabel='group1 loss', ylabel='group2 loss')
+        options=dict(xlabel='group1 loss', ylabel='group2 loss')
     )
 
 
