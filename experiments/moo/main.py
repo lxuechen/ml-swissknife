@@ -3,7 +3,6 @@ python -m moo.main
 """
 
 import fire
-import numpy as np
 import torch
 from torch import nn, optim
 import tqdm
@@ -15,8 +14,8 @@ def make_data(n_train, n_test, d, obs_noise_std=1):
     beta = torch.randn(d, 1).abs() * torch.randn(d, 1).sign()
 
     # TODO: Is mean shift really a problem?
-    mu1 = torch.full(size=(d,), fill_value=-0.5)
-    mu2 = torch.full(size=(d,), fill_value=0.5)
+    mu1 = torch.full(size=(d,), fill_value=-0.4)
+    mu2 = torch.full(size=(d,), fill_value=0.4)
     std1 = torch.cat([torch.randn(d // 2) * .3, torch.randn(d // 2) * 3.])
     std2 = torch.cat([torch.randn(d // 2) * 3., torch.randn(d // 2) * .3])
     x1_train = torch.randn(n_train // 2, d) * std1[None, :] + mu1[None, :]
@@ -35,6 +34,10 @@ def make_data(n_train, n_test, d, obs_noise_std=1):
     return x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test
 
 
+def compute_mse(x, y, model):
+    return .5 * ((model(x) - y) ** 2.).sum(1).mean(0)
+
+
 def train_and_eval(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
     eta, lr, train_steps,
@@ -42,17 +45,19 @@ def train_and_eval(
     model = nn.Linear(x1_train.size(1), 1)
     optimizer = optim.SGD(params=model.parameters(), lr=lr)
     for global_step in range(train_steps):
-        optimizer.zero_grad()
-        loss1 = ((model(x1_train) - y1_train) ** 2.).sum(dim=1).mean(dim=0)
-        loss2 = ((model(x2_train) - y2_train) ** 2.).sum(dim=1).mean(dim=0)
+        model.train()
+        model.zero_grad()
+        loss1 = compute_mse(x1_train, y1_train, model)
+        loss2 = compute_mse(x2_train, y2_train, model)
         loss = (torch.stack([loss1, loss2]) * eta).sum()
         loss.backward()
         optimizer.step()
         print(loss1, loss2, loss, eta)  # Sanity check loss stabilizes.
 
     with torch.no_grad():
-        loss1 = ((model(x1_test) - y1_test) ** 2.).sum(dim=1).mean(dim=0)
-        loss2 = ((model(x2_test) - y2_test) ** 2.).sum(dim=1).mean(dim=0)
+        model.eval()
+        loss1 = compute_mse(x1_test, y1_test, model)
+        loss2 = compute_mse(x2_test, y2_test, model)
     return loss1.item(), loss2.item()
 
 
@@ -63,11 +68,8 @@ def brute_force(
     losses1 = []
     losses2 = []
     for eta in tqdm.tqdm(etas):
-        eta = float(eta)
-        eta = torch.tensor([eta, 1. - eta])
         loss1, loss2 = train_and_eval(
-            x1_train, y1_train, x2_train, y2_train,
-            x1_test, y1_test, x2_test, y2_test,
+            x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
             eta=eta, lr=lr, train_steps=train_steps,
         )
         losses1.append(loss1)
@@ -75,19 +77,42 @@ def brute_force(
     return losses1, losses2
 
 
-def first_order():
-    pass
+def _first_order_helper(
+    model: nn.Module,  # Trained model at eta.
+    x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+    eta, query_etas,
+):
+    """Approximate left and right function values at eta_l and eta_r with first-order expansion."""
+
+    for query_eta in query_etas:
+        model.zero_grad()
+        tr_loss1 = compute_mse(x1_train, y1_train, model)
+        tr_loss2 = compute_mse(x2_train, y2_train, model)
+        tr_loss = torch.stack([tr_loss1, tr_loss2])
+        vjp = utils.vjp(
+            outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta,
+        )
+        # Hessian is weighted uncentered empirical covariances.
 
 
-def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=10000):
+def first_order(
+    x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+    etas: torch.Tensor, lr, train_steps
+):
+    delta = torch.mean(etas[0, 1:] - etas[0, :-1]) / 3.
+
+
+def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=20000):
     utils.manual_seed(62)
 
     (x1_train, y1_train, x2_train, y2_train,
      x1_test, y1_test, x2_test, y2_test) = make_data(n_train=n_train, n_test=n_test, d=d)
 
+    etas = torch.linspace(0.2, 0.8, steps=31)
+    etas = torch.stack([etas, 1 - etas], dim=1)
     losses1, losses2 = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-        etas=np.linspace(0.2, 0.8, num=31),
+        etas=etas,
         lr=lr, train_steps=train_steps,
     )
     plots = [dict(x=losses1, y=losses2, marker='x')]
