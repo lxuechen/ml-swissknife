@@ -45,8 +45,7 @@ def compute_covar(x, bias=False):
 
 
 def train(
-    x1_train, y1_train, x2_train, y2_train,
-    eta, lr, train_steps,
+    x1_train, y1_train, x2_train, y2_train, eta, lr, train_steps,
     model=None, optimizer=None,
 ):
     if model is None:
@@ -81,13 +80,10 @@ def train_and_evaluate(
     eta, lr, train_steps,
 ):
     model, _ = train(
-        x1_train, y1_train, x2_train, y2_train,
-        eta, lr, train_steps,
+        x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
+        eta=eta, lr=lr, train_steps=train_steps,
     )
-    return evaluate(
-        model,
-        x1_test, y1_test, x2_test, y2_test,
-    )
+    return evaluate(model=model, x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test)
 
 
 def brute_force(
@@ -99,7 +95,8 @@ def brute_force(
     losses2 = []
     for eta in tqdm.tqdm(etas):
         loss1, loss2 = train_and_evaluate(
-            x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+            x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
+            x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
             eta=eta, lr=lr, train_steps=train_steps,
         )
         losses1.append(loss1)
@@ -125,6 +122,7 @@ def _first_order_helper(
         tr_loss1 = compute_mse(x1_train, y1_train, model)
         tr_loss2 = compute_mse(x2_train, y2_train, model)
         tr_loss = torch.stack([tr_loss1, tr_loss2])
+        # TODO: Check this
         vjp = utils.vjp(
             outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta,
         )
@@ -132,6 +130,7 @@ def _first_order_helper(
         # Hessian is weighted uncentered empirical covariances.
         h1 = compute_covar(x1_train)
         h2 = compute_covar(x2_train)
+        # TODO: Check this
         h = eta[0] * h1 + eta[1] * h2
         h_inv = torch.inverse(h.to(torch.float64)).float()
         h_inv_vjp = (h_inv @ vjp).detach()
@@ -167,12 +166,12 @@ def first_order(
     expansions = []
     for eta in etas:
         model, _ = train(
-            x1_train, y1_train, x2_train, y2_train,
-            eta, lr, train_steps,
+            x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
+            eta=eta, lr=lr, train_steps=train_steps,
         )
         loss1, loss2 = evaluate(
-            model,
-            x1_test, y1_test, x2_test, y2_test
+            model=model,
+            x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test
         )
 
         query_etas_left = []
@@ -182,21 +181,23 @@ def first_order(
             query_eta[1] += (1 - idx / num_pts) * delta
             query_etas_left.append(query_eta)
         interps_left = _first_order_helper(
-            model,
-            x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+            model=model,
+            x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
+            x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
             eta=eta, query_etas=query_etas_left,
         )
         del query_etas_left
 
         query_etas_right = []
-        for idx in range(num_pts):
+        for idx in range(1, num_pts + 1):
             query_eta = eta.clone()
-            query_eta[0] += (1 - idx / num_pts) * delta
-            query_eta[1] -= (1 - idx / num_pts) * delta
+            query_eta[0] += (idx / num_pts) * delta
+            query_eta[1] -= (idx / num_pts) * delta
             query_etas_right.append(query_eta)
         interps_right = _first_order_helper(
-            model,
-            x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+            model=model,
+            x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
+            x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
             eta=eta, query_etas=query_etas_right,
         )
         del query_etas_right
@@ -222,7 +223,7 @@ def first_order(
     return plots
 
 
-def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=20000):
+def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=25000):
     utils.manual_seed(62)
 
     (x1_train, y1_train, x2_train, y2_train,
