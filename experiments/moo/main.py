@@ -104,7 +104,7 @@ def brute_force(
         )
         losses1.append(loss1)
         losses2.append(loss2)
-    plots = [dict(x=losses1, y=losses2, marker='x')]
+    plots = [dict(x=losses1, y=losses2, marker='x', label='brute force')]
     if show_plots:
         utils.plot_wrapper(
             plots=plots,
@@ -163,7 +163,7 @@ def first_order(
 ):
     delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 2.  # How far to interpolate.
 
-    centroids = dict(x=[], y=[], marker='^', label='centroids')
+    centroids = dict(x=[], y=[], marker='^', label='centroids', linewidth=0.)
     expansions = []
     for eta in etas:
         model, _ = train(
@@ -235,7 +235,7 @@ def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=20000):
         etas=etas, lr=lr, train_steps=train_steps,
     )
 
-    etas = torch.linspace(0.3, 0.7, steps=31)
+    etas = torch.linspace(0.3, 0.7, steps=21)
     etas = torch.stack([etas, 1 - etas], dim=1)
     brute_force_plots = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
