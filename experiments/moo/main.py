@@ -107,7 +107,7 @@ def brute_force(
         )
         losses1.append(loss1)
         losses2.append(loss2)
-    plots = [dict(x=losses1, y=losses2, marker='x', label='brute force', linewidth=3, color='k')]
+    plots = [dict(x=losses1, y=losses2, marker='x', label='brute force', linewidth=3, color='k', markersize=5)]
     if show_plots:
         utils.plot_wrapper(
             plots=plots,
