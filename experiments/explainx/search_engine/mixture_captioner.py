@@ -242,6 +242,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
 
         if captions is None:
             captions, caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup_caption_agnostic(
+                input_ids=input_ids,
                 ambient_images=ambient_images,
                 priority_images=priority_images,
                 num_clusters=num_clusters,
@@ -258,7 +259,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 **model_kwargs,
             )
         else:
-            caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup(
+            caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup_caption_aware(
                 captions=captions, num_clusters=num_clusters,
                 ambient_images=ambient_images, priority_images=priority_images,
                 **model_kwargs,
@@ -268,6 +269,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         for em_round_idx in range(num_em_rounds):
             # c, p(k), and r(k|x) are the main variables; they get updated in each round.
             (captions, caption_scores, log_p_k, log_r_k_given_x) = self._mixture_em(
+                input_ids=input_ids,
+
                 captions=captions,
                 caption_scores=caption_scores,
                 log_p_k=log_p_k,
@@ -470,6 +473,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
 
     def _mixture_setup_caption_agnostic(
         self,
+        input_ids: torch.Tensor,  # Shared prefix.
         ambient_images: List[Dict],
         priority_images: List[Dict],
         num_clusters: int,
@@ -498,6 +502,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         caption_scores = [None for _ in range(K)]
 
         captions, caption_scores, log_p_k = self._m_step(
+            input_ids=input_ids,
+
             captions=captions,
             caption_scores=caption_scores,
             log_p_k=log_p_k,
@@ -521,14 +527,23 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         )
         return captions, caption_scores, log_p_k, log_r_k_given_x
 
-    def _mixture_setup(
+    def _mixture_setup_caption_aware(
         self,
         captions: List[torch.LongTensor],
         ambient_images: List[Dict],
         priority_images: List[Dict],
-        caption_scores=None,
+        caption_scores: Optional[List[torch.FloatTensor]] = None,
         **model_kwargs,
     ) -> Tuple[List[torch.Tensor], torch.Tensor, torch.Tensor]:
+        """
+        Caption-aware initialization.
+
+        captions_scores are computed if not given.
+        log_p_k is uniform (uninformative).
+            the M-step that follows E-step updates this.
+        log_r_k_given_x is uniform over the k axis (uninformative).
+            the E-step immediately follows this would update r_k_given_x to give correct responsibilities.
+        """
         device = captions[0].device
         M = len(priority_images)
         K = len(captions)
@@ -555,6 +570,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
 
     def _mixture_em(
         self,
+        input_ids,
+
         captions,
         caption_scores,
         log_p_k,
@@ -588,6 +605,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             **model_kwargs,
         )
         captions, caption_scores, log_p_k = self._m_step(
+            input_ids=input_ids,
+
             captions=captions,
             caption_scores=caption_scores,
             log_p_k=log_p_k,
@@ -646,6 +665,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
 
     def _m_step(
         self,
+        input_ids,  # Shared prefix.
+
         captions, caption_scores,
         log_p_k, log_r_k_given_x,
         ambient_images, priority_images,
@@ -682,6 +703,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 num_beam_hyps_to_keep=num_return_sequences,
             )
             this_model_kwargs = copy.deepcopy(model_kwargs)
+            # This step performs duplication to match number of beams!
             input_ids, this_model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
                 expand_size=num_beams,
