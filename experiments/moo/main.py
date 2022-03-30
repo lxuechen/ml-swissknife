@@ -123,8 +123,7 @@ def _first_order_helper(
         tr_loss1 = compute_mse(x1_train, y1_train, model)
         tr_loss2 = compute_mse(x2_train, y2_train, model)
         tr_loss = torch.stack([tr_loss1, tr_loss2])
-        vjp = utils.vjp(outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta)
-        vjp = utils.flatten(vjp)
+        vjp, = utils.vjp(outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta)
         del tr_loss
 
         # Hessian is weighted uncentered empirical covariances.
@@ -132,8 +131,7 @@ def _first_order_helper(
         h2 = compute_covar(x2_train)
         h = eta[0] * h1 + eta[1] * h2
         h_inv = torch.inverse(h.to(torch.float64)).float()
-        h_inv_vjp = (h_inv @ vjp).detach()
-        h_inv_vjp = (h_inv_vjp.reshape(1, 20),)
+        h_inv_vjp = (vjp @ h_inv).detach(),
 
         # vjp
         te_loss = []
@@ -141,14 +139,14 @@ def _first_order_helper(
 
         model.zero_grad()
         te_loss1 = compute_mse(x1_test, y1_test, model)
-        delta1, = utils.jvp(te_loss1, tuple(model.parameters()), grad_inputs=h_inv_vjp, create_graph=True)
+        delta1, = utils.jvp(te_loss1, tuple(model.parameters()), grad_inputs=h_inv_vjp)
         te_loss.append(te_loss1.detach())
         delta.append(delta1.detach())
         del delta1, te_loss1
 
         model.zero_grad()
         te_loss2 = compute_mse(x2_test, y2_test, model)
-        delta2, = utils.jvp(te_loss2, tuple(model.parameters()), grad_inputs=h_inv_vjp, create_graph=True)
+        delta2, = utils.jvp(te_loss2, tuple(model.parameters()), grad_inputs=h_inv_vjp)
         te_loss.append(te_loss2.detach())
         delta.append(delta2.detach())
         del delta2, te_loss2
@@ -161,15 +159,14 @@ def _first_order_helper(
     return [out[0] for out in outs], [out[1] for out in outs]
 
 
-# TODO: Bug is here somewhere.
 def first_order(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
     etas: torch.Tensor, lr, train_steps,
     show_plots=False,
-    num_pts=5
+    num_pts=5,
+    delta=0.05,
 ):
-    delta = torch.mean(etas[1:, 0] - etas[:-1, 0]) / 2.  # How far to interpolate.
-
+    # TODO: Bug is here somewhere.
     centroids = dict(x=[], y=[], marker='^', label='centroids', linewidth=0.)
     expansions = []
     for eta in etas:
@@ -181,20 +178,6 @@ def first_order(
             model=model,
             x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test
         )
-
-        query_etas_left = []
-        for idx in range(num_pts):
-            query_eta = eta.clone()
-            query_eta[0] -= (1 - idx / num_pts) * delta
-            query_eta[1] += (1 - idx / num_pts) * delta
-            query_etas_left.append(query_eta)
-        interps_left = _first_order_helper(
-            model=model,
-            x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
-            x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
-            eta=eta, query_etas=query_etas_left,
-        )
-        del query_etas_left
 
         query_etas_right = []
         for idx in range(1, num_pts + 1):
@@ -210,12 +193,28 @@ def first_order(
         )
         del query_etas_right
 
+        query_etas_left = []
+        for idx in range(num_pts):
+            query_eta = eta.clone()
+            query_eta[0] -= (1 - idx / num_pts) * delta
+            query_eta[1] += (1 - idx / num_pts) * delta
+            query_etas_left.append(query_eta)
+        interps_left = _first_order_helper(
+            model=model,
+            x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
+            x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
+            eta=eta, query_etas=query_etas_left,
+        )
+        del query_etas_left
+
+        x = interps_left[0] + [loss1] + interps_right[0]
+        y = interps_left[1] + [loss2] + interps_left[1]
         expansions.append(
             dict(
-                x=interps_left[0] + [loss1] + interps_right[0],
-                y=interps_left[1] + [loss2] + interps_left[1],
+                x=x,
+                y=y,
                 marker='+',
-                markersize=0.5,
+                markersize=5,
             )
         )
         centroids['x'].append(loss1)
@@ -237,15 +236,19 @@ def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=25000):
     (x1_train, y1_train, x2_train, y2_train,
      x1_test, y1_test, x2_test, y2_test) = make_data(n_train=n_train, n_test=n_test, d=d)
 
-    etas = torch.linspace(0.3, 0.7, steps=5)
+    etas = torch.linspace(0.5, 0.6, steps=1)
     etas = torch.stack([etas, 1 - etas], dim=1)
+    # etas = torch.linspace(0.3, 0.7, steps=5)
+    # etas = torch.stack([etas, 1 - etas], dim=1)
     first_order_plots = first_order(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-        etas=etas, lr=lr, train_steps=train_steps,
+        etas=etas, lr=lr, train_steps=40000,
     )
 
-    etas = torch.linspace(0.3, 0.7, steps=21)
+    etas = torch.linspace(0.4, 0.6, steps=6)
     etas = torch.stack([etas, 1 - etas], dim=1)
+    # etas = torch.linspace(0.3, 0.7, steps=21)
+    # etas = torch.stack([etas, 1 - etas], dim=1)
     brute_force_plots = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
         etas=etas,
