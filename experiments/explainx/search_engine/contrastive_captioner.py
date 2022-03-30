@@ -57,7 +57,7 @@ class ContrastiveBeamSearchScorer(BeamSearchScorer):
         has_auxiliary_scores = jointly_evolving_scores is not None
         if has_auxiliary_scores:
             new_jointly_evolving_scores = {
-                key: torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
+                key: torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
                 for key, value in jointly_evolving_scores.items()
             }
         else:
