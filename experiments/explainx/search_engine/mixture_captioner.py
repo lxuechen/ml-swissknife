@@ -45,11 +45,12 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         self,
 
         # --- lxuechen: new arguments
-        captions: List[torch.LongTensor],  # List of k LongTensors.
         priority_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
         ambient_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
         num_em_rounds: int,
         contrastive_weight: float,
+        captions: Optional[List[torch.LongTensor]] = None,  # List of k LongTensors.
+        num_clusters: Optional[int] = None,  # Only useful if captions == None.
         # ---
 
         inputs: Optional[torch.Tensor] = None,
@@ -236,9 +237,32 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
         # 9.1. Compute the scores for initial captions; initialize the distributions p(k) and r(k | x).
-        caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup(
-            captions=captions, ambient_images=ambient_images, priority_images=priority_images, **model_kwargs,
-        )
+        if captions is None and num_clusters is None:
+            raise ValueError(f"captions and num_clusters cannot both be None.")
+
+        if captions is None:
+            captions, caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup_caption_agnostic(
+                ambient_images=ambient_images,
+                priority_images=priority_images,
+                num_clusters=num_clusters,
+                contrastive_weight=contrastive_weight,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                batch_size=batch_size,
+                num_beams=num_beams,
+                length_penalty=length_penalty,
+                early_stopping=early_stopping,
+                num_return_sequences=num_return_sequences,
+                **model_kwargs,
+            )
+        else:
+            caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup(
+                captions=captions, num_clusters=num_clusters,
+                ambient_images=ambient_images, priority_images=priority_images,
+                **model_kwargs,
+            )
 
         # 9.2. Alternate between E and M.
         for em_round_idx in range(num_em_rounds):
@@ -444,6 +468,59 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             sequences_scores=sequence_outputs["sequence_scores"],
         )
 
+    def _mixture_setup_caption_agnostic(
+        self,
+        ambient_images: List[Dict],
+        priority_images: List[Dict],
+        num_clusters: int,
+        contrastive_weight: float,
+        logits_processor,
+        stopping_criteria,
+        pad_token_id,
+        eos_token_id,
+        batch_size,
+        num_beams,
+        length_penalty,
+        early_stopping,
+        num_return_sequences,
+        **model_kwargs,
+    ):
+        device = priority_images[0]['encoder_hidden_states'].device
+        M = len(priority_images)
+        K = num_clusters
+
+        log_p_k = torch.zeros(K, device=device) - math.log(K)
+        # TODO: Is this random enough?
+        log_r_k_given_x = torch.randn((K, M), device=device).log_softmax(dim=0)  # Random assignments.
+
+        # Dummy values for captions, caption_scores.
+        captions = [None for _ in range(K)]
+        caption_scores = [None for _ in range(K)]
+
+        captions, caption_scores, log_p_k = self._m_step(
+            captions=captions,
+            caption_scores=caption_scores,
+            log_p_k=log_p_k,
+            log_r_k_given_x=log_r_k_given_x,
+            ambient_images=ambient_images,
+            priority_images=priority_images,
+            contrastive_weight=contrastive_weight,
+
+            logits_processor=logits_processor,
+            stopping_criteria=stopping_criteria,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+
+            batch_size=batch_size,
+            num_beams=num_beams,
+            length_penalty=length_penalty,
+            early_stopping=early_stopping,
+            num_return_sequences=num_return_sequences,
+
+            **model_kwargs,
+        )
+        return captions, caption_scores, log_p_k, log_r_k_given_x
+
     def _mixture_setup(
         self,
         captions: List[torch.LongTensor],
@@ -628,13 +705,13 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             )
             new_caption, new_caption_score = outputs.sequences, outputs.sequences_scores
             # Ensure monotonicity!
-            # TODO: Check shape!
-            if all(new_caption_score > caption_score):
-                new_captions.append(new_caption)
-                new_caption_scores.append(new_caption_score)
-            else:
+            # TODO: Check shape! Should remove all()
+            if caption_score is not None and caption_score > new_caption_score:
                 new_captions.append(caption)
                 new_caption_scores.append(caption_score)
+            else:
+                new_captions.append(new_caption)
+                new_caption_scores.append(new_caption_score)
 
         return new_captions, new_caption_scores, log_p_k
 
