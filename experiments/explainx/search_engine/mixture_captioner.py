@@ -22,8 +22,6 @@ from .. import numerical
 logger = logging.get_logger(__name__)
 
 
-# TODO: 1) Sandbox for running this.
-#  2) scorer implementation!
 class MixtureBeamSearchScorer(BeamSearchScorer):
     def process(
         self,
@@ -39,6 +37,7 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
 
 
 class MixtureGenerationMixin(base.CustomGenerationMixin):
+    beam_search_scorer_cls = MixtureBeamSearchScorer
 
     @torch.no_grad()
     def generate(
@@ -424,6 +423,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             next_tokens = next_tokens % vocab_size
 
             # stateless
+            # TODO: Take in ambient_scores and priority_scores. How does updating work again???
             beam_outputs = beam_scorer.process(
                 input_ids,
                 next_token_scores,
