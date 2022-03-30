@@ -182,7 +182,7 @@ def first_order(
 ):
     estimates_color = utils.get_sns_colors()[-1]
     centroids = dict(x=[], y=[], marker='^', label='centroids', linewidth=0.)
-    estimates = [dict(x=[], y=[], marker='+', label='estimates', color=estimates_color)]
+    estimates = [dict(x=[], y=[], marker='+', label='estimates', color='k')]
     for eta in etas:
         model, _ = train(
             x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
@@ -226,7 +226,7 @@ def first_order(
 
         x = interps_left[0] + [loss1] + interps_right[0]
         y = interps_left[1] + [loss2] + interps_right[1]
-        estimates.append(dict(x=x, y=y, marker='+', markersize=10, color=estimates_color))
+        estimates.append(dict(x=x, y=y, marker='+', markersize=10))
         centroids['x'].append(loss1)
         centroids['y'].append(loss2)
 
@@ -241,7 +241,7 @@ def first_order(
 
 
 def main(
-    n_train=40, n_test=300, d=20, lr=1e-2, train_steps=40000, bias=True, seed=62,
+    n_train=40, n_test=300, d=20, lr=1e-2, train_steps=30000, bias=True, seed=62,
 ):
     utils.manual_seed(seed)
 
@@ -266,7 +266,7 @@ def main(
     # etas = torch.stack([etas, 1. - etas], dim=1)
 
     # Actually getting the curve.
-    etas = torch.linspace(0.3, 0.7, steps=31)
+    etas = torch.linspace(0.2, 0.8, steps=41)
     etas = torch.stack([etas, 1 - etas], dim=1)
     brute_force_plots = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
