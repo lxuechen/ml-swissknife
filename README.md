@@ -17,5 +17,6 @@ pip install git+https://github.com/lxuechen/swissknife.git
 - [ ] Custom optimizers (HF, K-FAC)
 - [ ] Advanced seed averaging utils
 - [ ] Fast two-sample test utils
+- [ ] Helper code for calibration metrics (reliability diagram, ECE, Brier score)
 - [x] Boilerplate for fine-tuning GPT-3 via OpenAI API.
 - [x] Confidence interval utils
