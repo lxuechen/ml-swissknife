@@ -101,7 +101,6 @@ def consensus(
     black_first=True,
     gender_target: int = 0,  # Either 0 or 1.
 
-    z0_div_z1=1.,
     contrastive_mode: str = "subtraction",  # one of 'subtraction' 'marginalization'
     average_consensus: bool = True,
 
@@ -148,12 +147,11 @@ def consensus(
             contrastive_weight=contrastive_weight,
             contrastive_mode=contrastive_mode,
             average_consensus=average_consensus,
-            z0_div_z1=z0_div_z1,
             **beam_search_kwargs
         )[0]
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight:.2f}, cap: {cap}")
-    dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
+    dump = dict(pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
     captions = model.generate(

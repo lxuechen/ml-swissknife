@@ -146,7 +146,6 @@ def vqa(
 def consensus(
     num_per_background=10,
     image_size=384,
-    z0_div_z1=1.,
     dump_file: str = 'caps-weights.json',
     contrastive_mode: str = "subtraction",  # one of 'subtraction' 'marginalization'
     average_consensus=True,
@@ -214,12 +213,11 @@ def consensus(
             contrastive_weight=contrastive_weight,
             contrastive_mode=contrastive_mode,
             average_consensus=average_consensus,
-            z0_div_z1=z0_div_z1,
             **beam_search_kwargs
         )[0]
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
-    dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
+    dump = dict(pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
     captions = model.generate(
