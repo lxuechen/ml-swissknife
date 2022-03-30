@@ -235,8 +235,6 @@ def main(task="consensus", **kwargs):
     elif task == "vqa":
         vqa(**kwargs)
     elif task == "consensus":
-        # python -m explainx.waterbird_check --task consensus --beam_search_mode 'contrastive'
-        # python -m explainx.waterbird_check --task consensus --beam_search_mode 'mixture'
         consensus(**kwargs)
 
 
