@@ -208,13 +208,13 @@ def first_order(
         del query_etas_left
 
         x = interps_left[0] + [loss1] + interps_right[0]
-        y = interps_left[1] + [loss2] + interps_left[1]
+        y = interps_left[1] + [loss2] + interps_right[1]
         expansions.append(
             dict(
                 x=x,
                 y=y,
                 marker='+',
-                markersize=5,
+                markersize=10,
             )
         )
         centroids['x'].append(loss1)
@@ -230,7 +230,7 @@ def first_order(
     return plots
 
 
-def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=25000):
+def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=40000):
     utils.manual_seed(62)
 
     (x1_train, y1_train, x2_train, y2_train,
@@ -242,7 +242,7 @@ def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=25000):
     # etas = torch.stack([etas, 1 - etas], dim=1)
     first_order_plots = first_order(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-        etas=etas, lr=lr, train_steps=40000,
+        etas=etas, lr=lr, train_steps=train_steps,
     )
 
     etas = torch.linspace(0.4, 0.6, steps=6)
