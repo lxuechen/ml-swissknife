@@ -14,7 +14,13 @@ def gpt2():
 
     tokenizer = transformers.GPT2Tokenizer.from_pretrained('gpt2')
     model = transformers.GPT2LMHeadModel.from_pretrained('gpt2')
-    inputs = tokenizer.encode('Tom is ', return_tensors='pt', add_special_tokens=False)
+    text = 'Tom is '
+    inputs_ids = tokenizer.encode(text, return_tensors='pt', add_special_tokens=False)
+    inputs = tokenizer(text, return_tensors="pt", add_special_tokens=False)
+
+    outs = model(return_dict=True, **inputs)
+    import pdb;
+    pdb.set_trace()
 
     outputs = model.generate(
         inputs=inputs, output_scores=True,
@@ -111,7 +117,7 @@ def t5():
 
 
 def main():
-    t5()
+    # t5()
     gpt2()
 
 
