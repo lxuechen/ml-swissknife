@@ -47,9 +47,10 @@ def compute_covar(x, bias=False):
 def train(
     x1_train, y1_train, x2_train, y2_train, eta, lr, train_steps,
     model=None, optimizer=None,
+    bias=False,
 ):
     if model is None:
-        model = nn.Linear(x1_train.size(1), 1, bias=False)
+        model = nn.Linear(x1_train.size(1), 1, bias=bias)
     if optimizer is None:
         optimizer = optim.SGD(params=model.parameters(), lr=lr)
     for global_step in range(train_steps):
@@ -76,12 +77,15 @@ def evaluate(
 
 
 def train_and_evaluate(
-    x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
+    x1_train, y1_train, x2_train, y2_train,
+    x1_test, y1_test, x2_test, y2_test,
     eta, lr, train_steps,
+    bias=False,
 ):
     model, _ = train(
         x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
         eta=eta, lr=lr, train_steps=train_steps,
+        bias=bias
     )
     return evaluate(model=model, x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test)
 
@@ -90,6 +94,7 @@ def brute_force(
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
     etas, lr, train_steps,
     show_plots=False,
+    bias=False
 ):
     losses1 = []
     losses2 = []
@@ -98,6 +103,7 @@ def brute_force(
             x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
             x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
             eta=eta, lr=lr, train_steps=train_steps,
+            bias=bias
         )
         losses1.append(loss1)
         losses2.append(loss2)
@@ -114,6 +120,7 @@ def _first_order_helper(
     model: nn.Module,  # Trained model at eta.
     x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
     eta, query_etas,
+    bias=False
 ):
     """Approximate left and right function values at eta_l and eta_r with first-order expansion."""
     outs = []
@@ -123,15 +130,21 @@ def _first_order_helper(
         tr_loss1 = compute_mse(x1_train, y1_train, model)
         tr_loss2 = compute_mse(x2_train, y2_train, model)
         tr_loss = torch.stack([tr_loss1, tr_loss2])
-        vjp, = utils.vjp(outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta)
+        vjp = utils.vjp(outputs=tr_loss, inputs=tuple(model.parameters()), grad_outputs=query_eta - eta)
+        vjp = utils.flatten(vjp)
         del tr_loss
 
         # Hessian is weighted uncentered empirical covariances.
-        h1 = compute_covar(x1_train)
-        h2 = compute_covar(x2_train)
+        h1 = compute_covar(x1_train, bias=bias)
+        h2 = compute_covar(x2_train, bias=bias)
         h = eta[0] * h1 + eta[1] * h2
         h_inv = torch.inverse(h.to(torch.float64)).float()
-        h_inv_vjp = (vjp @ h_inv).detach(),
+        h_inv_vjp = (h_inv @ vjp).detach()
+        if not bias:
+            h_inv_vjp = h_inv_vjp[None, ...],
+        else:
+            h_inv_vjp = list(torch.split(h_inv_vjp, split_size_or_sections=(x1_train.size(1), 1)))
+            h_inv_vjp[0] = h_inv_vjp[0][None, ...]
 
         # vjp
         te_loss = []
@@ -164,15 +177,17 @@ def first_order(
     etas: torch.Tensor, lr, train_steps,
     show_plots=False,
     num_pts=5,
-    delta=0.05,
+    delta=0.1,
+    bias=False,
 ):
-    # TODO: Bug is here somewhere.
+    estimates_color = utils.get_sns_colors()[-1]
     centroids = dict(x=[], y=[], marker='^', label='centroids', linewidth=0.)
-    expansions = []
+    estimates = [dict(x=[], y=[], marker='+', label='estimates', color=estimates_color)]
     for eta in etas:
         model, _ = train(
             x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
             eta=eta, lr=lr, train_steps=train_steps,
+            bias=bias,
         )
         loss1, loss2 = evaluate(
             model=model,
@@ -190,6 +205,7 @@ def first_order(
             x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
             x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
             eta=eta, query_etas=query_etas_right,
+            bias=bias,
         )
         del query_etas_right
 
@@ -204,55 +220,58 @@ def first_order(
             x1_train=x1_train, y1_train=y1_train, x2_train=x2_train, y2_train=y2_train,
             x1_test=x1_test, y1_test=y1_test, x2_test=x2_test, y2_test=y2_test,
             eta=eta, query_etas=query_etas_left,
+            bias=bias,
         )
         del query_etas_left
 
         x = interps_left[0] + [loss1] + interps_right[0]
         y = interps_left[1] + [loss2] + interps_right[1]
-        expansions.append(
-            dict(
-                x=x,
-                y=y,
-                marker='+',
-                markersize=10,
-            )
-        )
+        estimates.append(dict(x=x, y=y, marker='+', markersize=10, color=estimates_color))
         centroids['x'].append(loss1)
         centroids['y'].append(loss2)
 
     # Mark the original points.
-    plots = [centroids] + expansions
+    plots = [centroids] + estimates
     if show_plots:
         utils.plot_wrapper(
             plots=plots,
-            options=dict(xlabel='group1 loss', ylabel='group2 loss')
+            options=dict(xlabel='group1 loss', ylabel='group2 loss'),
         )
     return plots
 
 
-def main(n_train=40, n_test=300, d=20, lr=1e-2, train_steps=40000):
-    utils.manual_seed(62)
+def main(
+    n_train=40, n_test=300, d=20, lr=1e-2, train_steps=40000, bias=True, seed=62,
+):
+    utils.manual_seed(seed)
 
     (x1_train, y1_train, x2_train, y2_train,
      x1_test, y1_test, x2_test, y2_test) = make_data(n_train=n_train, n_test=n_test, d=d)
 
-    etas = torch.linspace(0.5, 0.6, steps=1)
+    # Fast testing.
+    # etas = torch.linspace(0.5, 0.6, steps=1)
+    # etas = torch.stack([etas, 1. - etas], dim=1)
+
+    # Actually getting the curve.
+    etas = torch.linspace(0.3, 0.7, steps=5)
     etas = torch.stack([etas, 1 - etas], dim=1)
-    # etas = torch.linspace(0.3, 0.7, steps=5)
-    # etas = torch.stack([etas, 1 - etas], dim=1)
     first_order_plots = first_order(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
         etas=etas, lr=lr, train_steps=train_steps,
+        bias=bias,
     )
 
-    etas = torch.linspace(0.4, 0.6, steps=6)
+    # Fast testing.
+    # etas = torch.linspace(0.4, 0.6, steps=9)
+    # etas = torch.stack([etas, 1. - etas], dim=1)
+
+    # Actually getting the curve.
+    etas = torch.linspace(0.3, 0.7, steps=31)
     etas = torch.stack([etas, 1 - etas], dim=1)
-    # etas = torch.linspace(0.3, 0.7, steps=21)
-    # etas = torch.stack([etas, 1 - etas], dim=1)
     brute_force_plots = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
-        etas=etas,
-        lr=lr, train_steps=train_steps,
+        etas=etas, lr=lr, train_steps=train_steps,
+        bias=bias,
     )
     utils.plot_wrapper(
         plots=first_order_plots + brute_force_plots,
