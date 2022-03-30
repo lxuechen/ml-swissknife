@@ -323,11 +323,13 @@ class ContrastiveGenerationMixin(base.CustomGenerationMixin):
                 continue  # don't waste resources running the code we don't need
 
             # lxuechen: Generate contrastive scores if there's negative examples.
-            has_negatives = "encoder_hidden_states2" in model_kwargs and "encoder_attention_mask2" in model_kwargs
+            has_negatives = (
+                model_kwargs.get("encoder_hidden_states2", None) is not None and
+                model_kwargs.get("encoder_attention_mask2", None) is not None
+            )
             if has_negatives:
                 contrastive_mode = model_kwargs.get("contrastive_mode", "subtraction")
                 contrastive_weight = model_kwargs.get("contrastive_weight", 1.)
-                z0_div_z1 = model_kwargs.get("z0_div_z1", 1.)
                 # (batch_size * num_beams, vocab_size).
                 neg_scores = self._generate_consensus(
                     model_kwargs=model_kwargs,
@@ -348,7 +350,7 @@ class ContrastiveGenerationMixin(base.CustomGenerationMixin):
                     next_token_scores = next_token_scores - contrastive_weight * (
                         (
                             torch.logsumexp(
-                                torch.stack([all_pos_scores, all_neg_scores + math.log(z0_div_z1)], dim=0),
+                                torch.stack([all_pos_scores, all_neg_scores], dim=0),
                                 dim=0
                             ) - math.log(2)
                         )
