@@ -657,7 +657,10 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     outputs = make_seq_requires_grad(outputs)
 
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
-    _vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
+    first_kwargs = copy.deepcopy(kwargs)
+    first_kwargs['create_graph'] = True
+    _vjp = torch.autograd.grad(
+        outputs, inputs, grad_outputs=dummy_outputs, **first_kwargs)  # Must create graph to backprop a second time.
     _jvp = torch.autograd.grad(_vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
     return convert_none_to_zeros(_jvp, dummy_outputs)
 
