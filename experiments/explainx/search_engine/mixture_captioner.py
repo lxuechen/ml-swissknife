@@ -16,13 +16,14 @@ from transformers.generation_utils import (
     validate_stopping_criteria, torch_int_div
 )
 from transformers.utils import logging
-from .base import CustomGenerationMixin
+from . import base
 from .. import numerical
 
 logger = logging.get_logger(__name__)
 
 
-# TODO: Fix initialization in MixtureMixin::generate.
+# TODO: 1) Sandbox for running this.
+#  2) scorer implementation!
 class MixtureBeamSearchScorer(BeamSearchScorer):
     def process(
         self,
@@ -37,7 +38,7 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
         raise NotImplementedError
 
 
-class MixtureGenerationMixin(CustomGenerationMixin):
+class MixtureGenerationMixin(base.CustomGenerationMixin):
 
     @torch.no_grad()
     def generate(

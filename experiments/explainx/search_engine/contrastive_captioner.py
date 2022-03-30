@@ -17,7 +17,7 @@ from transformers.generation_utils import (
 )
 from transformers.pytorch_utils import torch_int_div
 from transformers.utils import logging
-from .base import CustomGenerationMixin
+from . import base
 
 logger = logging.get_logger(__name__)
 
@@ -140,7 +140,7 @@ class ContrastiveBeamSearchScorer(BeamSearchScorer):
         )
 
 
-class ContrastiveGenerationMixin(CustomGenerationMixin):
+class ContrastiveGenerationMixin(base.CustomGenerationMixin):
     beam_search_scorer_cls = ContrastiveBeamSearchScorer
 
     def _generate_consensus(

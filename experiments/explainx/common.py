@@ -8,9 +8,13 @@ root = os.path.join(os.path.expanduser('~'), 'data')
 celeba_data_path = utils.join(root, "img_align_celeba")
 metadata_path = utils.join(root, "list_attr_celeba.txt")
 
+BEAM_SEARCH_MODES = ("contrastive", "mixture", "regular")
+
 
 # Make model helpers.
 def make_image2text_model(image_size, beam_search_mode="contrastive", vit="base"):
+    if beam_search_mode not in BEAM_SEARCH_MODES:
+        raise ValueError(f"Unknown beam_search_mode: {beam_search_mode}")
     model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
     med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
     return blip.blip_decoder(
