@@ -107,7 +107,7 @@ def brute_force(
         )
         losses1.append(loss1)
         losses2.append(loss2)
-    plots = [dict(x=losses1, y=losses2, marker='x', label='brute force')]
+    plots = [dict(x=losses1, y=losses2, marker='x', label='brute force', linewidth=3, color='k')]
     if show_plots:
         utils.plot_wrapper(
             plots=plots,
@@ -253,7 +253,7 @@ def main(
     # etas = torch.stack([etas, 1. - etas], dim=1)
 
     # Actually getting the curve.
-    etas = torch.linspace(0.3, 0.7, steps=5)
+    etas = torch.linspace(0.2, 0.7, steps=5)
     etas = torch.stack([etas, 1 - etas], dim=1)
     first_order_plots = first_order(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
@@ -266,7 +266,7 @@ def main(
     # etas = torch.stack([etas, 1. - etas], dim=1)
 
     # Actually getting the curve.
-    etas = torch.linspace(0.2, 0.8, steps=41)
+    etas = torch.linspace(0.2, 0.7, steps=31)
     etas = torch.stack([etas, 1 - etas], dim=1)
     brute_force_plots = brute_force(
         x1_train, y1_train, x2_train, y2_train, x1_test, y1_test, x2_test, y2_test,
