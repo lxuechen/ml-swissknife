@@ -432,6 +432,10 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
             )
+            # TODO: Fix .process.
+            print(beam_outputs)
+            import pdb;
+            pdb.set_trace()
 
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
@@ -704,6 +708,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             )
             this_model_kwargs = copy.deepcopy(model_kwargs)
             # This step performs duplication to match number of beams!
+            #   1) input_ids is duplicated;
+            #   2) model_kwargs["attention_mask"] is duplicated
             input_ids, this_model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
                 expand_size=num_beams,
