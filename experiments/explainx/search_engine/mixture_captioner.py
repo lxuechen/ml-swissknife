@@ -371,6 +371,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             text_captions = [self._tokenizer.decode(caption[0], skip_special_tokens=True) for caption in captions]
             print('Captions at initialization:')
             print(text_captions)
+            print('Caption scores:')
+            print(caption_scores)
             print("p(k):")
             print(log_p_k.softmax(dim=0))
 
@@ -407,6 +409,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 text_captions = [self._tokenizer.decode(caption[0], skip_special_tokens=True) for caption in captions]
                 print(f'Captions after {em_round_idx} round:')
                 print(text_captions)
+                print('Caption scores:')
+                print(caption_scores)
                 print("p(k):")
                 print(log_p_k.softmax(dim=0))
 
