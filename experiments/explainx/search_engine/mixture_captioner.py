@@ -319,9 +319,6 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         )
 
         # 9. start mixture beam search
-        self._eos_token_id = eos_token_id
-        self._pad_token_id = pad_token_id
-
         if num_return_sequences > num_beams:
             raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -331,6 +328,15 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         # 9.1. Compute the scores for initial captions; initialize the distributions p(k) and r(k | x).
         if captions is None and num_clusters is None:
             raise ValueError(f"captions and num_clusters cannot both be None.")
+
+        # Bad style, but convenient.
+        if 'verbose' in model_kwargs:
+            verbose = model_kwargs.pop('verbose')
+        else:
+            verbose = False
+        self._tokenizer = model_kwargs.pop("tokenizer")
+        self._eos_token_id = eos_token_id
+        self._pad_token_id = pad_token_id
 
         if captions is None:
             captions, caption_scores, log_p_k, log_r_k_given_x = self._mixture_setup_caption_agnostic(
@@ -356,6 +362,14 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 ambient_images=ambient_images, priority_images=priority_images,
                 **model_kwargs,
             )
+
+        # Display this at each round.
+        if verbose:
+            text_captions = [self._tokenizer.decode(caption[0], skip_special_tokens=True) for caption in captions]
+            print('Captions at initialization:')
+            print(text_captions)
+            print("p(k):")
+            print(log_p_k.softmax(dim=0))
 
         # 9.2. Alternate between E and M.
         for em_round_idx in tqdm.tqdm(range(num_em_rounds), desc="em"):
@@ -386,6 +400,13 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
 
                 **model_kwargs,
             )
+            if verbose:
+                text_captions = [self._tokenizer.decode(caption[0], skip_special_tokens=True) for caption in captions]
+                print(f'Captions after {em_round_idx} round:')
+                print(text_captions)
+                print("p(k):")
+                print(log_p_k.softmax(dim=0))
+
         return BeamSearchDecoderOnlyOutput(
             sequences=captions,
             sequences_scores=caption_scores,
