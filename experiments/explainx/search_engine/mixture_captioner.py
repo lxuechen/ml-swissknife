@@ -790,8 +790,9 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             C1 = -log \sum_k p(x | c_k) p(k)
         C2 is constant due to constant assumptions for p(x).
         """
+        K = len(captions)
         log_r_k_given_x = torch.zeros_like(log_r_k_given_x)
-        log_q_c = torch.zeros(log_r_k_given_x.size(0), device=log_r_k_given_x.device)
+        log_q_c = torch.zeros(K, device=log_r_k_given_x.device)
 
         for k, caption in enumerate(captions):
             log_q_c[k] = self._compute_log_q_c(
@@ -803,7 +804,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                     caption=caption, image=priority_image, **model_kwargs
                 )
                 log_r_k_given_x[k, i] = log_q_c_given_x + log_p_k[k] - log_q_c[k]
-        log_r_k_given_x = log_r_k_given_x.log_softmax(dim=0)
+        log_r_k_given_x = log_r_k_given_x.log_softmax(dim=0)  # Normalize.
         return log_r_k_given_x
 
     def _m_step(
@@ -850,10 +851,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             #   1) input_ids is duplicated;
             #   2) model_kwargs["attention_mask"] is duplicated
             this_input_ids, this_model_kwargs = self._expand_inputs_for_generation(
-                input_ids,
-                expand_size=num_beams,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **this_model_kwargs,
+                input_ids, expand_size=num_beams, **this_model_kwargs,
             )
             outputs = self.beam_search(
                 this_input_ids,
@@ -872,8 +870,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             )
             new_caption, new_caption_score = outputs.sequences, outputs.sequences_scores
             # Ensure monotonicity!
-            # TODO: Check shape! Should remove all()
-            if caption_score is not None and caption_score > new_caption_score:
+            if caption_score is not None and (caption_score > new_caption_score).item():
                 new_captions.append(caption)
                 new_caption_scores.append(caption_score)
             else:
