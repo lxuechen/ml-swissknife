@@ -83,7 +83,9 @@ class BLIP_Decoder(nn.Module):
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
                  prompt='a picture of ',
+                 # --- lxuechen:
                  beam_search_mode="regular",
+                 # ---
                  ):
         """
         Args:
@@ -101,7 +103,7 @@ class BLIP_Decoder(nn.Module):
         if beam_search_mode == "regular":
             self.text_decoder = BertLMHeadModel(config=med_config)
 
-        # --- lxuechen: Support new decoding.
+        # --- lxuechen: new decoding
         elif beam_search_mode == "contrastive":
             from .med import BertLMHeadModelWithContrastiveGenerationMixin
             self.text_decoder = BertLMHeadModelWithContrastiveGenerationMixin(config=med_config)
