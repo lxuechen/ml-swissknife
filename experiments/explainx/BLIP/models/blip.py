@@ -244,6 +244,7 @@ class BLIP_Decoder(nn.Module):
         num_em_rounds=5,
         num_clusters=2,
         captions=None,
+        verbose=False,
     ) -> List[str]:
         if not isinstance(images, (tuple, list)):
             images = [images]
@@ -324,6 +325,8 @@ class BLIP_Decoder(nn.Module):
                     contrastive_weight=contrastive_weight,
                     captions=captions,
                     num_clusters=num_clusters,
+                    tokenizer=self.tokenizer,
+                    verbose=verbose,
                 )
                 outputs = self.text_decoder.generate(
                     input_ids=input_ids,
@@ -335,9 +338,12 @@ class BLIP_Decoder(nn.Module):
                     repetition_penalty=repetition_penalty,
                     **model_kwargs
                 )
-            import pdb;
-            pdb.set_trace()
-            return outputs
+            captions = []
+            for sequence in outputs.sequences:
+                caption = self.tokenizer.decode(sequence[0].tolist(), skip_special_tokens=True)
+                caption = caption[len(self.prompt):]
+                captions.append(caption)
+            return captions
 
 
 def blip_decoder(pretrained='', **kwargs):

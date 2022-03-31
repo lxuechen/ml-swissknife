@@ -331,6 +331,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             verbose = model_kwargs.pop('verbose')
         else:
             verbose = False
+        if verbose:
+            torch.set_printoptions(precision=10)
         self._tokenizer = model_kwargs.pop("tokenizer")
         self._eos_token_id = eos_token_id
         self._pad_token_id = pad_token_id
