@@ -13,7 +13,10 @@
     python -m explainx.waterbird_check \
       --task consensus \
       --beam_search_mode 'mixture' \
-      --contrastive_mode 'marginalization'
+      --contrastive_mode 'marginalization' \
+      --water_first True \
+      --verbose True \
+      --dump_file "mixture-captioner.json"
     ```
 
 ### Checks for CelebA

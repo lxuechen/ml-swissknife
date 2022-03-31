@@ -155,7 +155,7 @@ def consensus(
     max_length=50,
     min_length=3,
     num_em_rounds=5,
-    num_clusters=2,
+    num_clusters=3,
     water_first=True,
     beam_search_mode="contrastive",
     verbose=True,
@@ -165,6 +165,9 @@ def consensus(
     Give some images of waterbird on water vs land,
     see if it's possible for the model to generate the difference.
     """
+    print(dump_dir, dump_file)
+    print(num_water_images, num_land_images)
+
     model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode).to(device).eval()
 
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
@@ -222,10 +225,9 @@ def consensus(
             average_consensus=average_consensus,
             verbose=verbose,
             **beam_search_kwargs
-        )[0]
+        )
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
-        # TODO: Fix this report procedure.
     dump = dict(pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
