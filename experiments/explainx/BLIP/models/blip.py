@@ -83,6 +83,9 @@ class BLIP_Decoder(nn.Module):
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
                  prompt='a picture of ',
+                 # --- lxuechen:
+                 beam_search_mode="regular",
+                 # ---
                  ):
         """
         Args:
@@ -96,7 +99,21 @@ class BLIP_Decoder(nn.Module):
         self.tokenizer = init_tokenizer()
         med_config = BertConfig.from_json_file(med_config)
         med_config.encoder_width = vision_width
-        self.text_decoder = BertLMHeadModel(config=med_config)
+
+        if beam_search_mode == "regular":
+            self.text_decoder = BertLMHeadModel(config=med_config)
+
+        # --- lxuechen: new decoding
+        elif beam_search_mode == "contrastive":
+            from .med import BertLMHeadModelWithContrastiveGenerationMixin
+            self.text_decoder = BertLMHeadModelWithContrastiveGenerationMixin(config=med_config)
+        elif beam_search_mode == "mixture":
+            from .med import BertLMHeadModelWithMixtureGenerationMixin
+            self.text_decoder = BertLMHeadModelWithMixtureGenerationMixin(config=med_config)
+        else:
+            raise ValueError(f"Unknown beam_search_mode: {beam_search_mode}")
+        self._beam_search_mode = beam_search_mode
+        # ---
 
         self.prompt = prompt
         self.prompt_length = len(self.tokenizer(self.prompt).input_ids) - 1
@@ -194,6 +211,7 @@ class BLIP_Decoder(nn.Module):
             if image.shape != images[0].shape:
                 raise ValueError("Image tensors should all have the same shape.")
 
+        # TODO: Speed this up by batching.
         encoder_hidden_states = []
         encoder_attention_mask = []
         for image in images:
@@ -219,33 +237,30 @@ class BLIP_Decoder(nn.Module):
         repetition_penalty=1.0,
         images2: Optional[Union[torch.Tensor, Sequence]] = None,  # Contrastive set.
         contrastive_weight: float = 1.,
-        z0_div_z1: float = 1.,
+
+        # Contrastive beam search.
         contrastive_mode: str = "subtraction",
         average_consensus: bool = True,
+
+        # Mixture beam search.
+        num_em_rounds=5,
+        num_clusters=2,
+        captions=None,
+        verbose=False,
     ) -> List[str]:
-        model_kwargs = dict(
-            contrastive_weight=contrastive_weight,
-            z0_div_z1=z0_div_z1,
-            contrastive_mode=contrastive_mode,
-            average_consensus=average_consensus
-        )  # str -> list of tensors.
         if not isinstance(images, (tuple, list)):
             images = [images]
         encoder_hidden_states, encoder_attention_mask = self._create_conditioning_tensors(
             images=images, sample=sample, num_beams=num_beams,
         )
-        model_kwargs["encoder_hidden_states"] = encoder_hidden_states
-        model_kwargs["encoder_attention_mask"] = encoder_attention_mask
-        del encoder_hidden_states, encoder_attention_mask
-
         if images2 is not None:  # Create states for contrastive objective.
             if not isinstance(images2, (tuple, list)):
                 images2 = [images2]
             encoder_hidden_states2, encoder_attention_mask2 = self._create_conditioning_tensors(
                 images=images2, sample=sample, num_beams=num_beams
             )
-            model_kwargs["encoder_hidden_states2"] = encoder_hidden_states2
-            model_kwargs["encoder_attention_mask2"] = encoder_attention_mask2
+        else:
+            encoder_hidden_states2 = encoder_attention_mask2 = None
 
         prompt = [self.prompt] * images[0].size(0)  # l = batch_sz * beam_sz
         input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(images[0].device)
@@ -253,33 +268,84 @@ class BLIP_Decoder(nn.Module):
         input_ids = input_ids[:, :-1]
 
         if sample:
-            # nucleus sampling
-            outputs = self.text_decoder.generate(input_ids=input_ids,
-                                                 max_length=max_length,
-                                                 min_length=min_length,
-                                                 do_sample=True,
-                                                 top_p=top_p,
-                                                 num_return_sequences=1,
-                                                 eos_token_id=self.tokenizer.sep_token_id,
-                                                 pad_token_id=self.tokenizer.pad_token_id,
-                                                 repetition_penalty=1.1,
-                                                 **model_kwargs)
+            # TODO: Both modes need this!
+            raise NotImplemented
+            # # nucleus sampling
+            # outputs = self.text_decoder.generate(input_ids=input_ids,
+            #                                      max_length=max_length,
+            #                                      min_length=min_length,
+            #                                      do_sample=True,
+            #                                      top_p=top_p,
+            #                                      num_return_sequences=1,
+            #                                      eos_token_id=self.tokenizer.sep_token_id,
+            #                                      pad_token_id=self.tokenizer.pad_token_id,
+            #                                      repetition_penalty=1.1,
+            #                                      **model_kwargs)
         else:
             # beam search
-            outputs = self.text_decoder.generate(input_ids=input_ids,
-                                                 max_length=max_length,
-                                                 min_length=min_length,
-                                                 num_beams=num_beams,
-                                                 eos_token_id=self.tokenizer.sep_token_id,
-                                                 pad_token_id=self.tokenizer.pad_token_id,
-                                                 repetition_penalty=repetition_penalty,
-                                                 **model_kwargs)
+            if self._beam_search_mode in ('contrastive',):
+                model_kwargs = dict(
+                    contrastive_weight=contrastive_weight,
+                    contrastive_mode=contrastive_mode,
+                    average_consensus=average_consensus,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    encoder_hidden_states2=encoder_hidden_states2,
+                    encoder_attention_mask2=encoder_attention_mask2,
+                )
+                outputs = self.text_decoder.generate(
+                    input_ids=input_ids,
+                    max_length=max_length,
+                    min_length=min_length,
+                    num_beams=num_beams,
+                    eos_token_id=self.tokenizer.sep_token_id,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    repetition_penalty=repetition_penalty,
+                    **model_kwargs
+                )
+                captions = []
+                for output in outputs:
+                    caption = self.tokenizer.decode(output, skip_special_tokens=True)
+                    captions.append(caption[len(self.prompt):])
+                return captions
+            else:
+                if encoder_hidden_states2 is None or encoder_attention_mask2 is None:
+                    raise ValueError
 
-        captions = []
-        for output in outputs:
-            caption = self.tokenizer.decode(output, skip_special_tokens=True)
-            captions.append(caption[len(self.prompt):])
-        return captions
+                priority_images = [
+                    dict(encoder_hidden_states=t1, encoder_attention_mask=t2)
+                    for t1, t2 in zip(encoder_hidden_states, encoder_attention_mask)
+                ]
+                ambient_images = [
+                    dict(encoder_hidden_states=t1, encoder_attention_mask=t2)
+                    for t1, t2 in zip(encoder_hidden_states2, encoder_attention_mask2)
+                ]
+                model_kwargs = dict(
+                    priority_images=priority_images,
+                    ambient_images=ambient_images,
+                    num_em_rounds=num_em_rounds,
+                    contrastive_weight=contrastive_weight,
+                    captions=captions,
+                    num_clusters=num_clusters,
+                    tokenizer=self.tokenizer,
+                    verbose=verbose,
+                )
+                outputs = self.text_decoder.generate(
+                    input_ids=input_ids,
+                    max_length=max_length,
+                    min_length=min_length,
+                    num_beams=num_beams,
+                    eos_token_id=self.tokenizer.sep_token_id,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    repetition_penalty=repetition_penalty,
+                    **model_kwargs
+                )
+            captions = []
+            for sequence in outputs.sequences:
+                caption = self.tokenizer.decode(sequence[0].tolist(), skip_special_tokens=True)
+                caption = caption[len(self.prompt):]
+                captions.append(caption)
+            return captions
 
 
 def blip_decoder(pretrained='', **kwargs):

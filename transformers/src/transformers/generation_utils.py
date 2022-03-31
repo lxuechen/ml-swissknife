@@ -13,16 +13,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
-from dataclasses import dataclass
+
 import inspect
-import math
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import warnings
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
-from torch import nn
 import torch.distributed as dist
+from torch import nn
 
 from .file_utils import ModelOutput
 from .generation_beam_constraints import Constraint
@@ -54,6 +53,7 @@ from .generation_stopping_criteria import (
 from .pytorch_utils import torch_int_div
 from .utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -67,17 +67,14 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each
             tensor of shape `(batch_size, config.vocab_size)`).
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
@@ -100,29 +97,23 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size, config.vocab_size)`).
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when
-        `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
@@ -146,18 +137,15 @@ class SampleDecoderOnlyOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each
             tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`).
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(num_return_sequences*batch_size, num_heads, generated_length,
             sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(num_return_sequences*batch_size, generated_length, hidden_size)`.
     """
@@ -180,30 +168,24 @@ class SampleEncoderDecoderOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size*num_return_sequences, config.vocab_size)`).
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape
             `(batch_size*num_return_sequences, num_heads, sequence_length, sequence_length)`.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size*num_return_sequences, sequence_length, hidden_size)`.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_return_sequences, num_heads, generated_length,
             sequence_length)`.
-        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when
-        `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_return_sequences, generated_length, hidden_size)`.
     """
@@ -226,25 +208,20 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when
-        `output_scores=True` is passed or when `config.output_scores=True`):
+        sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or
-        when `config.output_scores=True`):
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
             tuple of `(max_length-input_ids.shape[-1],)`-shaped tuples of scalar `torch.LongTensor` tensors.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     """
@@ -268,40 +245,31 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when
-        `output_scores=True` is passed or when `config.output_scores=True`):
+        sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
             config.vocab_size)`).
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or
-        when `config.output_scores=True`):
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
             tuple of `(max_length-1,)`-shaped tuples of scalar `torch.LongTensor` tensors.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size*num_beams*num_return_sequences, sequence_length, hidden_size)`.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, num_heads, generated_length,
             sequence_length)`.
-        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when
-        `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     """
@@ -326,25 +294,20 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*,
-        returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             `(max_length-input_ids.shape[-1],)`-shaped tuple of `torch.FloatTensor` with each tensor of shape
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or
-        when `config.output_scores=True`):
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
             tuple of `(max_length-input_ids.shape[-1],)`-shaped tuples of scalar `torch.LongTensor` tensors.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
     """
@@ -368,37 +331,29 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_beams, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*,
-        returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        sequences_scores (`torch.FloatTensor` of shape `(batch_size * num_return_sequence)`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Final beam scores of the generated `sequences`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             `(max_length-1,)`-shaped tuple of `torch.FloatTensor` with each tensor of shape `(batch_size*num_beams,
             config.vocab_size)`).
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or
-        when `config.output_scores=True`):
+        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `(batch_size*num_return_sequences)`-shaped
             tuple of `(max_length-1,)`-shaped tuples of scalar `torch.LongTensor` tensors.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed
-        or `config.output_attentions=True`):
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size*num_beams, sequence_length, hidden_size)`.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
-        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is
-        passed or `config.output_attentions=True`):
+        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when
-        `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
     """
@@ -601,8 +556,8 @@ class GenerationMixin:
         input_ids: torch.LongTensor,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
-        attention_mask: torch.LongTensor = None,
-        encoder_outputs: ModelOutput = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[ModelOutput] = None,
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         expanded_return_idx = (
@@ -657,17 +612,16 @@ class GenerationMixin:
 
     def _reorder_cache(self, past, beam_idx):
         raise NotImplementedError(
-            f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to "
-            f"enable beam search for {self.__class__}"
+            f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to enable beam search for {self.__class__}"
         )
 
     def _get_logits_warper(
         self,
-        top_k: int = None,
-        top_p: float = None,
-        typical_p: float = None,
-        temperature: float = None,
-        num_beams: int = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        typical_p: Optional[float] = None,
+        temperature: Optional[float] = None,
+        num_beams: Optional[int] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -801,13 +755,10 @@ class GenerationMixin:
                 if type(custom) is type(default):
                     object_type = "stopping criteria" if isinstance(custom, StoppingCriteria) else "logits processor"
                     raise ValueError(
-                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to "
-                        f"`generate`, "
-                        f"but it has already been created with the values {default}. {default} has been created by "
-                        f"passing the "
+                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to `generate`, "
+                        f"but it has already been created with the values {default}. {default} has been created by passing the "
                         "corresponding arguments to generate or by the model's config default values. "
-                        f"If you just want to change the default values of {object_type} consider passing them as "
-                        f"arguments "
+                        f"If you just want to change the default values of {object_type} consider passing them as arguments "
                         f"to `generate` instead of using a custom {object_type}."
                     )
         default_list.extend(custom_list)
@@ -1182,10 +1133,8 @@ class GenerationMixin:
         if input_ids.shape[-1] >= max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             logger.warning(
-                f"Input length of {input_ids_string} is {input_ids.shape[-1]}, but ``max_length`` is set to "
-                f"{max_length}. "
-                "This can lead to unexpected behavior. You should consider increasing ``config.max_length`` or "
-                "``max_length``."
+                f"Input length of {input_ids_string} is {input_ids.shape[-1]}, but ``max_length`` is set to {max_length}. "
+                "This can lead to unexpected behavior. You should consider increasing ``config.max_length`` or ``max_length``."
             )
 
         # 6. determine generation mode
@@ -1529,8 +1478,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList("
-                "MaxLengthCriteria(max_length=max_length))` instead.",
+                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -1769,8 +1717,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList("
-                "MaxLengthCriteria(max_length=max_length))` instead.",
+                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -1905,73 +1852,6 @@ class GenerationMixin:
         else:
             return input_ids
 
-    # lxuechen: Helper function makes it easier with contrastive setup.
-    def _generate_consensus(
-        self,
-        model_kwargs: dict,
-        input_ids,
-        output_attentions,
-        output_hidden_states,
-        logits_processor,
-        consensus_fn,
-        cur_len,
-        encoder_hidden_states,
-        encoder_attention_mask,
-        average_consensus: bool,
-    ):
-        if not isinstance(encoder_hidden_states, (list, tuple)):
-            encoder_hidden_states = [encoder_hidden_states]
-        if not isinstance(encoder_attention_mask, (list, tuple)):
-            encoder_attention_mask = [encoder_attention_mask]
-
-        consensus_scores = torch.tensor(0., device=input_ids.device)
-        for this_encoder_hidden_states, this_encoder_attention_mask in zip(
-            encoder_hidden_states, encoder_attention_mask
-        ):
-            this_model_kwargs = copy.deepcopy(model_kwargs)
-            items_to_replace = (
-                ("encoder_hidden_states", this_encoder_hidden_states),
-                ("encoder_attention_mask", this_encoder_attention_mask)
-            )
-            for key, value in items_to_replace:
-                this_model_kwargs[key] = value
-
-            # lxuechen: BLIP associated Model class overrides `prepare_inputs_for_generation` to also
-            #   return keys like `encoder_hidden_states`.
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **this_model_kwargs)
-
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
-
-            next_token_logits = outputs.logits[:, -1, :]
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-            next_token_scores = nn.functional.log_softmax(
-                next_token_logits, dim=-1
-            )  # (batch_size * num_beams, vocab_size)
-
-            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-            consensus_scores = consensus_fn(consensus_scores, next_token_scores_processed)
-
-        if average_consensus:
-            consensus_scores /= len(encoder_hidden_states)
-
-        # Per-step normalization.
-        consensus_scores = consensus_scores.log_softmax(dim=-1)
-
-        return consensus_scores
-
-    # lxuechen: Rough logic of new beam search:
-    #   1. use all_pos_scores and all_neg_scores to keep track of accumulated scores (take the position of beam_scores)
-    #   2. next_token_scores is an aggregate of all_pos_scores and all_neg_scores
-    #   3. sort and rank using next_token_scores
-    #   4. filter and change ordering of all_pos_scores and all_neg_scores in parallel
-    #   5. finalize with beam_scores, which is produced by re-ranking with next_token_scores
     def beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -1986,7 +1866,6 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
-        consensus_fn: Optional[Callable] = None,  # lxuechen: Callable that aggregates two sets of log-probs.
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -2024,7 +1903,6 @@ class GenerationMixin:
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            consensus_fn: Function that takes two tensors of log-probs with the same shape and aggregates them.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2092,8 +1970,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList("
-                "MaxLengthCriteria(max_length=max_length))` instead.",
+                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -2120,33 +1997,25 @@ class GenerationMixin:
                 f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
             )
 
-        # lxuechen: beam search starts here.
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
+        beam_indices = (
+            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
+        )
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
-            raise NotImplementedError
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
 
-        def init_scores():
-            """Initialize scores for the beams."""
-            _scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-            _scores[:, 1:] = -1e9
-            _scores = _scores.view((batch_size * num_beams,))
-            return _scores
-
-        def agg_scores(cs, bs):
-            """Aggregate the consensus scores computed at each step with the beam score."""
-            # cs: (batch_size * beam_size, vocab_size)
-            # bs: (batch_size * beam_size,)
-            return cs + bs[:, None].expand_as(cs)  # Expand latter to vocab_size.
-
-        all_pos_scores = init_scores()
-        all_neg_scores = init_scores()  # lxuechen: This might not always be useful.
-
-        # lxuechen: Set up consensus function.
-        if consensus_fn is None:
-            consensus_fn = lambda x, y: x + y
+        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
+        beam_scores[:, 1:] = -1e9
+        beam_scores = beam_scores.view((batch_size * num_beams,))
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -2161,111 +2030,75 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            # lxuechen: Consensus scoring starts here.
-            # (batch_size * num_beams, vocab_size).
-            pos_scores = self._generate_consensus(
-                model_kwargs=model_kwargs,
-                input_ids=input_ids,
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                logits_processor=logits_processor,
-                consensus_fn=consensus_fn,
-                cur_len=cur_len,
-                encoder_hidden_states=model_kwargs.get("encoder_hidden_states", [None]),
-                encoder_attention_mask=model_kwargs.get("encoder_attention_mask", [None]),
-                average_consensus=model_kwargs.get("average_consensus", True),
             )
-            all_pos_scores = agg_scores(pos_scores, all_pos_scores)
-            next_token_scores = all_pos_scores.detach().clone()
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
-            # lxuechen: Generate contrastive scores if there's negative examples.
-            has_negatives = "encoder_hidden_states2" in model_kwargs and "encoder_attention_mask2" in model_kwargs
-            if has_negatives:
-                contrastive_mode = model_kwargs.get("contrastive_mode", "subtraction")
-                contrastive_weight = model_kwargs.get("contrastive_weight", 1.)
-                z0_div_z1 = model_kwargs.get("z0_div_z1", 1.)
-                # (batch_size * num_beams, vocab_size).
-                neg_scores = self._generate_consensus(
-                    model_kwargs=model_kwargs,
-                    input_ids=input_ids,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    logits_processor=logits_processor,
-                    consensus_fn=consensus_fn,
-                    cur_len=cur_len,
-                    encoder_hidden_states=model_kwargs.get("encoder_hidden_states2"),
-                    encoder_attention_mask=model_kwargs.get("encoder_attention_mask2"),
-                    average_consensus=model_kwargs.get("average_consensus", True),
-                )
-                all_neg_scores = agg_scores(neg_scores, all_neg_scores)
-                if contrastive_mode == "subtraction":
-                    next_token_scores = next_token_scores - contrastive_weight * all_neg_scores
-                elif contrastive_mode == "marginalization":
-                    next_token_scores = next_token_scores - contrastive_weight * (
-                        (
-                            torch.logsumexp(
-                                torch.stack([all_pos_scores, all_neg_scores + math.log(z0_div_z1)], dim=0),
-                                dim=0
-                            ) - math.log(2)
-                        )
-                    )
-                else:
-                    raise ValueError(f"Unknown contrastive_mode: {contrastive_mode}")
-                # lxuechen: Avoid creating a bunch of spurious zeros because of init_scores.
-                next_token_scores.masked_fill_(all_pos_scores.le(-1e8), -1e9)
-            # lxuechen: Consensus scoring ends here. `next_token_scores` is used below for ranking.
+            next_token_logits = outputs.logits[:, -1, :]
+            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
+            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
+            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
+            next_token_scores = nn.functional.log_softmax(
+                next_token_logits, dim=-1
+            )  # (batch_size * num_beams, vocab_size)
+
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
 
             # Store scores, attentions and hidden_states when required
-            # lxuechen: By default return_dict_in_generate=False in BLIP.
-            #   Also, we can't return this in general, since unclear what states are for outputs!
             if return_dict_in_generate:
-                raise NotImplementedError
+                if output_scores:
+                    scores += (next_token_scores_processed,)
+                if output_attentions:
+                    decoder_attentions += (
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
 
+                if output_hidden_states:
+                    decoder_hidden_states += (
+                        (outputs.decoder_hidden_states,)
+                        if self.config.is_encoder_decoder
+                        else (outputs.hidden_states,)
+                    )
+
+            # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
+
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
+
             next_indices = torch_int_div(next_tokens, vocab_size)
             next_tokens = next_tokens % vocab_size
 
-            # lxuechen: Prepare inputs for `.process`.
-            kwargs_for_process = dict(
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                jointly_evolving_scores=dict(
-                    all_pos_scores=all_pos_scores,
-                )
-            )
-            if has_negatives:
-                kwargs_for_process["jointly_evolving_scores"]["all_neg_scores"] = all_neg_scores
-
-            # lxuechen: Add beams which has eos to hyps and reduce 2K potential beams to K potential beams.
+            # stateless
             beam_outputs = beam_scorer.process(
                 input_ids,
                 next_token_scores,
                 next_tokens,
                 next_indices,
-                **kwargs_for_process,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
             )
 
-            # lxuechen: Collect outputs for `.process`.
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
-            all_pos_scores = beam_outputs["jointly_evolving_scores"]["all_pos_scores"]
-            if has_negatives:
-                all_neg_scores = beam_outputs["jointly_evolving_scores"]["all_neg_scores"]
 
-            # lxuechen: Reorder along batch dimension to match sorted order; cat the new token.
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
-            # lxuechen: Line below is crucial to avoid last sequence bias!!!
-            outputs = dict()
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
@@ -2273,7 +2106,7 @@ class GenerationMixin:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
             if return_dict_in_generate and output_scores:
-                raise ValueError
+                beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -2286,17 +2119,46 @@ class GenerationMixin:
 
         sequence_outputs = beam_scorer.finalize(
             input_ids,
-            beam_scores,  # lxuechen: Must be joint score!
-            None,  # lxuechen: This argument not really used.
-            None,  # lxuechen: This argument not really used.
+            beam_scores,
+            next_tokens,
+            next_indices,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
         )
-        # lxuechen: beam search ends here.
 
         if return_dict_in_generate:
-            raise ValueError
+            if not output_scores:
+                sequence_outputs["sequence_scores"] = None
+            else:
+                num_return_sequences = beam_scorer.num_beam_hyps_to_keep
+                # return only as many indices as sequences
+                beam_indices = tuple(
+                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
+                )
+                beam_indices = sum(beam_indices, ())
+
+            if self.config.is_encoder_decoder:
+                return BeamSearchEncoderDecoderOutput(
+                    sequences=sequence_outputs["sequences"],
+                    sequences_scores=sequence_outputs["sequence_scores"],
+                    scores=scores,
+                    beam_indices=beam_indices,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return BeamSearchDecoderOnlyOutput(
+                    sequences=sequence_outputs["sequences"],
+                    sequences_scores=sequence_outputs["sequence_scores"],
+                    scores=scores,
+                    beam_indices=beam_indices,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
         else:
             return sequence_outputs["sequences"]
 
@@ -2431,8 +2293,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList("
-                "MaxLengthCriteria(max_length=max_length))` instead.",
+                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -2593,7 +2454,7 @@ class GenerationMixin:
                 num_return_sequences = beam_scorer.num_beam_hyps_to_keep
                 # return only as many indices as sequences
                 beam_indices = tuple(
-                    (beam_indices[i * num_beams: i * num_beams + num_return_sequences] for i in range(batch_size))
+                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
                 )
                 beam_indices = sum(beam_indices, ())
 
@@ -2745,8 +2606,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList("
-                "MaxLengthCriteria(max_length=max_length))` instead.",
+                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -2958,7 +2818,7 @@ class GenerationMixin:
                 num_return_sequences = beam_scorer.num_beam_hyps_to_keep
                 # return only as many indices as sequences
                 beam_indices = tuple(
-                    (beam_indices[i * num_beams: i * num_beams + num_return_sequences] for i in range(batch_size))
+                    (beam_indices[i * num_beams : i * num_beams + num_return_sequences] for i in range(batch_size))
                 )
                 beam_indices = sum(beam_indices, ())
 
@@ -3115,8 +2975,7 @@ class GenerationMixin:
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList("
-                "MaxLengthCriteria(max_length=max_length))` instead.",
+                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)

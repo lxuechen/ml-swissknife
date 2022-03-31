@@ -4,7 +4,6 @@ Check captioner says something about background for waterbirds.
 python -m explainx.waterbird_check
 """
 
-import os
 from typing import List
 
 import fire
@@ -13,7 +12,7 @@ import torch
 import tqdm
 
 from swissknife import utils
-from .BLIP.models import blip, blip_vqa
+from .common import make_image2text_model, make_vqa_model
 from .misc import load_image_tensor
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -51,14 +50,11 @@ def get_captions(
 def caption(
     sample=False,
     num_instances=500,  # How many instances to label.
-    image_size=384
+    image_size=384,
+    beam_search_mode="regular",
 ):
-    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
-    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip.blip_decoder(
-        pretrained=model_url, image_size=image_size, vit='base', med_config=med_config
-    )
-    model.to(device)
+    """Caption single images."""
+    model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode).to(device).eval()
 
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
     metadata = utils.read_csv(metadata_path, delimiter=",")
@@ -103,10 +99,8 @@ def vqa(
     image_size=480,
     num_instances=500,  # How many instances to label.
 ):
-    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_vqa.pth'
-    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip_vqa.blip_vqa(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
-    model.to(device)
+    """Check vqa performance; nothing contrastive."""
+    model = make_vqa_model(image_size=image_size).to(device).eval()
 
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
     metadata = utils.read_csv(metadata_path, delimiter=",")
@@ -151,22 +145,31 @@ def vqa(
 
 @torch.no_grad()
 def consensus(
-    num_per_background=10,
+    num_water_images=10,
+    num_land_images=20,
     image_size=384,
-    z0_div_z1=1.,
     dump_file: str = 'caps-weights.json',
     contrastive_mode: str = "subtraction",  # one of 'subtraction' 'marginalization'
     average_consensus=True,
     num_beams=20,
     max_length=50,
     min_length=3,
+    num_em_rounds=5,
+    num_clusters=3,
     water_first=True,
+    beam_search_mode="contrastive",
+    verbose=True,
 ):
-    """Check consensus beam search works.
+    """Caption group of images potentially with many negatives.
 
     Give some images of waterbird on water vs land,
     see if it's possible for the model to generate the difference.
     """
+    print(dump_dir, dump_file)
+    print(num_water_images, num_land_images)
+
+    model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode).to(device).eval()
+
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
     metadata = utils.read_csv(metadata_path, delimiter=",")
     rows = metadata["rows"]
@@ -174,7 +177,7 @@ def consensus(
     water_images = []
     land_images = []
     for i, row in enumerate(rows):
-        if len(water_images) >= num_per_background and len(land_images) >= num_per_background:
+        if len(water_images) >= num_water_images and len(land_images) >= num_land_images:
             break
 
         y = int(row["y"])
@@ -186,19 +189,15 @@ def consensus(
         if y == 0:  # Only take images with label == 1!
             continue
         if background == Background.water:
-            if len(water_images) >= num_per_background:
+            if len(water_images) >= num_water_images:
                 continue
             else:
                 water_images.append(image)
         if background == Background.land:
-            if len(land_images) >= num_per_background:
+            if len(land_images) >= num_land_images:
                 continue
             else:
                 land_images.append(image)
-    model_url = 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model*_base_caption.pth'
-    med_config = os.path.join('.', 'explainx', 'BLIP', 'configs', 'med_config.json')
-    model = blip.blip_decoder(pretrained=model_url, image_size=image_size, vit='base', med_config=med_config)
-    model.to(device).eval()
 
     if water_first:
         group1, group2 = water_images, land_images
@@ -210,29 +209,31 @@ def consensus(
         num_beams=num_beams,
         max_length=max_length,
         min_length=min_length,
+        num_em_rounds=num_em_rounds,
+        num_clusters=num_clusters,
+        contrastive_mode=contrastive_mode,
+        average_consensus=average_consensus,
+        verbose=verbose,
     )
 
     contrastive_weights = np.concatenate(
-        [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5), np.linspace(1.2, 2, num=5)]
+        [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5)]
     ).tolist()  # Serializable.
     pairs = []
     for contrastive_weight in tqdm.tqdm(contrastive_weights):
         cap = model.generate(
             images=group1, images2=group2,
             contrastive_weight=contrastive_weight,
-            contrastive_mode=contrastive_mode,
-            average_consensus=average_consensus,
-            z0_div_z1=z0_div_z1,
             **beam_search_kwargs
-        )[0]
+        )
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
-    dump = dict(z0_div_z1=z0_div_z1, pairs=pairs)
-    utils.jdump(dump, utils.join(dump_dir, dump_file))
+    dump = dict(pairs=pairs)
+    utils.jdump(dump, utils.join(dump_dir, dump_file), default=str)
 
+    model = make_image2text_model(image_size=image_size, beam_search_mode='contrastive').to(device).eval()
     captions = model.generate(
         images=group1,
-        average_consensus=average_consensus,
         **beam_search_kwargs,
     )
     print('caption with only positives')
@@ -245,7 +246,6 @@ def main(task="consensus", **kwargs):
     elif task == "vqa":
         vqa(**kwargs)
     elif task == "consensus":
-        # python -m explainx.waterbird_check --task consensus
         consensus(**kwargs)
 
 

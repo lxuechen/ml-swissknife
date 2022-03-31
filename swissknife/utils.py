@@ -657,7 +657,10 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     outputs = make_seq_requires_grad(outputs)
 
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
-    _vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
+    first_kwargs = copy.deepcopy(kwargs)
+    first_kwargs['create_graph'] = True
+    _vjp = torch.autograd.grad(
+        outputs, inputs, grad_outputs=dummy_outputs, **first_kwargs)  # Must create graph to backprop a second time.
     _jvp = torch.autograd.grad(_vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
     return convert_none_to_zeros(_jvp, dummy_outputs)
 
@@ -669,7 +672,7 @@ def to_numpy(*possibly_tensors: Union[torch.Tensor, np.ndarray, float]):
     return arrays[0] if len(arrays) == 1 else arrays
 
 
-def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True):
+def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True, disable_tf=True):
     if hasattr(args_or_seed, 'seed'):
         args_or_seed = args_or_seed.seed
     random.seed(args_or_seed)
@@ -681,11 +684,12 @@ def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         os.environ['PYTHONHASHSEED'] = str(args_or_seed)
-    try:
-        import tensorflow as tf
-        tf.random.set_seed(args_or_seed)
-    except ModuleNotFoundError:
-        logging.warning('Tensorflow not installed; ignoring set seed for tf.')
+    if not disable_tf:
+        try:
+            import tensorflow as tf
+            tf.random.set_seed(args_or_seed)
+        except ModuleNotFoundError:
+            logging.warning('Tensorflow not installed; ignoring set seed for tf.')
 
 
 def manual_dtype(args_or_dtype: Union[str, argparse.Namespace]):
