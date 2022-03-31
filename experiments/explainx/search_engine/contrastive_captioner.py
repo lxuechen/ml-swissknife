@@ -1,7 +1,7 @@
 from collections import UserDict
 import copy
 import math
-from typing import Callable, Optional, Union, Tuple, Dict
+from typing import Callable, Optional, Union, Dict
 import warnings
 
 import torch
@@ -30,10 +30,34 @@ class ContrastiveBeamSearchScorer(BeamSearchScorer):
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
+        evolving_scores: Optional[Dict] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        jointly_evolving_scores: Optional[Dict] = None,  # lxuechen: Feed in positive and negative scores here.
-    ) -> Tuple[torch.Tensor]:
+    ) -> UserDict:
+        """Prepare for extending the beams by trimming the tensors for next tokens, indices, and scores.
+
+        This function produces for the next token
+            1) the token indices
+            2) the beam indices
+            3) the corresponding cumulative scores
+            *) jointly evolved auxiliary scores
+
+        Args:
+            input_ids: Tensor of beams of size (batch_size * num_beams, seq_len).
+            next_scores: FloatTensor of scores for top entries; size (batch_size, 2 * num_beams).
+            next_tokens: LongTensor of token indices for top entries; size (batch_size, 2 * num_beams).
+            next_indices: LongTensor of beam indices for top entries; size (batch_size, 2 * num_beams).
+            evolving_scores: Optional dictionary where values are transition probabilities of
+                size (batch_size * num_beams, vocab_size).
+            pad_token_id: Int id for pad token.
+            eos_token_id: Int id for eos token.
+
+        Returns:
+            next_beam_scores: FloatTensor of size (batch_size * num_beams,).
+            next_beam_tokens: LongTensor of size (batch_size * num_beams,).
+            next_beam_indices: LongTensor of size (batch_size * num_beams,).
+            evolving_scores: Dictionary where values are FloatTensor of size (batch_size * num_beams,).
+        """
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
@@ -49,20 +73,18 @@ class ContrastiveBeamSearchScorer(BeamSearchScorer):
                 )
 
         device = input_ids.device
-        # lxuechen: next_scores has size (bsz, 2k), next_beam_scores has size (bsz, k).
         next_beam_scores = torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
         next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
-        # --- lxuechen:
-        has_auxiliary_scores = jointly_evolving_scores is not None
-        if has_auxiliary_scores:
-            new_jointly_evolving_scores = {
+
+        has_evolving_scores = evolving_scores is not None
+        if has_evolving_scores:
+            new_evolving_scores = {
                 key: torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
-                for key, value in jointly_evolving_scores.items()
+                for key, value in evolving_scores.items()
             }
         else:
-            new_jointly_evolving_scores = {}
-        # ---
+            new_evolving_scores = {}
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -73,12 +95,6 @@ class ContrastiveBeamSearchScorer(BeamSearchScorer):
                 next_beam_scores[batch_idx, :] = 0
                 next_beam_tokens[batch_idx, :] = pad_token_id
                 next_beam_indices[batch_idx, :] = 0
-                # --- lxuechen: Joint scores.
-                if has_auxiliary_scores:
-                    for key in jointly_evolving_scores:
-                        new_value = new_jointly_evolving_scores[key]
-                        new_value[batch_idx, :] = 0
-                # ---
                 continue
 
             # next tokens for this sentence
@@ -102,13 +118,10 @@ class ContrastiveBeamSearchScorer(BeamSearchScorer):
                     next_beam_scores[batch_idx, beam_idx] = next_score
                     next_beam_tokens[batch_idx, beam_idx] = next_token
                     next_beam_indices[batch_idx, beam_idx] = batch_beam_idx
-                    # -- lxuechen: Joint scores.
-                    if has_auxiliary_scores:
-                        for key in jointly_evolving_scores:
-                            value = jointly_evolving_scores[key]
-                            new_value = new_jointly_evolving_scores[key]
-                            new_value[batch_idx, beam_idx] = value[batch_idx, beam_token_rank]
-                    # ---
+                    if has_evolving_scores:
+                        for key, value in evolving_scores.items():
+                            new_value = new_evolving_scores[key]
+                            new_value[batch_idx, beam_idx] = value[batch_beam_idx, next_token]
                     beam_idx += 1
 
                 # once the beam for next step is full, don't add more tokens to it.
@@ -126,16 +139,14 @@ class ContrastiveBeamSearchScorer(BeamSearchScorer):
                 next_scores[batch_idx].max().item(), cur_len
             )
 
-        return UserDict(  # noqa
+        return UserDict(
             {
                 "next_beam_scores": next_beam_scores.view(-1),
                 "next_beam_tokens": next_beam_tokens.view(-1),
                 "next_beam_indices": next_beam_indices.view(-1),
-                # --- lxuechen: Return new scores
-                "jointly_evolving_scores": {
-                    key: value.view(-1) for key, value in new_jointly_evolving_scores.items()
+                "evolving_scores": {
+                    key: value.view(-1) for key, value in new_evolving_scores.items()
                 },
-                # ---
             }
         )
 
@@ -202,7 +213,7 @@ class ContrastiveGenerationMixin(base.CustomGenerationMixin):
         # Per-step normalization.
         consensus_scores = consensus_scores.log_softmax(dim=-1)
 
-        return consensus_scores
+        return consensus_scores  # (batch_size * num_beams, vocab_size).
 
     # lxuechen: Rough logic of new beam search:
     #   1. use all_pos_scores and all_neg_scores to keep track of accumulated scores (take the position of beam_scores)
@@ -372,19 +383,19 @@ class ContrastiveGenerationMixin(base.CustomGenerationMixin):
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
-            next_indices = torch_int_div(next_tokens, vocab_size)
-            next_tokens = next_tokens % vocab_size
+            next_indices = torch_int_div(next_tokens, vocab_size)  # Beam indices.
+            next_tokens = next_tokens % vocab_size  # Token indices.
 
             # lxuechen: Prepare inputs for `.process`.
             kwargs_for_process = dict(
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                jointly_evolving_scores=dict(
+                evolving_scores=dict(
                     all_pos_scores=all_pos_scores,
                 )
             )
             if has_negatives:
-                kwargs_for_process["jointly_evolving_scores"]["all_neg_scores"] = all_neg_scores
+                kwargs_for_process["evolving_scores"]["all_neg_scores"] = all_neg_scores
 
             # lxuechen: Add beams which has eos to hyps and reduce 2K potential beams to K potential beams.
             beam_outputs = beam_scorer.process(
@@ -399,9 +410,9 @@ class ContrastiveGenerationMixin(base.CustomGenerationMixin):
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
-            all_pos_scores = beam_outputs["jointly_evolving_scores"]["all_pos_scores"]
+            all_pos_scores = beam_outputs["evolving_scores"]["all_pos_scores"]
             if has_negatives:
-                all_neg_scores = beam_outputs["jointly_evolving_scores"]["all_neg_scores"]
+                all_neg_scores = beam_outputs["evolving_scores"]["all_neg_scores"]
 
             # lxuechen: Reorder along batch dimension to match sorted order; cat the new token.
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
