@@ -522,14 +522,11 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 input_ids=input_ids, logits_processor=logits_processor, cur_len=cur_len,
                 **model_kwargs,
             )
-            # lxuechen: Get the score used in beam search: \E_{p_err}[r(k | x) \log q(c | x)] - \log \E_{p}[ q(c | x) ].
-            term1 = (torch.stack(ambient_next_token_scores) * r_k_given_x[:, None, None]).mean(dim=0)
-            term2 = numerical.logmeanexp(
-                torch.stack(priority_next_token_scores), dim=0
-            )
-            next_token_scores = term1 - contrastive_weight * term2
             # TODO: Check if there's bad subtraction bug caused by -1e9.
-            # TODO: Check if next_token_scores has the right shape?
+            # lxuechen: Get the score used in beam search: \E_{p_err}[r(k | x) \log q(c | x)] - \log \E_{p}[ q(c | x) ].
+            term1 = (torch.stack(priority_next_token_scores) * r_k_given_x[:, None, None]).mean(dim=0)
+            term2 = numerical.logmeanexp(torch.stack(ambient_next_token_scores), dim=0)
+            next_token_scores = term1 - contrastive_weight * term2
 
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
@@ -621,6 +618,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         captions = [None for _ in range(K)]
         caption_scores = [None for _ in range(K)]
 
+        # TODO: Why doesn't things become a lot worse for the cluster that barely gets assigned???
         captions, caption_scores, log_p_k = self._m_step(
             input_ids=input_ids,
 
