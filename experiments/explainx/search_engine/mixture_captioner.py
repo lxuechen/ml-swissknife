@@ -854,12 +854,12 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 input_ids, expand_size=num_beams, **this_model_kwargs,
             )
             outputs = self.beam_search(
-                this_input_ids,
-                beam_scorer,
-                ambient_images,
-                priority_images,
-                r_k_given_x[k],
-                contrastive_weight,
+                input_ids=this_input_ids,
+                beam_scorer=beam_scorer,
+                ambient_images=ambient_images,
+                priority_images=priority_images,
+                r_k_given_x=r_k_given_x[k],
+                contrastive_weight=contrastive_weight,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
