@@ -318,6 +318,9 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         )
 
         # 9. start mixture beam search
+        self._eos_token_id = eos_token_id
+        self._pad_token_id = pad_token_id
+
         if num_return_sequences > num_beams:
             raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -862,6 +865,9 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
 
         this_model_kwargs = copy.deepcopy(model_kwargs)
         this_model_kwargs.update(image)
+        this_model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
+            caption, self._pad_token_id, self._eos_token_id
+        )
         model_inputs = self.prepare_inputs_for_generation(caption, **this_model_kwargs)
         outputs = self(**model_inputs, return_dict=True)  # noqa
 
