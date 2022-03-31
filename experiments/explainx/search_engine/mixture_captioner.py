@@ -32,8 +32,8 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
         next_indices: torch.LongTensor,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        ambient_scores: Optional[List[torch.Tensor]] = None,
-        priority_scores: Optional[List[torch.Tensor]] = None,
+        ambient_next_token_scores: Optional[List[torch.Tensor]] = None,
+        priority_next_token_scores: Optional[List[torch.Tensor]] = None,
     ) -> Dict:
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
@@ -55,10 +55,12 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
         next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
 
         new_ambient_scores = [
-            torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device) for _ in ambient_scores
+            torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
+            for _ in ambient_next_token_scores
         ]
         new_priority_scores = [
-            torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device) for _ in priority_scores
+            torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
+            for _ in priority_next_token_scores
         ]
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
@@ -93,9 +95,9 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
                     next_beam_scores[batch_idx, beam_idx] = next_score
                     next_beam_tokens[batch_idx, beam_idx] = next_token
                     next_beam_indices[batch_idx, beam_idx] = batch_beam_idx
-                    for new_val, old_val in zip(new_ambient_scores, ambient_scores):
+                    for new_val, old_val in zip(new_ambient_scores, ambient_next_token_scores):
                         new_val[batch_idx, beam_idx] = old_val[batch_beam_idx, next_token]
-                    for new_val, old_val in zip(new_priority_scores, priority_scores):
+                    for new_val, old_val in zip(new_priority_scores, priority_next_token_scores):
                         new_val[batch_idx, beam_idx] = old_val[batch_beam_idx, next_token]
                     beam_idx += 1
 
@@ -131,8 +133,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         self,
 
         # --- lxuechen: new arguments
-        priority_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
-        ambient_images: List[Dict],  # Keywords: `encoder_hidden_states`, `encoder_attention_mask`.
+        priority_images: List[Dict],  # Keys: `encoder_hidden_states`, `encoder_attention_mask`.
+        ambient_images: List[Dict],  # Keys: `encoder_hidden_states`, `encoder_attention_mask`.
         num_em_rounds: int,
         contrastive_weight: float,
         captions: Optional[List[torch.LongTensor]] = None,  # List of k LongTensors.
@@ -316,6 +318,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         )
 
         # 9. start mixture beam search
+        # ---lxuechen: Everything below is new
         if num_return_sequences > num_beams:
             raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -333,6 +336,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             verbose = False
         if verbose:
             torch.set_printoptions(precision=10)
+
         self._tokenizer = model_kwargs.pop("tokenizer")
         self._eos_token_id = eos_token_id
         self._pad_token_id = pad_token_id
@@ -507,19 +511,22 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
             )
 
-        def _init_scores():
+        def _init_beam_scores():
             _scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
             _scores[:, 1:] = -1e9
             _scores = _scores.view((batch_size * num_beams,))
             return _scores
 
-        ambient_scores = [_init_scores() for _ in ambient_images]
-        priority_scores = [_init_scores() for _ in priority_images]
+        ambient_scores = [_init_beam_scores() for _ in ambient_images]  # Each tensor of size (batch_size * num_beams,).
+        priority_scores = [_init_beam_scores() for _ in priority_images]
 
         while True:
             # lxuechen: Expand the partial scores for each image, i.e.,
             #   get distribution q(c_{t+1}, c_{1:t} | x) where c_{1:t} is an existing beam,
             #   and c_{t+1} ranges over whole vocab.
+
+            # ambient_next_token_scores list of tensors, each of size (batch_size * num_beams, vocab_size).
+            # TODO: Check correctness of `_extend_next_token_scores_all`
             ambient_next_token_scores, priority_next_token_scores = self._extend_next_token_scores_all(
                 ambient_images=ambient_images, priority_images=priority_images,
                 ambient_scores=ambient_scores, priority_scores=priority_scores,
@@ -531,7 +538,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             term2 = numerical.logmeanexp(torch.stack(ambient_next_token_scores), dim=0)
             next_token_scores = term1 - contrastive_weight * term2
             examples_scores = ambient_scores[0][:, None].expand_as(next_token_scores)
-            # Guard against bug due to -1e9 - (-1e9) = 0.
+            # Guard against bug due to -1e9 - (-1e9) = 0; in the first round, will only let beam 0 be useful.
             next_token_scores.masked_fill_(examples_scores < -1e8, -1e9)
 
             # reshape for beam search
@@ -548,13 +555,14 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             # stateless
             beam_outputs = beam_scorer.process(  # noqa
                 input_ids,
-                next_token_scores,
+                next_token_scores,  # noqa
                 next_tokens,
                 next_indices,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                ambient_scores=ambient_next_token_scores,
-                priority_scores=priority_next_token_scores,
+                # lxuechen: Extra scores to extend.
+                ambient_next_token_scores=ambient_next_token_scores,
+                priority_next_token_scores=priority_next_token_scores,
             )
             beam_outputs: Dict  # Type given by HuggingFace is wrong.
 
