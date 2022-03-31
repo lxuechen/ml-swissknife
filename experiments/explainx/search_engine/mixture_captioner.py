@@ -615,7 +615,6 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         K = num_clusters
 
         log_p_k = torch.zeros(K, device=device) - math.log(K)
-        # TODO: Is this random enough?
         log_r_k_given_x = torch.randn((K, M), device=device).log_softmax(dim=0)  # Random assignments.
 
         # Dummy values for captions, caption_scores.
