@@ -211,29 +211,29 @@ def consensus(
         min_length=min_length,
         num_em_rounds=num_em_rounds,
         num_clusters=num_clusters,
+        contrastive_mode=contrastive_mode,
+        average_consensus=average_consensus,
+        verbose=verbose,
     )
 
     contrastive_weights = np.concatenate(
-        [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5), np.linspace(1.2, 2, num=5)]
+        [np.linspace(0.0, 0.9, num=10), np.linspace(0.92, 1, num=5)]
     ).tolist()  # Serializable.
     pairs = []
     for contrastive_weight in tqdm.tqdm(contrastive_weights):
         cap = model.generate(
             images=group1, images2=group2,
             contrastive_weight=contrastive_weight,
-            contrastive_mode=contrastive_mode,
-            average_consensus=average_consensus,
-            verbose=verbose,
             **beam_search_kwargs
         )
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
     dump = dict(pairs=pairs)
-    utils.jdump(dump, utils.join(dump_dir, dump_file))
+    utils.jdump(dump, utils.join(dump_dir, dump_file), default=str)
 
+    model = make_image2text_model(image_size=image_size, beam_search_mode='contrastive').to(device).eval()
     captions = model.generate(
         images=group1,
-        average_consensus=average_consensus,
         **beam_search_kwargs,
     )
     print('caption with only positives')
