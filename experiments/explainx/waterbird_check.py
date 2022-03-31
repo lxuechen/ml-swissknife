@@ -51,8 +51,9 @@ def caption(
     sample=False,
     num_instances=500,  # How many instances to label.
     image_size=384,
-    beam_search_mode="contrastive",
+    beam_search_mode="regular",
 ):
+    """Caption single images."""
     model = make_image2text_model(image_size=image_size, beam_search_mode=beam_search_mode).to(device).eval()
 
     metadata_path = utils.join(waterbird_data_path, "metadata.csv")
@@ -152,10 +153,12 @@ def consensus(
     num_beams=20,
     max_length=50,
     min_length=3,
+    num_em_rounds=5,
+    num_clusters=2,
     water_first=True,
     beam_search_mode="contrastive",
 ):
-    """Check consensus beam search works.
+    """Caption group of images potentially with many negatives.
 
     Give some images of waterbird on water vs land,
     see if it's possible for the model to generate the difference.
@@ -201,6 +204,8 @@ def consensus(
         num_beams=num_beams,
         max_length=max_length,
         min_length=min_length,
+        num_em_rounds=num_em_rounds,
+        num_clusters=num_clusters,
     )
 
     contrastive_weights = np.concatenate(
