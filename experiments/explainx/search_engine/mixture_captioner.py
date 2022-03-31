@@ -424,10 +424,11 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             if len(input_ids) == 1:
                 image[key] = image[key][:1]  # Just take a single tensor; remember, we duplicated due to beam search.
 
-        this_model_kwargs = copy.deepcopy(model_kwargs)  # Defensive.
+        this_model_kwargs = copy.deepcopy(model_kwargs)  # Be defensive.
         this_model_kwargs.update(image)
         model_inputs = self.prepare_inputs_for_generation(input_ids, **this_model_kwargs)
         try:
+            # Need the logits but not the hidden states or attention.
             outputs = self(  # noqa
                 **model_inputs, return_dict=True, output_attentions=False, output_hidden_states=False,
             )
@@ -455,6 +456,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         input_ids, logits_processor, cur_len,
         **model_kwargs,
     ):
+        # TODO: Batch this.
         new_ambient_scores, new_priority_scores = [], []
         for image, beam_scores in zip(ambient_images, ambient_scores):
             new_ambient_scores.append(
@@ -526,7 +528,6 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             #   and c_{t+1} ranges over whole vocab.
 
             # ambient_next_token_scores list of tensors, each of size (batch_size * num_beams, vocab_size).
-            # TODO: Check correctness of `_extend_next_token_scores_all`
             ambient_next_token_scores, priority_next_token_scores = self._extend_next_token_scores_all(
                 ambient_images=ambient_images, priority_images=priority_images,
                 ambient_scores=ambient_scores, priority_scores=priority_scores,
@@ -575,17 +576,18 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
-            # lxuechen: Line below is crucial to avoid last sequence bias!!!
+            # lxuechen: Line below is crucial to avoid last sequence bias! Don't give any outputs.
             model_kwargs = self._update_model_kwargs_for_generation(
-                dict(), model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                outputs=dict(), model_kwargs=model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+                raise ValueError  # lxuechen: Should not reach here!
 
             # increase cur_len
             cur_len = cur_len + 1
 
-            if beam_scorer.is_done:
+            # lxuechen: Stopping based on scores breaks, but this use pattern is too niche.
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores=torch.FloatTensor([])):
                 break
 
         sequence_outputs = beam_scorer.finalize(
