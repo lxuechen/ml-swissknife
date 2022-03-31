@@ -1,4 +1,3 @@
-from collections import UserDict
 import copy
 import inspect
 import math
@@ -35,7 +34,7 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
         eos_token_id: Optional[int] = None,
         ambient_scores: Optional[List[torch.Tensor]] = None,
         priority_scores: Optional[List[torch.Tensor]] = None,
-    ) -> UserDict:
+    ) -> Dict:
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
@@ -115,15 +114,13 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
                 next_scores[batch_idx].max().item(), cur_len
             )
 
-        return UserDict(
-            {
-                "next_beam_scores": next_beam_scores.view(-1),
-                "next_beam_tokens": next_beam_tokens.view(-1),
-                "next_beam_indices": next_beam_indices.view(-1),
-                "ambient_scores": [tensor.view(-1) for tensor in new_ambient_scores],
-                "priority_scores": [tensor.view(-1) for tensor in new_priority_scores],
-            }
-        )
+        return {
+            "next_beam_scores": next_beam_scores.view(-1),
+            "next_beam_tokens": next_beam_tokens.view(-1),
+            "next_beam_indices": next_beam_indices.view(-1),
+            "ambient_scores": [tensor.view(-1) for tensor in new_ambient_scores],
+            "priority_scores": [tensor.view(-1) for tensor in new_priority_scores],
+        }
 
 
 class MixtureGenerationMixin(base.CustomGenerationMixin):
@@ -540,7 +537,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             next_tokens = next_tokens % vocab_size
 
             # stateless
-            beam_outputs = beam_scorer.process(
+            beam_outputs = beam_scorer.process(  # noqa
                 input_ids,
                 next_token_scores,
                 next_tokens,
@@ -550,6 +547,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 ambient_scores=ambient_next_token_scores,
                 priority_scores=priority_next_token_scores,
             )
+            beam_outputs: Dict  # Type given by HuggingFace is wrong.
 
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
