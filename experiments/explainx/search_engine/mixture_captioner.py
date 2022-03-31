@@ -8,6 +8,7 @@ import warnings
 import torch
 from torch import nn
 import torch.nn.functional as F
+import tqdm
 
 from transformers.generation_beam_search import BeamSearchScorer
 from transformers.generation_stopping_criteria import StoppingCriteriaList
@@ -357,7 +358,7 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             )
 
         # 9.2. Alternate between E and M.
-        for em_round_idx in range(num_em_rounds):
+        for em_round_idx in tqdm.tqdm(range(num_em_rounds), desc="em"):
             # c, p(k), and r(k|x) are the main variables; they get updated in each round.
             (captions, caption_scores, log_p_k, log_r_k_given_x) = self._mixture_em(
                 input_ids=input_ids,
