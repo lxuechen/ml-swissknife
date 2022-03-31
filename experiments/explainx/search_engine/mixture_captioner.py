@@ -1,3 +1,4 @@
+from collections import UserDict
 import copy
 import inspect
 import math
@@ -31,9 +32,97 @@ class MixtureBeamSearchScorer(BeamSearchScorer):
         next_indices: torch.LongTensor,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-    ) -> Tuple[torch.Tensor]:
-        # TODO: Evolve score for all examples in process.
-        raise NotImplementedError
+        ambient_scores: Optional[List[torch.Tensor]] = None,
+        priority_scores: Optional[List[torch.Tensor]] = None,
+    ) -> UserDict:
+        cur_len = input_ids.shape[-1]
+        batch_size = len(self._beam_hyps)
+        if not (batch_size == (input_ids.shape[0] // self.group_size)):
+            if self.num_beam_groups > 1:
+                raise ValueError(
+                    f"A group beam size of {input_ids.shape[0]} is used as the input, but a group beam "
+                    f"size of {self.group_size} is expected by the beam scorer."
+                )
+            else:
+                raise ValueError(
+                    f"A beam size of {input_ids.shape[0]} is used as the input, but a beam size of "
+                    f"{self.group_size} is expected by the beam scorer."
+                )
+
+        device = input_ids.device
+        next_beam_scores = torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device)
+        next_beam_tokens = torch.zeros((batch_size, self.group_size), dtype=next_tokens.dtype, device=device)
+        next_beam_indices = torch.zeros((batch_size, self.group_size), dtype=next_indices.dtype, device=device)
+
+        new_ambient_scores = [
+            torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device) for _ in ambient_scores
+        ]
+        new_priority_scores = [
+            torch.zeros((batch_size, self.group_size), dtype=next_scores.dtype, device=device) for _ in priority_scores
+        ]
+
+        for batch_idx, beam_hyp in enumerate(self._beam_hyps):
+            if self._done[batch_idx]:
+                if self.num_beams < len(beam_hyp):
+                    raise ValueError(f"Batch can only be done if at least {self.num_beams} beams have been generated")
+                if eos_token_id is None or pad_token_id is None:
+                    raise ValueError("Generated beams >= num_beams -> eos_token_id and pad_token have to be defined")
+                next_beam_scores[batch_idx, :] = 0
+                next_beam_tokens[batch_idx, :] = pad_token_id
+                next_beam_indices[batch_idx, :] = 0
+                continue
+
+            # next tokens for this sentence
+            beam_idx = 0
+            for beam_token_rank, (next_token, next_score, next_index) in enumerate(
+                zip(next_tokens[batch_idx], next_scores[batch_idx], next_indices[batch_idx])
+            ):
+                batch_beam_idx = batch_idx * self.group_size + next_index
+                # add to generated hypotheses if end of sentence
+                if (eos_token_id is not None) and (next_token.item() == eos_token_id):
+                    # if beam_token does not belong to top num_beams tokens, it should not be added
+                    is_beam_token_worse_than_top_num_beams = beam_token_rank >= self.group_size
+                    if is_beam_token_worse_than_top_num_beams:
+                        continue
+                    beam_hyp.add(
+                        input_ids[batch_beam_idx].clone(),
+                        next_score.item(),
+                    )
+                else:
+                    # add next predicted token since it is not eos_token
+                    next_beam_scores[batch_idx, beam_idx] = next_score
+                    next_beam_tokens[batch_idx, beam_idx] = next_token
+                    next_beam_indices[batch_idx, beam_idx] = batch_beam_idx
+                    for new_val, old_val in zip(new_ambient_scores, ambient_scores):
+                        new_val[batch_idx, beam_idx] = old_val[batch_beam_idx, next_token]
+                    for new_val, old_val in zip(new_priority_scores, priority_scores):
+                        new_val[batch_idx, beam_idx] = old_val[batch_beam_idx, next_token]
+                    beam_idx += 1
+
+                # once the beam for next step is full, don't add more tokens to it.
+                if beam_idx == self.group_size:
+                    break
+
+            if beam_idx < self.group_size:
+                raise ValueError(
+                    f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: "
+                    f"{eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                )
+
+            # Check if we are done so that we can save a pad step if all(done)
+            self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
+                next_scores[batch_idx].max().item(), cur_len
+            )
+
+        return UserDict(
+            {
+                "next_beam_scores": next_beam_scores.view(-1),
+                "next_beam_tokens": next_beam_tokens.view(-1),
+                "next_beam_indices": next_beam_indices.view(-1),
+                "ambient_scores": [tensor.view(-1) for tensor in new_ambient_scores],
+                "priority_scores": [tensor.view(-1) for tensor in new_priority_scores],
+            }
+        )
 
 
 class MixtureGenerationMixin(base.CustomGenerationMixin):
@@ -423,7 +512,6 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             next_tokens = next_tokens % vocab_size
 
             # stateless
-            # TODO: Take in ambient_scores and priority_scores. How does updating work again???
             beam_outputs = beam_scorer.process(
                 input_ids,
                 next_token_scores,
@@ -431,18 +519,16 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 next_indices,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                ambient_scores=ambient_next_token_scores,
+                priority_scores=priority_next_token_scores,
             )
-            # TODO: Fix .process.
-            print(beam_outputs)
-            import pdb;
-            pdb.set_trace()
 
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
             # lxuechen: Get the per image partial scores as well.
-            ambient_scores = beam_scores["ambient_scores"]
-            priority_scores = beam_scores["priority_scores"]
+            ambient_scores = beam_outputs["ambient_scores"]
+            priority_scores = beam_outputs["priority_scores"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
