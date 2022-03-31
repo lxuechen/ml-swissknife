@@ -23,7 +23,6 @@ logger = logging.get_logger(__name__)
 
 
 class ContrastiveBeamSearchScorer(BeamSearchScorer):
-    # lxuechen: `.process` starts here.
     def process(
         self,
         input_ids: torch.LongTensor,
