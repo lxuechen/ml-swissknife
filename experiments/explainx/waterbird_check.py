@@ -145,7 +145,8 @@ def vqa(
 
 @torch.no_grad()
 def consensus(
-    num_per_background=10,
+    num_water_images=10,
+    num_land_images=20,
     image_size=384,
     dump_file: str = 'caps-weights.json',
     contrastive_mode: str = "subtraction",  # one of 'subtraction' 'marginalization'
@@ -173,7 +174,7 @@ def consensus(
     water_images = []
     land_images = []
     for i, row in enumerate(rows):
-        if len(water_images) >= num_per_background and len(land_images) >= num_per_background:
+        if len(water_images) >= num_water_images and len(land_images) >= num_land_images:
             break
 
         y = int(row["y"])
@@ -185,12 +186,12 @@ def consensus(
         if y == 0:  # Only take images with label == 1!
             continue
         if background == Background.water:
-            if len(water_images) >= num_per_background:
+            if len(water_images) >= num_water_images:
                 continue
             else:
                 water_images.append(image)
         if background == Background.land:
-            if len(land_images) >= num_per_background:
+            if len(land_images) >= num_land_images:
                 continue
             else:
                 land_images.append(image)
@@ -224,6 +225,7 @@ def consensus(
         )[0]
         pairs.append((contrastive_weight, cap))
         print(f"contrastive_weight: {contrastive_weight}, cap: {cap}")
+        # TODO: Fix this report procedure.
     dump = dict(pairs=pairs)
     utils.jdump(dump, utils.join(dump_dir, dump_file))
 
