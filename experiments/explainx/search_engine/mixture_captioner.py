@@ -796,14 +796,14 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             # This step performs duplication to match number of beams!
             #   1) input_ids is duplicated;
             #   2) model_kwargs["attention_mask"] is duplicated
-            input_ids, this_model_kwargs = self._expand_inputs_for_generation(
+            this_input_ids, this_model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
                 expand_size=num_beams,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **this_model_kwargs,
             )
             outputs = self.beam_search(
-                input_ids,
+                this_input_ids,
                 beam_scorer,
                 ambient_images,
                 priority_images,
