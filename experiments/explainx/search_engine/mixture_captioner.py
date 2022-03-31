@@ -393,9 +393,15 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
     def _extend_next_token_scores(
         self, image, beam_scores, input_ids, logits_processor, cur_len, **model_kwargs,
     ):
-        model_kwargs = copy.deepcopy(model_kwargs)  # Defensive.
-        model_kwargs.update(image)
-        model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+        keys_to_replace = ("encoder_hidden_states", "encoder_attention_mask")
+        for key in keys_to_replace:
+            assert key in image
+            if len(input_ids) == 1:
+                image[key] = image[key][:1]  # Just take a single tensor; remember, we duplicated due to beam search.
+
+        this_model_kwargs = copy.deepcopy(model_kwargs)  # Defensive.
+        this_model_kwargs.update(image)
+        model_inputs = self.prepare_inputs_for_generation(input_ids, **this_model_kwargs)
         outputs = self(  # noqa
             **model_inputs, return_dict=True, output_attentions=False, output_hidden_states=False,
         )
@@ -694,7 +700,6 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
             log_r_k_given_x=log_r_k_given_x,
             ambient_images=ambient_images,
             priority_images=priority_images,
-
             **model_kwargs,
         )
         captions, caption_scores, log_p_k = self._m_step(
@@ -857,11 +862,11 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         return term1 - term2
 
     def _compute_log_q_c_given_x(self, caption: torch.LongTensor, image: Dict, **model_kwargs) -> torch.Tensor:
-        # --- sanity check
         keys_to_replace = ("encoder_hidden_states", "encoder_attention_mask")
         for key in keys_to_replace:
             assert key in image
-        # ---
+            if len(caption) == 1:
+                image[key] = image[key][:1]  # Just take a single tensor; remember, we duplicated due to beam search.
 
         this_model_kwargs = copy.deepcopy(model_kwargs)
         this_model_kwargs.update(image)
