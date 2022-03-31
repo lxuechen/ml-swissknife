@@ -456,7 +456,6 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         input_ids, logits_processor, cur_len,
         **model_kwargs,
     ):
-        # TODO: Batch this.
         new_ambient_scores, new_priority_scores = [], []
         for image, beam_scores in zip(ambient_images, ambient_scores):
             new_ambient_scores.append(
