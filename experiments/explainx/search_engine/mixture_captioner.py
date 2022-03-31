@@ -433,8 +433,8 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 **model_inputs, return_dict=True, output_attentions=False, output_hidden_states=False,
             )
         except Exception as e:
-            # TODO: Remove this after catching the bug.
-            import pdb;
+            # The length bug is fixed, so this shouldn't be reached. Including just in case things go wrong.
+            import pdb
             pdb.set_trace()
 
         next_token_logits = outputs.logits[:, -1, :]
@@ -624,7 +624,11 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         num_return_sequences,
         **model_kwargs,
     ):
-        device = priority_images[0]['encoder_hidden_states'].device
+        """Initialization w/o captions.
+
+        Sets the r(k | x) to random values.
+        """
+        device = input_ids.device
         M = len(priority_images)
         K = num_clusters
 
@@ -635,7 +639,6 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         captions = [None for _ in range(K)]
         caption_scores = [None for _ in range(K)]
 
-        # TODO: Why doesn't things become a lot worse for the cluster that barely gets assigned???
         captions, caption_scores, log_p_k = self._m_step(
             input_ids=input_ids,
 
@@ -780,6 +783,12 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 log r(k | x) = log p(x | c_k) + log p(k) + C1
                              = log q(c_k | x) + log p(x) - log q(c_k) + log p(k) + C1
                              = log q(c_k | x) + log p(k) - log q(c_k) + C2
+
+        Assume p(x) is the same for all priority images, and the same for all ambient images.
+
+        C1 is constant that ensures the distribution is normalized over k, i.e.,
+            C1 = -log \sum_k p(x | c_k) p(k)
+        C2 is constant due to constant assumptions for p(x).
         """
         log_r_k_given_x = torch.zeros_like(log_r_k_given_x)
         log_q_c = torch.zeros(log_r_k_given_x.size(0), device=log_r_k_given_x.device)
