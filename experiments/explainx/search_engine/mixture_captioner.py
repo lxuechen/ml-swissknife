@@ -423,9 +423,14 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         this_model_kwargs = copy.deepcopy(model_kwargs)  # Defensive.
         this_model_kwargs.update(image)
         model_inputs = self.prepare_inputs_for_generation(input_ids, **this_model_kwargs)
-        outputs = self(  # noqa
-            **model_inputs, return_dict=True, output_attentions=False, output_hidden_states=False,
-        )
+        try:
+            outputs = self(  # noqa
+                **model_inputs, return_dict=True, output_attentions=False, output_hidden_states=False,
+            )
+        except Exception as e:
+            # TODO: Remove this after catching the bug.
+            import pdb;
+            pdb.set_trace()
 
         next_token_logits = outputs.logits[:, -1, :]
         # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
@@ -521,11 +526,13 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
                 input_ids=input_ids, logits_processor=logits_processor, cur_len=cur_len,
                 **model_kwargs,
             )
-            # TODO: Check if there's bad subtraction bug caused by -1e9.
             # lxuechen: Get the score used in beam search: \E_{p_err}[r(k | x) \log q(c | x)] - \log \E_{p}[ q(c | x) ].
             term1 = (torch.stack(priority_next_token_scores) * r_k_given_x[:, None, None]).mean(dim=0)
             term2 = numerical.logmeanexp(torch.stack(ambient_next_token_scores), dim=0)
             next_token_scores = term1 - contrastive_weight * term2
+            examples_scores = ambient_scores[0][:, None].expand_as(next_token_scores)
+            # Guard against bug due to -1e9 - (-1e9) = 0.
+            next_token_scores.masked_fill_(examples_scores < -1e8, -1e9)
 
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
@@ -919,8 +926,9 @@ class MixtureGenerationMixin(base.CustomGenerationMixin):
         Returns:
             Tensor of size ().
         """
-        # TODO: Try other approximation of log to get a proper lower bound for maximization.
-        # TODO: Try variance reduction techniques.
+        # TODO:
+        #   1) Try other approximation of log to get a proper lower bound for maximization.
+        #   2) Try variance reduction techniques.
         log_q_c_given_x = []
         for image in images:
             log_q_c_given_x.append(

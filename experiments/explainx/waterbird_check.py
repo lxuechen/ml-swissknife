@@ -157,6 +157,7 @@ def consensus(
     num_clusters=2,
     water_first=True,
     beam_search_mode="contrastive",
+    verbose=True,
 ):
     """Caption group of images potentially with many negatives.
 
@@ -218,6 +219,7 @@ def consensus(
             contrastive_weight=contrastive_weight,
             contrastive_mode=contrastive_mode,
             average_consensus=average_consensus,
+            verbose=verbose,
             **beam_search_kwargs
         )[0]
         pairs.append((contrastive_weight, cap))
