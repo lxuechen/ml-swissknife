@@ -12,12 +12,17 @@ import tqdm
 from swissknife import utils
 import transformers
 
-data_root = utils.join(utils.home, 'data', 'copyright')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 tokenizer = TreebankWordTokenizer()  # Standardized across all models.
-
-full_data_id = "1lJS5LQmaj3R5WVwzbNQdl8I4U1tf266t"  # ~2.9G
-pilot_data_id = "1NwzDx19uzIwBuw7Lq5CSytG7jIth2wJ-"  # Very small; 10 examples.
+datatag2hash = {
+    "pilot.json": "1NwzDx19uzIwBuw7Lq5CSytG7jIth2wJ-",  # Very small; 10 examples.
+    # 5-tok prefix.
+    "n_books_1000-extractions_per_book_1-prefix_length_5.json": "1_B8xfXQTklaAXgOfeSCuL3FvXvoXGBPq",
+    # 25-tok prefix.
+    "n_books_1000-extractions_per_book_1-prefix_length_25.json": "1i-v-KACEUnKOljJxfe5u_qcrA-uTBCky",
+    # 125-tok prefix.
+    "n_books_1000-extractions_per_book_1-prefix_length_125.json": "1TRbkha807PiDKoegA6Kqf9SgqBUOlM1Y",
+}
 
 
 class Metric(abc.ABC):
@@ -122,16 +127,21 @@ def _make_generative_components(model_name):
     return GenerativePair(model=model, tokenizer=tokenizer)
 
 
-def _make_data(dest_path: str):
-    if not os.path.exists(dest_path):
-        utils.download_file_from_google_drive(id=pilot_data_id, destination=dest_path)
-    data = utils.jload(dest_path)
+def _make_data(data_root: str, datatag: str):
+    destination = utils.join(data_root, datatag)
+    if not os.path.exists(destination):
+        gdrive_file_id = datatag2hash[datatag]
+        url = f'https://drive.google.com/uc?id={gdrive_file_id}'
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        os.system(f'gdown {url} -O {destination}')
+    data = utils.jload(destination)
     # dict with keys 'meta_data' and 'data'.
     # the value for 'data' is a dict with keys being the prompt and value for the completion.
     return data
 
 
 def _make_decoding_kwargs(decoding_mode="beam"):
+    # TODO: Make specific.
     if decoding_mode == "beam":  # This is very slow.
         return dict(num_beams=5)
     elif decoding_mode == "sample":
@@ -210,16 +220,21 @@ class DictAvgMeter(object):
 
 
 def _eval(
-    dest_path: str, model_name: str, metric_name: str, decoding_mode: str, pause_steps=100, seed=42, dtype='float32'
+    data_root: str,
+    datatag: str,
+    model_name: str,
+    metric_name: str,
+    decoding_mode: str,
+    pause_steps=100,
+    seed=42,
 ):
     """Loop over examples in the training data and check metric.
 
     The evaluation is intentionally not batched, since the beam search implementation in Huggingface isn't batched.
     """
     utils.manual_seed(seed)
-    utils.manual_dtype(dtype)
 
-    data = _make_data(dest_path)
+    data = _make_data(data_root=data_root, datatag=datatag)
     pair: GenerativePair = _make_generative_components(model_name)
     metric: Metric = METRIC_FNS[metric_name]()
     result = DictAvgMeter()
@@ -237,14 +252,17 @@ def _eval(
 
 
 def main(
-    dest_path=utils.join(data_root, 'data.json'),
+    data_root=utils.join(utils.home, 'data', 'copyright'),
+    datatag="n_books_1000-extractions_per_book_1-prefix_length_5.json",
     model_name="distilgpt2",
     metric_name="edit_distance",
     task="eval",
     decoding_mode="beam",
 ):
-    if task == "eval":  # python -m copyright.extract --task eval
-        _eval(dest_path, model_name, metric_name, decoding_mode)
+    # Run from `experiments/` folder.
+    # python -m copyright.extract --task eval --datatag "n_books_1000-extractions_per_book_1-prefix_length_25.json"
+    if task == "eval":
+        _eval(data_root, datatag, model_name, metric_name, decoding_mode)
 
 
 if __name__ == "__main__":

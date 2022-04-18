@@ -11,7 +11,8 @@ setuptools.setup(
     url="https://github.com/lxuechen/swissknife",
     packages=setuptools.find_packages(exclude=['experiments']),
     install_requires=[
-        'torch', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers', 'datasets'
+        'torch', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers', 'datasets',
+        'gdown>=4.4.0'
     ],
     python_requires='~=3.8',
     classifiers=[
