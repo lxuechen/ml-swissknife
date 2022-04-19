@@ -200,7 +200,7 @@ def run_retriever(n_books=17868, extractions_per_book=1, prefix_length=10):
 
 
 def main():
-    for n_books in (5000, 10000, 1000):
+    for n_books in (100, 200, 500, 1000, 5000, 10000):
         for extractions_per_book in (1, 3, 5, 10):
             for prefix_length in (5, 10, 25, 50, 125, 250):
                 run_retriever(
