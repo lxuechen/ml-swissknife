@@ -203,6 +203,7 @@ def main():
     for n_books in (100, 200, 500, 1000, 5000, 10000):
         for extractions_per_book in (1, 3, 5, 10):
             for prefix_length in (5, 10, 25, 50, 125, 250):
+                # You should get the same books if only the prefix length is varied.
                 run_retriever(
                     n_books=n_books,
                     extractions_per_book=extractions_per_book,
