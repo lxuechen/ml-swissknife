@@ -16,12 +16,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 tokenizer = TreebankWordTokenizer()  # Standardized across all models.
 datatag2hash = {
     "pilot.json": "1NwzDx19uzIwBuw7Lq5CSytG7jIth2wJ-",  # Very small; 10 examples.
-    # 5-tok prefix.
     "n_books_1000-extractions_per_book_1-prefix_length_5.json": "1_B8xfXQTklaAXgOfeSCuL3FvXvoXGBPq",
-    # 25-tok prefix.
     "n_books_1000-extractions_per_book_1-prefix_length_25.json": "1i-v-KACEUnKOljJxfe5u_qcrA-uTBCky",
-    # 125-tok prefix.
     "n_books_1000-extractions_per_book_1-prefix_length_125.json": "1TRbkha807PiDKoegA6Kqf9SgqBUOlM1Y",
+    "n_books_1000-extractions_per_book_3-prefix_length_5.json": "1tXfhaAZrwkA4C7TnqU7SV4gj2RxIIT4x",
+    "n_books_1000-extractions_per_book_3-prefix_length_25.json": "1ciKUFfCh1MKQ1m6KFEHdzX4AWy_ec0R9",
+    "n_books_1000-extractions_per_book_3-prefix_length_125.json": "1MZyMoCSgA6-_hu4gQe4G9IfeyVqgwfUb",
 }
 
 
