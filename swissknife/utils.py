@@ -501,6 +501,17 @@ class ContainerMeta(type):
         return item in cls.all()
 
 
+def runs_tasks(
+    task: str,
+    task_names: Sequence[str],
+    task_callables: Sequence[Callable],
+    **kwargs,
+):
+    for task_name, task_callable in zip_(task_names, task_callables):
+        if task == task_name:
+            return task_callable(**kwargs)
+
+
 # Torch.
 def collect_tensors(verbose=False):
     """Collect all referenced tensors; useful for debugging memory leak."""
