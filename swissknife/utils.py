@@ -510,6 +510,7 @@ def runs_tasks(
     for task_name, task_callable in zip_(task_names, task_callables):
         if task == task_name:
             return task_callable(**kwargs)
+    raise ValueError(f"Unknown task: {task}. Expected one of {task_names}")
 
 
 # Torch.
