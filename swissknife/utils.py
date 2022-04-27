@@ -45,6 +45,7 @@ import tqdm
 
 # Misc.
 home = os.path.expanduser("~")
+home_data = os.path.join(home, 'data')
 join = os.path.join
 pathexists = os.path.exists
 makedirs = os.makedirs
