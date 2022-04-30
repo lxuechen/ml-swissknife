@@ -51,6 +51,7 @@ class RandomSentenceSampler(PrefixSampler):
     def __init__(
         self,
         prefix_length: int, front_sent_offset: int, tail_sent_offset: int,
+        completion_tokens=2000,  # Number of tokens in the reference completion.
         **unused_kwargs,
     ):
         """Initialize sampler.
@@ -64,6 +65,7 @@ class RandomSentenceSampler(PrefixSampler):
         self.prefix_length = prefix_length
         self.front_sent_offset = front_sent_offset
         self.tail_sent_offset = tail_sent_offset
+        self.completion_tokens = completion_tokens
 
         self.tokenizer = TreebankWordTokenizer()
         self.detokenizer = TreebankWordDetokenizer()
@@ -90,6 +92,9 @@ class RandomSentenceSampler(PrefixSampler):
 
         start_index = np.random.randint(low=low, high=high)
         completion = ' '.join(sents[start_index:])
+        completion = self.detokenizer.detokenize(
+            self.tokenizer.tokenize(completion)[:self.completion_tokens]
+        )
 
         # Save time by only peaking few sents as opposed to tokenizing whole str.
         peak_str = ' '.join(sents[start_index:])
