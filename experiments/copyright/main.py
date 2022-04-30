@@ -11,18 +11,17 @@ python -m copyright.main
 import abc
 from typing import Tuple, List, Union
 
+from datasets import load_dataset
 import fire
 import nltk
-
-from swissknife import utils
-
-nltk.download('punkt')
-
 from nltk.tokenize import sent_tokenize
 from nltk.tokenize.treebank import TreebankWordDetokenizer, TreebankWordTokenizer
 import numpy as np
 import tqdm
-from datasets import load_dataset
+
+from swissknife import utils
+
+nltk.download('punkt')
 
 
 class BookSampler(abc.ABC):
@@ -189,7 +188,7 @@ def run_retriever(n_books=17868, extractions_per_book=1, prefix_length=10):
 
     data = {pair[0]: pair[1] for pair in sanitized_pairs}
     out_path = utils.join(
-        '/home/lxuechen_stanford_edu/software/swissknife/experiments/copyright',
+        '/home/lxuechen_stanford_edu/software/swissknife/experiments/copyright/data',
         f'n_books_{n_books}-extractions_per_book_{extractions_per_book}-prefix_length_{prefix_length}.json'
     )
     utils.jdump(
@@ -205,9 +204,9 @@ def run_retriever(n_books=17868, extractions_per_book=1, prefix_length=10):
 
 
 def main():
-    for n_books in (100, 200, 500, 1000, 5000, 10000):
+    for n_books in (1000, 100, 200, 500, 5000, 10000):
         for extractions_per_book in (1, 3, 5, 10):
-            for prefix_length in (5, 10, 25, 50, 125, 250):
+            for prefix_length in (50, 125, 250, 5, 10, 25):
                 # You should get the same books if only the prefix length is varied.
                 run_retriever(
                     n_books=n_books,
