@@ -14,14 +14,18 @@ import transformers
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 tokenizer = TreebankWordTokenizer()  # Standardized across all models.
+
 datatag2hash = {
-    "pilot.json": "1NwzDx19uzIwBuw7Lq5CSytG7jIth2wJ-",  # Very small; 10 examples.
-    "n_books_1000-extractions_per_book_1-prefix_length_5.json": "1_B8xfXQTklaAXgOfeSCuL3FvXvoXGBPq",
-    "n_books_1000-extractions_per_book_1-prefix_length_25.json": "1i-v-KACEUnKOljJxfe5u_qcrA-uTBCky",
-    "n_books_1000-extractions_per_book_1-prefix_length_125.json": "1TRbkha807PiDKoegA6Kqf9SgqBUOlM1Y",
-    "n_books_1000-extractions_per_book_3-prefix_length_5.json": "1tXfhaAZrwkA4C7TnqU7SV4gj2RxIIT4x",
-    "n_books_1000-extractions_per_book_3-prefix_length_25.json": "1ciKUFfCh1MKQ1m6KFEHdzX4AWy_ec0R9",
-    "n_books_1000-extractions_per_book_3-prefix_length_125.json": "1MZyMoCSgA6-_hu4gQe4G9IfeyVqgwfUb",
+    # Very small; 10 examples.
+    "pilot": "1NwzDx19uzIwBuw7Lq5CSytG7jIth2wJ-",
+    # 1k examples.
+    "n_books_1000-extractions_per_book_1-prefix_length_5": "16nQD8Nq3ma4K2EZLXHcahG9fcBDxS-zB",
+    "n_books_1000-extractions_per_book_1-prefix_length_25": "108sZcMjzY7mvyy1p5Rw62_A8A1I2zM2S",
+    "n_books_1000-extractions_per_book_1-prefix_length_125": "10uC4jM6tgI1pgtq--07FFHQ2Te7-SXGA",
+    # 3k examples from 1k books.
+    "n_books_1000-extractions_per_book_3-prefix_length_5": "1byrafXv2iULcZArxguJZp2LyFxswX7fN",
+    "n_books_1000-extractions_per_book_3-prefix_length_25": "13QOKOd5Fpu5cVu1HRBYxzRcQzwhcPhjD",
+    "n_books_1000-extractions_per_book_3-prefix_length_125": "1Y6QvYStCJVanHaI67Pxep3HakWL2cIRP",
 }
 
 
@@ -227,6 +231,7 @@ def _eval(
     decoding_mode: str,
     pause_steps=100,
     seed=42,
+    verbose=False
 ):
     """Loop over examples in the training data and check metric.
 
@@ -238,11 +243,17 @@ def _eval(
     pair: GenerativePair = _make_generative_components(model_name)
     metric: Metric = METRIC_FNS[metric_name]()
     result = DictAvgMeter()
+    decoding_kwargs = _make_decoding_kwargs(decoding_mode)
 
     for global_step, (prompt, reference) in tqdm.tqdm(enumerate(data["data"].items(), 1), desc="examples"):
-        completions = _decode(pair=pair, prompt=prompt, **_make_decoding_kwargs(decoding_mode))
+        completions = _decode(pair=pair, prompt=prompt, **decoding_kwargs)
         this_result = metric.process(completions=completions, reference=reference, prompt=prompt)
         result.step(this_result)
+
+        if verbose:
+            print(completions)
+            import pdb;
+            pdb.set_trace()
 
         if global_step % pause_steps == 0:
             print(f'global_step: {global_step}, metric_name: {metric_name}, avg result: {result.item()}')
@@ -253,16 +264,17 @@ def _eval(
 
 def main(
     data_root=utils.join(utils.home, 'data', 'copyright'),
-    datatag="n_books_1000-extractions_per_book_1-prefix_length_5.json",
-    model_name="distilgpt2",
-    metric_name="edit_distance",
     task="eval",
+    datatag="n_books_1000-extractions_per_book_1-prefix_length_5.json",
+    model_name="gpt2",
+    metric_name="edit_distance",
     decoding_mode="beam",
+    verbose=False,
 ):
     # Run from `experiments/` folder.
-    # python -m copyright.extract --task eval --datatag "n_books_1000-extractions_per_book_1-prefix_length_25.json"
+    # python -m copyright.extract --task eval --datatag "n_books_1000-extractions_per_book_1-prefix_length_25"
     if task == "eval":
-        _eval(data_root, datatag, model_name, metric_name, decoding_mode)
+        _eval(data_root, datatag, model_name, metric_name, decoding_mode, verbose=verbose)
 
 
 if __name__ == "__main__":
