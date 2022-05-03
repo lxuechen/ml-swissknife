@@ -150,7 +150,9 @@ def _make_decoding_kwargs(pair: GenerativePair, decoding_mode="beam"):
     elif decoding_mode == "sample":
         return dict(top_p=0.9)  # Nucleus.
     elif decoding_mode == "sample_temp":
-        return dict(top_p=0.9, temperature=0.2)
+        return dict(
+            top_p=0.9, temperature=0.2, no_repeat_ngram_size=3, bad_words_ids=pair.tokenizer(["\n\n", "\n"]).input_ids
+        )
     elif decoding_mode == "sample_temp_decay":
         raise NotImplementedError
     else:
