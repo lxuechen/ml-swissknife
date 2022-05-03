@@ -144,9 +144,9 @@ def _make_data(data_root: str, datatag: str):
     return data
 
 
-def _make_decoding_kwargs(decoding_mode="beam"):
+def _make_decoding_kwargs(pair: GenerativePair, decoding_mode="beam"):
     if decoding_mode == "beam":  # This is very slow.
-        return dict(num_beams=5, no_repeat_ngram_size=3)
+        return dict(num_beams=5, no_repeat_ngram_size=3, bad_words_ids=pair.tokenizer(["\n\n", "\n"]).input_ids)
     elif decoding_mode == "sample":
         return dict(top_p=0.9)  # Nucleus.
     elif decoding_mode == "sample_temp":
@@ -244,7 +244,7 @@ def _eval(
     pair: GenerativePair = _make_generative_components(model_name)
     metric: Metric = METRIC_FNS[metric_name]()
     result = DictAvgMeter()
-    decoding_kwargs = _make_decoding_kwargs(decoding_mode)
+    decoding_kwargs = _make_decoding_kwargs(pair=pair, decoding_mode=decoding_mode)
 
     for global_step, (prompt, reference) in tqdm.tqdm(enumerate(data["data"].items(), 1), desc="examples"):
         completions = _decode(pair=pair, prompt=prompt, **decoding_kwargs)
@@ -254,7 +254,7 @@ def _eval(
         if verbose:
             print('ref:')
             print(reference[:len(completions[0])])
-            print('com:')
+            print('\ncom:')
             print(completions[0])
             import pdb;
             pdb.set_trace()
@@ -276,7 +276,7 @@ def main(
     verbose=False,
 ):
     # Run from `experiments/` folder.
-    # python -m copyright.extract --task eval --datatag "n_books_1000-extractions_per_book_1-prefix_length_25"
+    # python -m copyright.extract --task eval --datatag "n_books_1000-extractions_per_book_1-prefix_length_125"
     if task == "eval":
         _eval(data_root, datatag, model_name, metric_name, decoding_mode, verbose=verbose)
 
