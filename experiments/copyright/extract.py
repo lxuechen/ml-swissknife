@@ -145,9 +145,8 @@ def _make_data(data_root: str, datatag: str):
 
 
 def _make_decoding_kwargs(decoding_mode="beam"):
-    # TODO: Make specific.
     if decoding_mode == "beam":  # This is very slow.
-        return dict(num_beams=5)
+        return dict(num_beams=5, no_repeat_ngram_size=3)
     elif decoding_mode == "sample":
         return dict(top_p=0.9)  # Nucleus.
     elif decoding_mode == "sample_temp":
@@ -172,6 +171,7 @@ def _decode(
     temperature=1.,
     typical_p=None,
     length_penalty=None,
+    no_repeat_ngram_size=0,
 ):
     """Decode from the model multiple completions given a single prompt."""
     input_kwargs: Dict = pair.tokenizer(prompt, return_tensors="pt").to(device)
@@ -188,6 +188,7 @@ def _decode(
         temperature=temperature,
         typical_p=typical_p,
         length_penalty=length_penalty,
+        no_repeat_ngram_size=no_repeat_ngram_size,
     )
     completions = tuple(
         pair.tokenizer.decode(sequence, clean_up_tokenization_spaces=True)
@@ -251,7 +252,10 @@ def _eval(
         result.step(this_result)
 
         if verbose:
-            print(completions)
+            print('ref:')
+            print(reference[:len(completions[0])])
+            print('com:')
+            print(completions[0])
             import pdb;
             pdb.set_trace()
 
