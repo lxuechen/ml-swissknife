@@ -150,7 +150,7 @@ def _make_decoding_kwargs(pair: GenerativePair, decoding_mode="beam"):
     elif decoding_mode == "sample":
         return dict(top_p=0.9)  # Nucleus.
     elif decoding_mode == "sample_temp":
-        return dict(top_p=0.9, temperature=0.7)
+        return dict(top_p=0.9, temperature=0.2)
     elif decoding_mode == "sample_temp_decay":
         raise NotImplementedError
     else:
@@ -159,7 +159,8 @@ def _make_decoding_kwargs(pair: GenerativePair, decoding_mode="beam"):
 
 @torch.no_grad()
 def _decode(
-    pair: GenerativePair, prompt: str,
+    pair: GenerativePair,
+    prompt: str,
     # Decoding kwargs.
     top_k=0,
     top_p=0.9,
@@ -252,10 +253,13 @@ def _eval(
         result.step(this_result)
 
         if verbose:
-            print('ref:')
-            print(reference[:len(completions[0])])
+            print('prompt:')
+            print(prompt)
             print('\ncom:')
-            print(completions[0])
+            com = completions[0][len(prompt):]
+            print(com)
+            print('ref:')
+            print(reference[len(prompt):len(prompt) + len(com)])
             import pdb;
             pdb.set_trace()
 
