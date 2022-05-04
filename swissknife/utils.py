@@ -609,15 +609,13 @@ def _mish(x):
     return x * torch.tanh(F.softplus(x))
 
 
-def flat_to_shape(tensor: torch.Tensor, shapes: Sequence[Union[torch.Size, Sequence]], length=()):
-    tensor_list = []
-    total = 0
-    for shape in shapes:
-        next_total = total + shape.numel()  # noqa
-        # It's important that this be view((...)), not view(...). Else when length=(), shape=() it fails.
-        tensor_list.append(tensor[..., total:next_total].view((*length, *shape)))
-        total = next_total
-    return tensor_list
+def flat_to_shape(flat_tensor: torch.Tensor, shapes: Sequence):
+    """Convert a flat tensor to a list of tensors with specified shapes.
+
+    `flat_tensor` must have exactly the number of elements as stated in `shapes`.
+    """
+    numels = [shape.numel() for shape in shapes]
+    return [flat.reshape(shape) for flat, shape in zip_(flat_tensor.split(split_size=numels), shapes)]
 
 
 def convert_none_to_zeros(sequence: Sequence[Union[torch.Tensor, type(None)]], like_sequence: Sequence[torch.Tensor]):
