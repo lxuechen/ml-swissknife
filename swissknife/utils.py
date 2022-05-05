@@ -2836,7 +2836,15 @@ def extract_argument(cmd: str, arg="--train_dir"):
     return cmd[start:end].strip()
 
 
-def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180, log=True, maxMemory=1e-4, maxLoad=1e-4):
+def gpu_scheduler(
+    commands: Sequence[str],
+    wait_time_in_secs: int = 180,
+    log=True,
+    maxMemory=1e-4,
+    maxLoad=1e-4,
+    excludeID=(),
+    excludeUUID=()
+):
     """Schedule jobs on a VM with several GPUs.
 
     Args:
@@ -2862,6 +2870,8 @@ def gpu_scheduler(commands: Sequence[str], wait_time_in_secs: int = 180, log=Tru
                 maxLoad=maxLoad,
                 maxMemory=maxMemory,
                 limit=1,
+                excludeID=excludeID,
+                excludeUUID=excludeUUID,
             )
             time.sleep(1)
         print(f'empty gpus: {empty_gpus}')
