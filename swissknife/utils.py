@@ -1581,7 +1581,7 @@ def annotate_heatmap(im, data=None, **textkw):
     texts = []
     for i in range(len(data)):
         for j in range(len(data[0])):
-            text = im.axes.text(j, i, data[i, j], **kw)
+            text = im.axes.text(j, i, data[i][j], **kw)
             texts.append(text)
 
     return texts
