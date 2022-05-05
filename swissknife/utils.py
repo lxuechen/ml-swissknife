@@ -1548,9 +1548,7 @@ def heatmap(data, row_labels, col_labels, ax=None,
     return im, cbar
 
 
-def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
-                     textcolors=("black", "white"),
-                     threshold=None, no_text_color=True, **textkw):
+def annotate_heatmap(im, data=None, valfmt="{x:.2f}", **textkw):
     """
     A function to annotate a heatmap.
 
@@ -1564,13 +1562,6 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
         The format of the annotations inside the heatmap.  This should either
         use the string format method, e.g. "$ {x:.2f}", or be a
         `matplotlib.ticker.Formatter`.  Optional.
-    textcolors
-        A pair of colors.  The first is used for values below a threshold,
-        the second for those above.  Optional.
-    threshold
-        Value in data units according to which the colors from textcolors are
-        applied.  If None (the default) uses the middle of the colormap as
-        separation.  Optional.
     **kwargs
         All other arguments are forwarded to each call to `text` used to create
         the text labels.
@@ -1579,12 +1570,6 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
 
     if not isinstance(data, (list, np.ndarray)):
         data = im.get_array()
-
-    # Normalize the threshold to the images color range.
-    if threshold is not None:
-        threshold = im.norm(threshold)
-    else:
-        threshold = im.norm(data.max()) / 2.
 
     # Set default alignment to center, but allow it to be
     # overwritten by textkw.
@@ -1601,8 +1586,6 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
     texts = []
     for i in range(data.shape[0]):
         for j in range(data.shape[1]):
-            if not no_text_color:
-                kw.update(color=textcolors[int(im.norm(data[i, j]) > threshold)])
             text = im.axes.text(j, i, valfmt(data[i, j], None), **kw)
             texts.append(text)
 
