@@ -1548,7 +1548,7 @@ def heatmap(data, row_labels, col_labels, ax=None,
     return im, cbar
 
 
-def annotate_heatmap(im, data=None, valfmt="{x:.2f}", **textkw):
+def annotate_heatmap(im, data=None, **textkw):
     """
     A function to annotate a heatmap.
 
@@ -1566,7 +1566,6 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", **textkw):
         All other arguments are forwarded to each call to `text` used to create
         the text labels.
     """
-    import matplotlib
 
     if not isinstance(data, (list, np.ndarray)):
         data = im.get_array()
@@ -1577,16 +1576,12 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", **textkw):
               verticalalignment="center")
     kw.update(textkw)
 
-    # Get the formatter in case a string is supplied
-    if isinstance(valfmt, str):
-        valfmt = matplotlib.ticker.StrMethodFormatter(valfmt)
-
     # Loop over the data and create a `Text` for each "pixel".
     # Change the text's color depending on the data.
     texts = []
     for i in range(len(data)):
         for j in range(len(data[0])):
-            text = im.axes.text(j, i, valfmt(data[i, j], None), **kw)
+            text = im.axes.text(j, i, data[i, j], **kw)
             texts.append(text)
 
     return texts
