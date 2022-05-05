@@ -1584,8 +1584,8 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", **textkw):
     # Loop over the data and create a `Text` for each "pixel".
     # Change the text's color depending on the data.
     texts = []
-    for i in range(data.shape[0]):
-        for j in range(data.shape[1]):
+    for i in range(len(data)):
+        for j in range(len(data[0])):
             text = im.axes.text(j, i, valfmt(data[i, j], None), **kw)
             texts.append(text)
 
