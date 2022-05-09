@@ -1125,8 +1125,9 @@ def plot(
     errorbars: Sequence = (),
     bars: Sequence = (),
     fill_betweens: Sequence = (),
+    annotates: Sequence = (),
+    stems: Sequence = (),
     options: Optional[Dict] = None,
-    annotates=(),
 
     plots2: Sequence = (),
     steps2: Sequence = (),
@@ -1137,8 +1138,9 @@ def plot(
     errorbars2: Sequence = (),
     bars2: Sequence = (),
     fill_betweens2: Sequence = (),
-    options2: Optional[Dict] = None,
     annotates2=(),
+    stems2: Sequence = (),
+    options2: Optional[Dict] = None,
 
     legend_options: Optional[Dict] = None,
     disable_legend: Optional[bool] = False,
@@ -1215,7 +1217,8 @@ def plot(
         bars=bars,
         fill_betweens=fill_betweens,
         options=options,
-        annotates=annotates
+        annotates=annotates,
+        stems=stems,
     )
 
     # Twin-x plot: Share xaxis.
@@ -1232,7 +1235,8 @@ def plot(
             bars=bars2,
             fill_betweens=fill_betweens2,
             options=options2,
-            annotates=annotates2
+            annotates=annotates2,
+            stems=stems2,
         )
 
     if legend_options is None:
@@ -1270,7 +1274,7 @@ def _feed_args(options, key, func):
             func(params)
 
 
-def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fill_betweens, options, annotates):
+def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fill_betweens, options, annotates, stems):
     if options is None:
         options = dict()
 
@@ -1313,32 +1317,39 @@ def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fi
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         kwargs.pop('aux', None)
         ax.plot(entry['x'], entry['y'], **kwargs)
+
     for entry in steps:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         kwargs.pop('aux', None)
         ax.step(entry['x'], entry['y'], **kwargs)
+
     for entry in vlines:
         kwargs = {key: entry[key] for key in entry if key not in ('x', 'ymin', 'ymax')}
         kwargs.pop('aux', None)
         ax.vlines(entry['x'], entry['ymin'], entry['ymax'], **kwargs)
+
     for entry in hlines:
         kwargs = {key: entry[key] for key in entry if key not in ('y', 'xmin', 'xmax')}
         kwargs.pop('aux', None)
         ax.hlines(entry['y'], entry['xmin'], entry['xmax'], **kwargs)
+
     for entry in errorbars:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         kwargs.pop('aux', None)
         if "capsize" not in kwargs:
             kwargs["capsize"] = 5
         ax.errorbar(entry['x'], entry['y'], **kwargs)
+
     for entry in scatters:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         kwargs.pop('aux', None)
         ax.scatter(entry['x'], entry['y'], **kwargs)
+
     for entry in hists:
         kwargs = {key: entry[key] for key in entry if key != 'x'}
         kwargs.pop('aux', None)
         ax.hist(entry['x'], **kwargs)
+
     for entry in fill_betweens:
         kwargs = {key: entry[key] for key in entry if key not in ('x', 'y1', 'y2')}
         kwargs.pop('aux', None)
@@ -1354,10 +1365,14 @@ def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fi
         x, height = [np.array(entry[key]) for key in ('x', 'height')]
         ax.bar(x - width * (len(bars) - 1) / 2 + width * i, height, width=width, **kwargs)
 
-    for annotate in annotates:
-        kwargs = copy.deepcopy(annotate)
+    for entry in annotates:
+        kwargs = copy.deepcopy(entry)
         text, xy = kwargs.pop("text"), kwargs.pop("xy")
         ax.annotate(text, xy, **kwargs)
+
+    for entry in stems:
+        kwargs = {key: entry[key] for key in entry if key not in ("locs", "heads")}
+        ax.stem(entry["locs"], entry["heads"], **kwargs)
 
     return ax
 
