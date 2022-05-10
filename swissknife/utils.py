@@ -2044,6 +2044,19 @@ class MaxMeter(Meter):
         return self._val
 
 
+class MinMeter(Meter):
+    def __init__(self):
+        super(MinMeter, self).__init__()
+
+    def step(self, x: Union[torch.Tensor, np.ndarray, float]):
+        x = super(MinMeter, self).step(x)
+        if self._val is None:
+            self._val = x
+        elif x < self._val:
+            self._val = x
+        return self._val
+
+
 # Custom learning rate schedules.
 def get_warmup_exp_decay_scheduler(optimizer: optim.Optimizer,
                                    num_warmup_steps: int,
