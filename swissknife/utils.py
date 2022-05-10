@@ -1104,14 +1104,17 @@ def denormalize(x: torch.Tensor, mean: Sequence[float], std: Sequence[float]) ->
 # Plotting.
 def plot_wrapper(*args, suffixes: Optional[Sequence] = None, **kwargs):
     """Allows specifying paths with multiple suffixes."""
-    if suffixes is None:
-        return plot(*args, **kwargs)
+    img_path = kwargs.pop("img_path", None)
+    if img_path is None:
+        return plot(*args, **kwargs)  # Directly plot.
     else:
-        # Append suffix to img_path.
-        img_path = kwargs.pop("img_path")
-        for suffix in suffixes:
-            this_img_path = img_path + suffix
-            plot(*args, img_path=this_img_path, **kwargs)
+        if suffixes is None:
+            return plot(*args, img_path=img_path, **kwargs)  # Plot with img_path directly.
+        else:
+            # Append suffix to img_path.
+            for suffix in suffixes:
+                this_img_path = img_path + suffix
+                plot(*args, img_path=this_img_path, **kwargs)
 
 
 def plot(
