@@ -516,6 +516,11 @@ def runs_tasks(
 
 
 # Torch.
+def tsave(state_dicts: dict, path: str):
+    makedirs(dirname(path), exist_ok=True)
+    torch.save(state_dicts, path)
+
+
 def collect_tensors(verbose=False):
     """Collect all referenced tensors; useful for debugging memory leak."""
     count = 0
