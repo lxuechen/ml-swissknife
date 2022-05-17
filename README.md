@@ -11,11 +11,15 @@ pip install git+https://github.com/lxuechen/swissknife.git
 ```
 
 ## TODOs
+- [ ] Numerical utils
+  - [ ] simultaneous iteration
+  - [ ] QR iteration (with shift)
+  - [ ] Lanczos
+  - [ ] spectral density plotting
 - [ ] NLP
   - [ ] Decoding utils, new token embedding for GPT-2, fast dataset loading (w/ auto-download)
   - [ ] Evaluation pipeline for generation
 - [ ] Custom optimizers (HF, K-FAC)
-- [ ] Advanced seed averaging utils
 - [ ] Fast two-sample test utils
 - [ ] Helper code for calibration metrics (reliability diagram, ECE, Brier score)
 - [x] Boilerplate for fine-tuning GPT-3 via OpenAI API.
