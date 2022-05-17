@@ -710,7 +710,7 @@ def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True, dis
 
 
 def get_dtype(dtype_str: str):
-    if dtype_str in ("single", "float32"):
+    if dtype_str in ("single", "float32", "float"):
         return torch.float
     elif dtype_str in ("half", "float16"):
         return torch.float16
