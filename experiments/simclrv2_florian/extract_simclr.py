@@ -5,10 +5,10 @@ Unmodified from Florian's codebase
     https://github.com/ftramer/Handcrafted-DP/blob/main/transfer/extract_simclr.py
 
 Run
-    python -m experiments.simclrv2.extract_simclr --dataset "cifar-10" &
-    python -m experiments.simclrv2.extract_simclr --dataset "cifar-10.2" &
-    python -m experiments.simclrv2.extract_simclr --dataset "cinic-10" &
-    python -m experiments.simclrv2.extract_simclr --dataset "cinic-10-pure" &
+    python -m experiments.simclrv2_florian.extract_simclr --dataset "cifar-10" &
+    python -m experiments.simclrv2_florian.extract_simclr --dataset "cifar-10.2" &
+    python -m experiments.simclrv2_florian.extract_simclr --dataset "cinic-10" &
+    python -m experiments.simclrv2_florian.extract_simclr --dataset "cinic-10-pure" &
 """
 
 import numpy as np
