@@ -48,6 +48,10 @@ def lanczos_tridiag(
     num_init_vecs=1,
     tol=1e-5,
 ):
+    """Run Lanczos tridiagonalization with reorthogonalization.
+
+    The returned eigenvalues are mostly accurate.
+    """
     if not callable(matmul_closure):
         raise RuntimeError(
             "matmul_closure should be a function callable object that multiples a (Lazy)Tensor "
@@ -151,7 +155,14 @@ def lanczos_tridiag(
     # num_init_vecs x num_iter x num_iter
     t_mat = t_mat[:num_iter, :num_iter].permute(-1, 0, 1).contiguous()
 
+    q_mat.squeeze_(0)
+    t_mat.squeeze_(0)
+
     return q_mat, t_mat
+
+
+def lanczos_tridiag_to_diag(t_mat):
+    return torch.linalg.eigh(t_mat)
 
 
 def orthogonal_iteration():

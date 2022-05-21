@@ -12,7 +12,7 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['experiments']),
     install_requires=[
         'torch', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers', 'datasets',
-        'gdown>=4.4.0', 'pandas',
+        'gdown>=4.4.0', 'pandas', 'pytest',
     ],
     python_requires='~=3.8',
     classifiers=[
