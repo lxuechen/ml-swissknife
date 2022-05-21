@@ -7,8 +7,10 @@ TODO:
     Memory scaling for `lanczos_tridiag` is bad.
     Memory scaling for `orthogonal_iteration_mem_saving` is bad in G-S.
 """
+import math
 from typing import Callable, Optional, Union, Sequence
 
+import numpy as np
 import torch
 import tqdm
 
@@ -237,3 +239,87 @@ def eigenvectors_to_eigenvalues(
 ):
     """Rayleigh quotient computation."""
     return ((mat @ eigenvectors) * eigenvectors).sum(dim=0) / (eigenvectors * eigenvectors).sum(dim=0)
+
+
+def eigv_to_density(eig_vals, all_weights=None, grids=None,
+                    grid_len=10000, sigma_squared=None, grid_expand=1e-2):
+    """Compute the smoothed spectral density from a set of eigenvalues.
+    Convolves the given eigenvalues with a Gaussian kernel, weighting the values
+    by all_weights (or uniform weighting if all_weights is None). Example output
+    can be seen in Figure 1 of https://arxiv.org/pdf/1901.10159.pdf. Visualizing
+    the estimated density can be done by calling plt.plot(grids, density). There
+    is likely not a best value of sigma_squared that works for all use cases,
+    so it is recommended to try multiple values in the range [1e-5,1e-1].
+    Args:
+      eig_vals: Array of shape [num_draws, order]
+      all_weights: Array of shape [num_draws, order], if None then weights will be
+        taken to be uniform.
+      grids: Array of shape [grid_len], the smoothed spectrum will be plotted
+        in the interval [grids[0], grids[-1]]. If None then grids will be
+        computed based on max and min eigenvalues and grid length.
+      grid_len: Integer specifying number of grid cells to use, only used if
+        grids is None
+      sigma_squared: Scalar. Controls the smoothing of the spectrum estimate.
+        If None, an appropriate value is inferred.
+      grid_expand: Controls the window of values that grids spans.
+        grids[0] = smallest eigenvalue - grid_expand.
+        grids[-1] = largest_eigenvalue + grid_expand.
+    Returns:
+      density: Array of shape [grid_len], the estimated density, averaged over
+        all draws.
+      grids: Array of shape [grid_len]. The values the density is estimated on.
+    """
+    if all_weights is None:
+        all_weights = np.ones(eig_vals.shape) * 1.0 / float(eig_vals.shape[1])
+    num_draws = eig_vals.shape[0]
+
+    lambda_max = np.nanmean(np.max(eig_vals, axis=1), axis=0) + grid_expand
+    lambda_min = np.nanmean(np.min(eig_vals, axis=1), axis=0) - grid_expand
+
+    if grids is None:
+        assert grid_len is not None, 'grid_len is required if grids is None.'
+        grids = np.linspace(lambda_min, lambda_max, num=grid_len)
+
+    grid_len = grids.shape[0]
+    if sigma_squared is None:
+        sigma = 10 ** -5 * max(1, (lambda_max - lambda_min))
+    else:
+        sigma = sigma_squared * max(1, (lambda_max - lambda_min))
+
+    density_each_draw = np.zeros((num_draws, grid_len))
+    for i in range(num_draws):
+
+        if np.isnan(eig_vals[i, 0]):
+            raise ValueError('tridaig has nan values.')
+        else:
+            for j in range(grid_len):
+                x = grids[j]
+                vals = _kernel(eig_vals[i, :], x, sigma)
+                density_each_draw[i, j] = np.sum(vals * all_weights[i, :])
+    density = np.nanmean(density_each_draw, axis=0)
+    norm_fact = np.sum(density) * (grids[1] - grids[0])
+    density = density / norm_fact
+    return density, grids
+
+
+def _kernel(x, x0, variance):
+    """Point estimate of the Gaussian kernel.
+    This function computes the Gaussian kernel for
+    C exp(-(x - x0) ^2 /(2 * variance)) where C is the appropriate normalization.
+    variance should be a list of length 1. Either x0 or x should be a scalar. Only
+    one of the x or x0 can be a numpy array.
+    Args:
+      x: Can be either scalar or array of shape [order]. Points to estimate
+        the kernel on.
+      x0: Scalar. Mean of the kernel.
+      variance: Scalar. Variance of the kernel.
+    Returns:
+      point_estimate: A scalar corresponding to
+        C exp(-(x - x0) ^2 /(2 * variance)).
+    """
+    coeff = 1.0 / np.sqrt(2 * math.pi * variance)
+    val = -(x0 - x) ** 2
+    val = val / (2.0 * variance)
+    val = np.exp(val)
+    point_estimate = coeff * val
+    return point_estimate
