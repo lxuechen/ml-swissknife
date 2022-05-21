@@ -1,7 +1,16 @@
-"""Common numerical algorithms."""
+"""Common numerical algorithms.
+
+Eigenvalue computation for `lanczos_tridiag` and `orthogonal_iteration_mem_saving` are accurate.
+
+TODO:
+    Eigenvector computation for `lanczos_tridiag` and `orthogonal_iteration_mem_saving` not working well.
+    Memory scaling for `lanczos_tridiag` is bad.
+    Memory scaling for `orthogonal_iteration_mem_saving` is bad in G-S.
+"""
 from typing import Callable, Optional, Union, Sequence
 
 import torch
+import tqdm
 
 
 def power_iteration(
@@ -165,5 +174,66 @@ def lanczos_tridiag_to_diag(t_mat):
     return torch.linalg.eigh(t_mat)
 
 
-def orthogonal_iteration():
-    pass
+def orthogonal_iteration_mem_saving(
+    matmul_closure: Callable,  # CPU -> CPU function.
+    k: int,
+    dtype: torch.dtype,
+    device: torch.device,  # Some GPU device where bulk of computation is performed.
+    matrix_shape: torch.Size,
+    num_power_iteration: Optional[int] = 1,
+    # A function that takes in the current Q matrix on CPU.
+    callback: Optional[Callable] = None,
+    enable_tqdm=False,
+):
+    """Orthogonal iteration.
+
+    Different from torch.linalg.eigh, outputs are sorted in descending order.
+    Can be used to obtain top eigenvectors/eigenvalues, or to perform PCA.
+
+    Returns a CPU tensor.
+    """
+    Q = torch.randn(size=(matrix_shape[-1], k), dtype=dtype)
+    Q = _gram_schmidt_mem_saving(Q, device)
+
+    for _ in tqdm.tqdm(range(num_power_iteration), disable=not enable_tqdm):
+        matmul = matmul_closure(Q)
+        Q = _gram_schmidt_mem_saving(matmul, device)
+
+        if callback is not None:
+            callback(Q)
+
+    return Q
+
+
+def _gram_schmidt_mem_saving(Q, device, batch_size=100):
+    Q = Q.to(device)
+    n, m = Q.size()
+    for i in range(m):
+        # Normalize the ith column.
+        col = Q[:, i: i + 1]  # (n, 1).
+        col /= col.norm(2)
+        # Remove contribution of this component for remaining columns.
+        if i + 1 < m:
+            rest = Q[:, i + 1:]  # (p, r).
+            r = rest.size(1)
+
+            start_idx = 0
+            while start_idx < r:
+                batch = rest[:, start_idx:start_idx + batch_size]
+                # Broadcast, point-wise multiply, and then reduce seems to
+                # suffer from less imprecision than direct matmul or mm.
+                batch -= torch.sum(col * batch, dim=0) * col
+                start_idx += batch_size
+        torch.cuda.empty_cache()
+
+    Q = Q.cpu()
+    torch.cuda.empty_cache()
+    return Q
+
+
+def eigenvectors_to_eigenvalues(
+    mat: torch.Tensor,  # (p, p).
+    eigenvectors: torch.Tensor,  # (p, k).
+):
+    """Rayleigh quotient computation."""
+    return ((mat @ eigenvectors) * eigenvectors).sum(dim=0) / (eigenvectors * eigenvectors).sum(dim=0)

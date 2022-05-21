@@ -12,9 +12,8 @@ pip install git+https://github.com/lxuechen/swissknife.git
 
 ## TODOs
 - [ ] Numerical utils
-  - [ ] simultaneous iteration
-  - [ ] QR iteration (with shift)
-  - [ ] Lanczos
+  - [x] simultaneous iteration
+  - [x] Lanczos
   - [ ] spectral density plotting
 - [ ] NLP
   - [ ] Decoding utils, new token embedding for GPT-2, fast dataset loading (w/ auto-download)
