@@ -2876,6 +2876,7 @@ def gpu_scheduler(
     import GPUtil
     import subprocess
 
+    procs = []
     for job_id, command in enumerate(commands):
         empty_gpus = []
         while len(empty_gpus) == 0:
@@ -2902,13 +2903,16 @@ def gpu_scheduler(
             command = f"mkdir -p {train_dir}; \n{command}"
 
         # This doesn't wait.
-        subprocess.Popen(
+        proc = subprocess.Popen(
             [command],
             shell=True, stdin=None, stdout=None, stderr=None, close_fds=True
         )
+        procs.append(proc)
         print('command: ')
         print(command)
         print(f'scheduled job: {job_id} on gpu: {gpu_id}')
 
         # Give the program some time to be located on the GPU, before scheduling the next.
         time.sleep(wait_time_in_secs)
+
+    return procs
