@@ -137,3 +137,6 @@ dmypy.json
 # Figures
 *.png
 *.pdf
+
+# Latex
+*.bib

@@ -2,6 +2,10 @@ import setuptools
 
 version = "0.0.1"
 
+extras_require = {
+    "latex": ("bibtexparser",)
+}
+
 setuptools.setup(
     name="swissknife",
     version=version,
@@ -14,6 +18,7 @@ setuptools.setup(
         'torch', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers', 'datasets',
         'gdown>=4.4.0', 'pandas', 'pytest',
     ],
+    extras_require=extras_require,
     python_requires='~=3.8',
     classifiers=[
         "Programming Language :: Python :: 3",
