@@ -61,7 +61,8 @@ def eval_loss(functions: dict, model, tokenizer, context_window_size=2048, num_l
             continue
 
         try:
-            outputs = model(input_ids=input_ids.to(device), return_dict=True)
+            input_ids = input_ids.to(device)
+            outputs = model(input_ids=input_ids, return_dict=True)
             shift_labels = input_ids[:, 1:]
             shift_logits = outputs.logits[:, :-1]
             loss = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
