@@ -2,7 +2,11 @@
 Create prompt datasets for popular books.
 """
 
+import re
+
 import fire
+from nltk.tokenize.treebank import TreebankWordDetokenizer, TreebankWordTokenizer
+import tqdm
 
 from swissknife import utils
 
@@ -43,13 +47,13 @@ name2start = {
         "These two very old people are the father and mother of Mr Bucket. Their names are Grandpa Joe and Grandma Josephine.",
     
     "Charlotte's Web - E":
-        '''WHERE'S Papa going with that ax?" said Fern to her mother as they were setting the table for breakfast.''',
+        "WHERE'S Papa going with that ax?",
 
     "What_to_Expect_When_Youre_Expecting":
-        '''SO YOU'VE MADE THE DECISION TO start a family (or to grow that family you've already started). That's a great—and exciting—first step. But before sperm meets egg to create the baby of your dreams, take this preconception opportunity to prepare for the healthiest pregnancy—and baby—possible. The next steps outlined in this chapter will help you (and dad-to-be) get into tip-top baby-making shape, give you a leg up on conception, and get you to the pregnancy starting gate with all systems go.''',
+        "SO YOU'VE MADE THE DECISION TO start a family",
 
     "What Color Is Your Parachute 2012":
-        '''If we had such a thing as a national bumper-sticker for our cars, the bumper-sticker of the year would be: "I'm out of work, I can't find a job, and I've tried everything."''',
+        "If we had such a thing as a national bumper-sticker for our cars, the bumper-sticker of the year would be: ",
 
     "Wild Swans":
         "Granddad says all the Milbourn women are extraordinary.",
@@ -73,10 +77,41 @@ name2start = {
 
 
 def main(
-    in_path="/Users/xuechenli/data/books-memorization/top_texts_filtered.json"
+    in_path="/Users/xuechenli/data/books-memorization/top_texts_filtered.json",
+    out_dir="/Users/xuechenli/data/books-memorization/",
+    completion_tokens=2000,
+    prefix_lengths=(5, 10, 25, 50, 125, 250,)
 ):
     popular_books = utils.jload(in_path)
-    print(len(popular_books.keys()))
+
+    tokenizer = TreebankWordTokenizer()
+    detokenizer = TreebankWordDetokenizer()
+
+    for prefix_length in prefix_lengths:
+        data = dict()
+        for key, start in tqdm.tqdm(name2start.items()):
+            book = popular_books[key]
+
+            try:
+                search_result = re.search(pattern=start, string=book)
+                start_index = search_result.start()
+            except AttributeError as e:
+                import pdb
+                pdb.set_trace()
+            book_no_front_matter = book[start_index:]
+
+            completion = detokenizer.detokenize(
+                tokenizer.tokenize(book_no_front_matter)[:completion_tokens]
+            )
+            prefix = detokenizer.detokenize(
+                tokenizer.tokenize(book_no_front_matter)[:prefix_length]
+            )
+            data[prefix] = completion
+        metadata = dict(pairs_size=len(name2start), sanitized_pairs_size=len(name2start))
+        utils.jdump(
+            dict(data=data, metadata=metadata),
+            utils.join(out_dir, f'popular_books-prefix_length_{prefix_length}.json'),
+        )
 
 
 if __name__ == "__main__":
