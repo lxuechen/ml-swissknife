@@ -112,12 +112,12 @@ def curate_top_memorization(
 
     logprob_ratios = []
     for key in gptj_losses:
+        if not (key in gptj_losses and key in gpt2_losses):
+            continue
         logprob_ratio = gptj_losses[key] / gpt2_losses[key]
-        logprob_ratios.append(
-            (key, logprob_ratio)
-        )
+        logprob_ratios.append((key, logprob_ratio))
     logprob_ratios = heapq.nlargest(n=n, iterable=logprob_ratios, key=lambda item: item[1])
-    logprob_ratios = {key: functions[key] for key in logprob_ratios}
+    logprob_ratios = {key: functions[key] for key, _ in logprob_ratios}
     utils.jdump(logprob_ratios, out_path)
 
 
