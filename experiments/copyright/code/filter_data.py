@@ -19,17 +19,21 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def curate_functions(
-    linux_kernel_source="/Users/xuechenli/data/linux-master",
+    in_path="/Users/xuechenli/data/linux-master",
     out_path="/Users/xuechenli/data/linux-master-curated.json",
     min_lines=20,  # Only retain functions with more than min_lines.
 ):
-    filepaths = utils.listfiles(linux_kernel_source)
+    """Collect all functions in the linux kernel that have more than min_lines.
+
+    We collect functions that start with `static` in .c ending files.
+    """
+    filepaths = utils.listfiles(in_path)
     filepaths = [filepath for filepath in filepaths if filepath.endswith('.c')]
     # Wrap with outer capture group, since re.findall gets all capture groups.
     #  First match the first line of function definitions, then match `)\n{`, then match function body,
     #   then match `\n}\n`.
     pattern = re.compile(
-        "(\nstatic (void|int|bool|struct|const|unsigned|long|inline) [\S\t\v ]+?\)\n{\n[\S\n\t\v ]+?\n}\n)"
+        "(\nstatic (void|int|bool|struct|const|unsigned|long|inline|enum) [\S\t\v ]+?\)\n{([\S\n\t\v ]*?)\n}\n)"
     )
     functions = []
     for filepath in tqdm.tqdm(filepaths):
@@ -39,17 +43,25 @@ def curate_functions(
 
         matches = pattern.findall(filestr)
         for match in matches:
-            match = match[0].strip('\n')  # Take first capture group.
-            num_lines = match.count('\n') + 1
+            function = match[0].strip('\n')  # Take first capture group (all code of function); don't strip tabs!!!
+            function_body = match[2].strip('\n')  # Function body; don't strip tabs!!!
+            if len(function_body) == 0:  # Don't consider functions with empty bodies.
+                continue
+            num_lines = function.count('\n') + 1
             if num_lines > min_lines:
-                functions.append(match)
+                functions.append(function)
 
     output = {str(uuid.uuid4()): function for function in functions}
     utils.jdump(output, out_path)
 
 
 @torch.no_grad()
-def eval_loss(functions: dict, model, tokenizer, context_window_size=2048, num_lines=10, max_samples=sys.maxsize):
+def _eval_loss(
+    functions: dict, model, tokenizer,
+    context_window_size=2048,
+    num_lines=10,  # Number of lines to use as memorization scoring criterion.
+    max_samples=sys.maxsize
+):
     losses = dict()
     key_val_pairs = functions.items()
     total = min(len(key_val_pairs), max_samples)
@@ -73,19 +85,27 @@ def eval_loss(functions: dict, model, tokenizer, context_window_size=2048, num_l
         except Exception as e:
             import pdb
             pdb.set_trace()
+
     return losses
 
 
 def curate_top_memorization(
     max_samples=50000, n=2000,
     url="https://drive.google.com/file/d/16dKug5Ie-2c34yFX-66z8dNEFAuKDj6_/view?usp=sharing",
-    output="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-curated.json",
+    in_path="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-curated.json",
     out_path="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-top-candidates.json"
 ):
-    if not utils.pathexists(output):
-        gdown.download(url, output=output)
+    """Pick the top n=2000 functions that have the most amount of surprise from the curated list.
 
-    functions = utils.jload(output)
+    Surprise is measured as in Carlini et al. with logprob large model / logprob small model.
+    Large model is GPT-J 6B, small model is GPT-2.
+
+    Run this on VM since need GPU for LM inference.
+    """
+    if not utils.pathexists(in_path):
+        gdown.download(url, output=in_path)
+
+    functions = utils.jload(in_path)
 
     # Use the large / small model log-prob trick to get the top 2000 functions with very likely extraction.
     with utils.Timer(msg='loading gpt-j'):
@@ -95,7 +115,7 @@ def curate_top_memorization(
         ).to(device).eval()
         gptj_tokenizer = transformers.AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
-    gptj_losses = eval_loss(
+    gptj_losses = _eval_loss(
         functions=functions, model=gptj, tokenizer=gptj_tokenizer, context_window_size=context_window_size,
         max_samples=max_samples,
     )
@@ -105,7 +125,7 @@ def curate_top_memorization(
         gpt2 = transformers.GPT2LMHeadModel.from_pretrained("gpt2").to(device).eval()
         gpt2_tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2")
 
-    gpt2_losses = eval_loss(
+    gpt2_losses = _eval_loss(
         functions=functions, model=gpt2, tokenizer=gpt2_tokenizer, context_window_size=context_window_size,
         max_samples=max_samples,
     )
@@ -121,11 +141,23 @@ def curate_top_memorization(
     utils.jdump(logprob_ratios, out_path)
 
 
-def main(task="curate_top_memorization", **kwargs):
+def curate_prompt_dataset(
+    prompt_num_lines=(1, 5, 10),
+    in_path="/Users/xuechenli/data/linux-master-top-candidates.json"
+):
+    """Create the prompt dataset where the prompt varies in the number of lines."""
+    functions = utils.jload(in_path)
+    for key, function in functions.items():
+        print(function)
+        import pdb
+        pdb.set_trace()
+
+
+def main(task="curate_prompt_dataset", **kwargs):
     utils.runs_tasks(
         task=task,
-        task_names=("curate_top_memorization", "curate_functions"),
-        task_callables=(curate_top_memorization, curate_functions),
+        task_names=("curate_functions", "curate_top_memorization", "curate_prompt_dataset"),
+        task_callables=(curate_functions, curate_top_memorization, curate_prompt_dataset),
         **kwargs,
     )
 
