@@ -51,7 +51,9 @@ def curate_functions(
 @torch.no_grad()
 def eval_loss(functions: dict, model, tokenizer, context_window_size=2048, num_lines=10, max_samples=sys.maxsize):
     losses = dict()
-    for i, (hashval, function) in enumerate(functions.items()):
+    key_val_pairs = functions.items()
+    total = min(len(key_val_pairs), max_samples)
+    for i, (hashval, function) in tqdm.tqdm(enumerate(key_val_pairs), total=total):
         if i >= max_samples:
             break
         lines = function.split('\n')
