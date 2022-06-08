@@ -77,7 +77,7 @@ def eval_loss(functions: dict, model, tokenizer, context_window_size=2048, num_l
 
 
 def curate_top_memorization(
-    max_samples=20000, n=2000,
+    max_samples=50000, n=2000,
     url="https://drive.google.com/file/d/16dKug5Ie-2c34yFX-66z8dNEFAuKDj6_/view?usp=sharing",
     output="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-curated.json",
     out_path="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-top-candidates.json"
