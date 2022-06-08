@@ -14,13 +14,13 @@ import transformers
 
 from swissknife import utils
 
+min_lines = 20  # Only retain functions with more than min_lines.
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def curate_functions(
     in_path="/home/lxuechen_stanford_edu/data/code-memorization/linux-master",
     out_path="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-curated.json",
-    min_lines=20,  # Only retain functions with more than min_lines.
 ):
     """Collect all functions in the linux kernel that have more than min_lines.
 
@@ -137,14 +137,26 @@ def curate_top_memorization(
 
 def curate_prompt_dataset(
     prompt_num_lines=(1, 5, 10),
-    in_path="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-top-candidates.json"
+    in_path="/Users/xuechenli/data/code-memorization/linux-master-top-candidates.json",
+    out_dir="/Users/xuechenli/data/code-memorization/prompt_datasets"
 ):
-    """Create the prompt dataset where the prompt varies in the number of lines."""
+    """Create the prompt dataset where the prompt varies in the number of lines.
+
+    Run this locally so that you could upload to gdrive.
+    """
     functions = utils.jload(in_path)
-    for key, function in functions.items():
-        print(function)
-        import pdb
-        pdb.set_trace()
+
+    for prompt_num_line in prompt_num_lines:
+        metadata = dict(prompt_num_line=prompt_num_line, min_lines=min_lines)
+        data = dict()
+        for key, function in functions.items():
+            lines = function.split('\n')
+            prompt = '\n'.join(lines[:prompt_num_line])
+            data[prompt] = function
+        utils.jdump(
+            dict(metadata=metadata, data=data),
+            utils.join(out_dir, f'prompt_num_line_{prompt_num_line}-min_lines_{min_lines}.json')
+        )
 
 
 def run_all():
