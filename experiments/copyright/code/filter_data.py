@@ -1,6 +1,7 @@
 """
 Create the dataset of functions where GPT-2 would score highly.
 """
+import heapq
 import re
 import sys
 import uuid
@@ -73,9 +74,12 @@ def eval_loss(functions: dict, model, tokenizer, context_window_size=2048, num_l
     return losses
 
 
-def curate_top_memorization():
-    url = "https://drive.google.com/file/d/16dKug5Ie-2c34yFX-66z8dNEFAuKDj6_/view?usp=sharing"
-    output = "/home/lxuechen_stanford_edu/data/code-memorization/linux-master-curated.json"
+def curate_top_memorization(
+    max_samples=10000, n=2000,
+    url="https://drive.google.com/file/d/16dKug5Ie-2c34yFX-66z8dNEFAuKDj6_/view?usp=sharing",
+    output="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-curated.json",
+    out_path="/home/lxuechen_stanford_edu/data/code-memorization/linux-master-top-candidates.json"
+):
     if not utils.pathexists(output):
         gdown.download(url, output=output)
 
@@ -91,7 +95,7 @@ def curate_top_memorization():
 
     gptj_losses = eval_loss(
         functions=functions, model=gptj, tokenizer=gptj_tokenizer, context_window_size=context_window_size,
-        max_samples=1,
+        max_samples=max_samples,
     )
 
     with utils.Timer(msg='loading gpt2'):
@@ -101,9 +105,18 @@ def curate_top_memorization():
 
     gpt2_losses = eval_loss(
         functions=functions, model=gpt2, tokenizer=gpt2_tokenizer, context_window_size=context_window_size,
-        max_samples=1,
+        max_samples=max_samples,
     )
-    print(gptj_losses, gpt2_losses)
+
+    logprob_ratios = []
+    for key in gptj_losses:
+        logprob_ratio = gptj_losses[key] / gpt2_losses[key]
+        logprob_ratios.append(
+            (key, logprob_ratio)
+        )
+    logprob_ratios = heapq.nlargest(n=n, iterable=logprob_ratios, key=lambda item: item[1])
+    logprob_ratios = {key: functions[key] for key in logprob_ratios}
+    utils.jdump(logprob_ratios, out_path)
 
 
 def main(task="curate_top_memorization", **kwargs):
