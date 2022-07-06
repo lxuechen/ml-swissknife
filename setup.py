@@ -20,7 +20,7 @@ setuptools.setup(
         'datasets', 'gdown>=4.4.0', 'pandas', 'pytest', 'matplotlib', 'seaborn', 'cvxpy'
     ],
     extras_require=extras_require,
-    python_requires='~=3.8',
+    python_requires='~=3.7',
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
