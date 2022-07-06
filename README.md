@@ -1,4 +1,4 @@
-# swissknife
+# ml-swissknife
 
 Reusable ML research primitives for fast prototyping. 
 
