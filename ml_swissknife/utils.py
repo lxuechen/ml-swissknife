@@ -2882,7 +2882,7 @@ def gpu_scheduler(
         num_times_failed_to_make_progress = -1
         while len(empty_gpus) == 0:
             num_times_failed_to_make_progress += 1
-            if num_times_failed_to_make_progress % 240 == 0:
+            if num_times_failed_to_make_progress > 0 and num_times_failed_to_make_progress % 240 == 0:
                 print(f"Failed to fetch a GPU for {num_times_failed_to_make_progress} seconds.")
             # Don't use `getFirstAvailable`; it is very bad since it throws RuntimeError when no GPU is found.
             empty_gpus = GPUtil.getAvailable(
