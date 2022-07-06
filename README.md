@@ -7,7 +7,7 @@ Slowly porting and refactoring lots of stale code from many past projects.
 ## Installation
 
 ```bash
-pip install git+https://github.com/lxuechen/swissknife.git
+pip install ml-swissknife
 ```
 
 ## TODOs
