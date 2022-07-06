@@ -7,14 +7,14 @@ extras_require = {
 }
 
 setuptools.setup(
-    name="swissknife",
+    name="ml-swissknife",
     packages=setuptools.find_packages(exclude=['experiments', 'templates', 'latex', 'tests']),
     version=version,
     license="MIT",
     description="Reusable ML research primitives for fast prototyping.",
     author="Xuechen Li",
     author_email="lxuechen@cs.toronto.edu",
-    url="https://github.com/lxuechen/swissknife",
+    url="https://github.com/lxuechen/ml-swissknife",
     install_requires=[
         'torch', 'torchvision', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers',
         'datasets', 'gdown>=4.4.0', 'pandas', 'pytest', 'matplotlib', 'seaborn', 'cvxpy'
