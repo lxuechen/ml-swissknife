@@ -2858,7 +2858,7 @@ def gpu_scheduler(
     maxMemory=1e-4,
     maxLoad=1e-4,
     excludeID=(),
-    excludeUUID=()
+    excludeUUID=(),
 ):
     """Schedule jobs on a VM with several GPUs.
 
@@ -2879,7 +2879,11 @@ def gpu_scheduler(
     procs = []
     for job_id, command in enumerate(commands):
         empty_gpus = []
+        num_times_failed_to_make_progress = -1
         while len(empty_gpus) == 0:
+            num_times_failed_to_make_progress += 1
+            if num_times_failed_to_make_progress >= 240:
+                print(f"Failed to fetch a GPU for {num_times_failed_to_make_progress} seconds.")
             # Don't use `getFirstAvailable`; it is very bad since it throws RuntimeError when no GPU is found.
             empty_gpus = GPUtil.getAvailable(
                 order='first',
