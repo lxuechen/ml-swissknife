@@ -2855,8 +2855,8 @@ def gpu_scheduler(
     commands: Sequence[str],
     wait_time_in_secs: int = 180,
     log=True,
-    maxMemory=1e-4,
-    maxLoad=1e-4,
+    maxMemory=0.01,
+    maxLoad=0.01,
     excludeID=(),
     excludeUUID=(),
 ):
