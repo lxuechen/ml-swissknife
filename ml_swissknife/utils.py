@@ -30,18 +30,18 @@ import shutil
 import signal
 import sys
 import time
-from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import warnings
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import requests
-from scipy import stats
 import six
 import torch
-from torch import nn, optim
 import torch.nn.functional as F
-from torch.utils import data
 import tqdm
+from scipy import stats
+from torch import nn, optim
+from torch.utils import data
 
 # Misc.
 home = os.path.expanduser("~")
@@ -1015,76 +1015,30 @@ def retrieval_scores(tp: Union[torch.Tensor, np.ndarray],
 
 
 # EMA model averaging.
-# Only for backwards compatibility.
-@torch.no_grad()
-def ema_update(ema_model: nn.Module, model: nn.Module, gamma: Optional[float] = .999):
-    if isinstance(model, nn.DataParallel):
-        model = model.module  # Base model.
+def AverageModel(model: nn.Module, avg_fn: Union[str, Callable] = 'ema', **kwargs):
+    """Thin wrapper around `torch.optim.swa_utils.AveragedModel`."""
+    if not callable(avg_fn):
+        if avg_fn == 'ema':
+            gamma = kwargs.get('gamma', 0.999)
 
-    ema_model_state = ema_model.training
-    ema_model.eval()
+            def ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
+                return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
 
-    model_state = model.training
-    model.eval()
+            avg_fn = ema_avg_fn
+        elif avg_fn == 'warmup_ema':
+            # From
+            #   Tan, Mingxing, and Quoc Le. "Efficientnet: Rethinking model scaling for convolutional neural networks."
+            #   International conference on machine learning. PMLR, 2019.
+            decay_rate = kwargs.get('decay_rate', 0.9999)
 
-    ema_state_dict = ema_model.state_dict()
-    for key, val in model.state_dict().items():
-        p1 = ema_state_dict[key]
-        if val.dtype in (torch.int32, torch.int64):  # For `num_batches_tracked` in batch norm.
-            p1.data.copy_(val.detach())
+            def warmup_ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
+                gamma = min(decay_rate, (1 + num_averaged) / (10 + num_averaged))
+                return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
+
+            avg_fn = warmup_ema_avg_fn
         else:
-            p1.data.copy_(gamma * p1 + (1 - gamma) * val.detach())
-
-    ema_model.train(ema_model_state)
-    model.train(model_state)
-
-
-def inplace_ema(averaged_module, module, num_averaged, gamma=.99):
-    del num_averaged
-    averaged_module_state_dict = averaged_module.state_dict()
-    for key, val in module.state_dict().items():
-        p1 = averaged_module_state_dict[key]
-        if val.dtype in (torch.int32, torch.int64):  # For `num_batches_tracked` in batch norm.
-            p1.data.copy_(val.detach())
-        else:
-            p1.data.copy_(gamma * p1.data + (1 - gamma) * val.data)
-
-
-def inplace_polyak(averaged_module, module, num_averaged):
-    averaged_module_state_dict = averaged_module.state_dict()
-    for key, val in module.state_dict().items():
-        p1 = averaged_module_state_dict[key]
-        val = val.detach()
-        if val.dtype in (torch.int32, torch.int64):  # For `num_batches_tracked` in batch norm.
-            p1.data.copy_(val)
-        else:
-            p1.data.copy_(p1 + (val - p1) / (num_averaged + 1))
-
-
-class AveragedModel(nn.Module):
-    def __init__(self, module: nn.Module, avg_fn=inplace_ema, start_from=0):
-        super(AveragedModel, self).__init__()
-        self._module = module
-        self._averaged_module = copy.deepcopy(module)
-
-        self._avg_fn = avg_fn
-        self._start_from = start_from
-        self._num_averaged = 1
-
-    @torch.no_grad()
-    def step(self, global_step):
-        if global_step >= self._start_from:
-            self._avg_fn(
-                averaged_module=self._averaged_module,
-                module=self._module,
-                num_averaged=self._num_averaged
-            )
-            self._num_averaged += 1
-        else:
-            self._averaged_module = copy.deepcopy(self._module)
-
-    def forward(self, *args, **kwargs):
-        return self._averaged_module(*args, **kwargs)
+            raise ValueError(f"Unknown average function: {avg_fn}.")
+    return torch.optim.swa_utils.AveragedModel(model, avg_fn)
 
 
 def denormalize(x: torch.Tensor, mean: Sequence[float], std: Sequence[float]) -> torch.Tensor:
@@ -2701,14 +2655,6 @@ class InfiniteLoader(object):
         except StopIteration:
             self.iterator = iter(self.loader)
             return next(self.iterator)
-
-
-def get_ema_avg_fn(gamma=0.999):
-    def ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
-        """Used for `torch.optim.swa_utils.AveragedModel`."""
-        return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
-
-    return ema_avg_fn
 
 
 class Comparator(object):
