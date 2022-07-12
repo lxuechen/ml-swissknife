@@ -1038,7 +1038,7 @@ def AverageModel(model: nn.Module, avg_fn: Union[str, Callable] = 'ema', **kwarg
             avg_fn = warmup_ema_avg_fn
         else:
             raise ValueError(f"Unknown average function: {avg_fn}.")
-    return torch.optim.swa_utils.AveragedModel(model, avg_fn)
+    return torch.optim.swa_utils.AveragedModel(model, avg_fn=avg_fn, **kwargs)
 
 
 def denormalize(x: torch.Tensor, mean: Sequence[float], std: Sequence[float]) -> torch.Tensor:
