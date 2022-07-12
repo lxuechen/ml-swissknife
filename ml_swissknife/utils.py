@@ -1019,7 +1019,7 @@ def AverageModel(model: nn.Module, avg_fn: Union[str, Callable] = 'ema', **kwarg
     """Thin wrapper around `torch.optim.swa_utils.AveragedModel`."""
     if not callable(avg_fn):
         if avg_fn == 'ema':
-            gamma = kwargs.get('gamma', 0.999)
+            gamma = kwargs.pop('gamma', 0.999)
 
             def ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
                 return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
@@ -1029,7 +1029,7 @@ def AverageModel(model: nn.Module, avg_fn: Union[str, Callable] = 'ema', **kwarg
             # From
             #   Tan, Mingxing, and Quoc Le. "Efficientnet: Rethinking model scaling for convolutional neural networks."
             #   International conference on machine learning. PMLR, 2019.
-            decay_rate = kwargs.get('decay_rate', 0.9999)
+            decay_rate = kwargs.pop('decay_rate', 0.9999)
 
             def warmup_ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
                 gamma = min(decay_rate, (1 + num_averaged) / (10 + num_averaged))
