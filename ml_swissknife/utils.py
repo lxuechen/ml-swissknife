@@ -138,8 +138,8 @@ def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False,
         logging.warning(f"Uploading to gcs: {f}")
 
 
-def jdumps(obj, indent=4):
-    return json.dumps(obj, indent=indent)
+def jdumps(obj, indent=4, default=str):
+    return json.dumps(obj, indent=indent, default=default)
 
 
 def jload(f: Union[str, io.IOBase], mode="r"):
