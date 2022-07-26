@@ -2866,3 +2866,11 @@ def gpu_scheduler(
         time.sleep(wait_time_in_secs)
 
     return procs
+
+
+def is_wandb_available():
+    try:
+        import wandb
+        return True
+    except ImportError:
+        return False
