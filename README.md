@@ -5,7 +5,7 @@ Reusable ML research primitives for fast prototyping.
 Slowly porting and refactoring lots of stale code from many past projects.
 
 ## Installation
-
+To install the stable release, run the command below.
 ```bash
 pip install ml-swissknife
 ```
