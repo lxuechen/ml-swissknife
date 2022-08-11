@@ -17,15 +17,19 @@ pip install git+https://github.com/lxuechen/ml-swissknife.git
 ```
 
 ## TODOs
-- [x] Numerical utils
+- Numerical utils
   - [x] simultaneous iteration
   - [x] Lanczos
   - [x] spectral density plotting
-- [ ] NLP
+  - [ ] distributed simultaneous iteration
+- NLP
   - [ ] Decoding utils, new token embedding for GPT-2, fast dataset loading (w/ auto-download)
   - [ ] Evaluation pipeline for generation
-- [ ] Custom optimizers (HF, K-FAC)
-- [ ] Fast two-sample test utils
-- [ ] Helper code for calibration metrics (reliability diagram, ECE, Brier score)
-- [x] Boilerplate for fine-tuning GPT-3 via OpenAI API.
-- [x] Confidence interval utils
+- Misc
+  - [ ] Fast two-sample test utils
+  - [ ] Helper code for calibration metrics (reliability diagram, ECE, Brier score)
+  - [ ] Custom optimizers (HF, K-FAC)
+  - [x] Boilerplate for fine-tuning GPT-3 via OpenAI API.
+  - [x] Confidence interval utils
+- Data
+  - [ ] UTKFaces
