@@ -39,6 +39,7 @@ import six
 import torch
 import torch.nn.functional as F
 import tqdm
+import transformers
 from scipy import stats
 from torch import nn, optim
 from torch.utils import data
@@ -2874,3 +2875,27 @@ def is_wandb_available():
         return True
     except ImportError:
         return False
+
+
+# NLP.
+def smart_tokenizer_and_embedding_resize(
+    special_tokens_dict,
+    tokenizer: transformers.PreTrainedTokenizer,
+    model: transformers.PreTrainedModel
+):
+    """Resize tokenizer and embedding in a smart way.
+
+    Notes:
+        For new tokens, the embedding value is the average of all old embedding vectors.
+    """
+    num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
+    model.resize_token_embeddings(len(tokenizer))
+
+    input_embeddings = model.get_input_embeddings().weight.data
+    output_embeddings = model.get_output_embeddings().weight.data
+
+    input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+    output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+
+    input_embeddings[-num_new_tokens:] = input_embeddings_avg
+    output_embeddings[-num_new_tokens:] = output_embeddings_avg

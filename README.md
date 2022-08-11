@@ -23,7 +23,8 @@ pip install git+https://github.com/lxuechen/ml-swissknife.git
   - [x] spectral density plotting
   - [ ] distributed simultaneous iteration
 - NLP
-  - [ ] Decoding utils, new token embedding for GPT-2, fast dataset loading (w/ auto-download)
+  - [x] New token embedding for GPT-2
+  - [ ] Decoding utils, fast dataset loading (w/ auto-download)
   - [ ] Evaluation pipeline for generation
 - Misc
   - [ ] Fast two-sample test utils
