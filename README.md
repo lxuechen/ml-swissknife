@@ -29,7 +29,7 @@ pip install git+https://github.com/lxuechen/ml-swissknife.git
 - NLP
     - [x] New token embedding for GPT-2
     - [x] Evaluation pipeline for generation
-    - [ ] Turk templates
+    - [x] Turk templates
     - [ ] Decoding utils, fast dataset loading (w/ auto-download)
 - Misc
     - [ ] Fast two-sample test utils

@@ -8,7 +8,7 @@ extras_require = {
 
 setuptools.setup(
     name="ml-swissknife",
-    packages=setuptools.find_packages(exclude=['experiments', 'templates', 'latex', 'tests']),
+    packages=setuptools.find_packages(exclude=['experiments', 'templates', 'latex', 'tests', 'turk']),
     version=version,
     license="MIT",
     description="Reusable ML research primitives for fast prototyping.",
