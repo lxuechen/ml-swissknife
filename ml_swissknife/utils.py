@@ -504,16 +504,30 @@ class ContainerMeta(type):
         return item in cls.all()
 
 
-def runs_tasks(
+def run_tasks(
     task: str,
     task_names: Sequence[str],
     task_callables: Sequence[Callable],
-    **kwargs,
+    **kwargs,  # Given to each callable.
 ):
     for task_name, task_callable in zip_(task_names, task_callables):
         if task == task_name:
             return task_callable(**kwargs)
     raise ValueError(f"Unknown task: {task}. Expected one of {task_names}")
+
+
+def runs_tasks(*args, **kwargs):
+    logging.warning("`runs_tasks` will be deprecated in the future. Consider using `run_tasks` instead.")
+    return run_tasks(*args, **kwargs)
+
+
+def run_tasks_v2(task: str, *args, mode="locals", **kwargs):
+    if mode == "locals":
+        locals()[task](*args, **kwargs)
+    elif mode == "globals":
+        globals()[task](*args, **kwargs)
+    else:
+        raise ValueError(f"Unknown mode: {mode}. Expected one of `locals`, `globals`.")
 
 
 # Torch.
@@ -2949,3 +2963,7 @@ def e2e_metrics(
 
     if out_path is not None:
         return jload(out_path)
+
+
+def gem_metrics():
+    pass
