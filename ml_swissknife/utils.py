@@ -2899,3 +2899,53 @@ def smart_tokenizer_and_embedding_resize(
 
     input_embeddings[-num_new_tokens:] = input_embeddings_avg
     output_embeddings[-num_new_tokens:] = output_embeddings_avg
+
+
+def e2e_metrics(
+    reference_path: str,
+    generation_path: str,
+    out_path: Optional[str] = None,
+    e2e_metrics_dir: Optional[str] = None,
+    skip_coco=False,
+    skip_mteval=False,
+) -> Optional[dict]:
+    """Run e2e-metrics.
+
+    If repo doesn't exist, git clone and run from inside that repo.
+    Repo url:
+        https://github.com/lxuechen/e2e-metrics
+
+    Args:
+        reference_path: Path to the reference file.
+        generation_path: Path to the generation file.
+        out_path: Path to store json dump of results.
+        e2e_metrics_dir: Directory of the e2e-metrics repo.
+            If not given, defaults to cloning the repo to ${HOME}/evaluation/e2e-metrics.
+    """
+    if e2e_metrics_dir is None:
+        e2e_metrics_dir = join(home, 'evaluation', 'e2e-metrics')
+
+    if not pathexists(e2e_metrics_dir):
+        e2e_metrics_dir_dirname = os.path.dirname(e2e_metrics_dir)
+        os.makedirs(e2e_metrics_dir_dirname, exist_ok=True)
+        os.system(
+            f'cd {e2e_metrics_dir_dirname}; '
+            f'git clone https://github.com/lxuechen/e2e-metrics; '
+            f'cd e2e-metrics; pip install -r requirements.txt'
+        )
+
+    # Run evaluation from within the repo.
+    cmd = (
+        f'cd {e2e_metrics_dir}; '
+        f'./measure_scores.py {reference_path} {generation_path} '
+        f'    --skip_coco {skip_coco} '
+        f'    --skip_mteval {skip_mteval} '
+        f'    --python True'
+    )
+    if out_path is not None:
+        cmd += f' --out_path {out_path} '
+
+    os.system(cmd)
+
+    if out_path is not None:
+        return jload(out_path)
