@@ -2954,10 +2954,10 @@ def e2e_metrics(
         f'./measure_scores.py {reference_path} {generation_path} '
         f'    --skip_coco {skip_coco} '
         f'    --skip_mteval {skip_mteval} '
-        f'    --python True'
+        f'    --python True '
     )
     if out_path is not None:
-        cmd += f' --out_path {out_path} '
+        cmd += f'    --out_path {out_path} '
 
     os.system(cmd)
 
@@ -2965,5 +2965,38 @@ def e2e_metrics(
         return jload(out_path)
 
 
-def gem_metrics():
-    pass
+def gem_metrics(
+    reference_path: str,
+    generation_path: str,
+    out_path: Optional[str] = None,
+    gem_metrics_dir: Optional[str] = None,
+    metric_list=('bleu', 'rouge', "nist", "bertscore",),
+    heavy_metrics=False,
+):
+    if gem_metrics_dir is None:
+        gem_metrics_dir = join(home, 'evaluation', 'GEM-metrics')
+
+    if not pathexists(gem_metrics_dir):
+        gem_metrics_dir_dirname = os.path.dirname(gem_metrics_dir)
+        os.makedirs(gem_metrics_dir_dirname, exist_ok=True)
+        os.system(
+            f'cd {gem_metrics_dir_dirname}; '
+            f'git clone https://github.com/GEM-benchmark/GEM-metrics; '
+            f'cd GEM-metrics; '
+            f'pip install -r requirements.txt -r requirements-heavy.txt'
+        )
+
+    metric_list = ' '.join(metric_list)
+    cmd = (
+        f"cd {gem_metrics_dir}; "
+        f"./run_metrics.py {generation_path} -r {reference_path} --metric-list {metric_list} "
+    )
+    if out_path is not None:
+        cmd += f'-o {out_path} '
+    if heavy_metrics:
+        cmd += '--heavy-metrics '
+
+    os.system(cmd)
+
+    if out_path is not None:
+        return jload(out_path)
