@@ -2922,6 +2922,7 @@ def e2e_metrics(
     e2e_metrics_dir: Optional[str] = None,
     skip_coco=False,
     skip_mteval=False,
+    conda_env_name="e2e_metrics",  # All evaluation is run a separate env so default env is not polluted.
 ) -> Optional[dict]:
     """Run e2e-metrics.
 
@@ -2942,11 +2943,21 @@ def e2e_metrics(
     if not pathexists(e2e_metrics_dir):
         e2e_metrics_dir_dirname = os.path.dirname(e2e_metrics_dir)
         os.makedirs(e2e_metrics_dir_dirname, exist_ok=True)
-        os.system(
-            f'cd {e2e_metrics_dir_dirname}; '
-            f'git clone https://github.com/lxuechen/e2e-metrics; '
-            f'cd e2e-metrics; pip install -r requirements.txt'
-        )
+        # Be sure to use my fork; I fixed various annoying issues.
+        os.system(f'cd {e2e_metrics_dir_dirname}; git clone https://github.com/lxuechen/e2e-metrics;')
+
+    # Check if env exists. If not, then create new environment with given name.
+    conda_env_exists = os.system(
+        f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env_name}'"
+    )
+    if conda_env_exists != 0:
+        create_conda_env_cmd = f"conda create -n {conda_env_name} python=3.7 -y"
+        os.system(f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && {create_conda_env_cmd}'")
+
+    # Install the requirements into conda env.
+    cmd = f'cd {e2e_metrics_dir}; pip install -r requirements.txt'
+    cmd = f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env_name} && {cmd}'"
+    os.system(cmd)
 
     # Run evaluation from within the repo.
     cmd = (
@@ -2958,6 +2969,7 @@ def e2e_metrics(
     )
     if out_path is not None:
         cmd += f'    --out_path {out_path} '
+    cmd = f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env_name} && {cmd}'"
 
     os.system(cmd)
 
@@ -2972,6 +2984,7 @@ def gem_metrics(
     gem_metrics_dir: Optional[str] = None,
     metric_list=('bleu', 'rouge', "nist", "bertscore",),
     heavy_metrics=False,
+    conda_env_name="gem_metrics",  # All evaluation is run a separate env so default env is not polluted.
 ):
     if gem_metrics_dir is None:
         gem_metrics_dir = join(home, 'evaluation', 'GEM-metrics')
@@ -2982,9 +2995,29 @@ def gem_metrics(
         os.system(
             f'cd {gem_metrics_dir_dirname}; '
             f'git clone https://github.com/GEM-benchmark/GEM-metrics; '
-            f'cd GEM-metrics; '
-            f'pip install -r requirements.txt -r requirements-heavy.txt'
         )
+
+    # Check if env exists. If not, then create new environment with given name.
+    conda_env_exists = os.system(
+        f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env_name}'"
+    )
+    if conda_env_exists != 0:
+        cmd = f"conda create -n {conda_env_name} python=3.7 -y"
+        os.system(
+            f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && {cmd}'"
+        )
+
+    # Install the requirements into conda env.
+    cmd = (
+        f'cd {gem_metrics_dir}; '
+        f'pip install -r requirements.txt -r requirements-heavy.txt; '
+        f'pip uninstall -y torch torchvision torchaudio; '
+        # TODO: This is only a temp sol'n. 
+        #  The annoying issue of can't get torch+cuda installed correctly through requirements.txt...
+        f'pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113; '
+    )
+    cmd = f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env_name} && {cmd}'"
+    os.system(cmd)
 
     metric_list = ' '.join(metric_list)
     cmd = (
@@ -2995,6 +3028,7 @@ def gem_metrics(
         cmd += f'-o {out_path} '
     if heavy_metrics:
         cmd += '--heavy-metrics '
+    cmd = f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env_name} && {cmd}'"
 
     os.system(cmd)
 
