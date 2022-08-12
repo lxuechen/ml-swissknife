@@ -517,7 +517,7 @@ def run_tasks(
 
 
 def runs_tasks(*args, **kwargs):
-    logging.warning("`runs_tasks` will be deprecated in the future. Consider using `run_tasks` instead.")
+    logging.warning("`runs_tasks` will be deprecated in the future. Consider using `run_tasks_v2` instead.")
     return run_tasks(*args, **kwargs)
 
 
