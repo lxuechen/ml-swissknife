@@ -51,6 +51,7 @@ join = os.path.join
 pathexists = os.path.exists
 makedirs = os.makedirs
 dirname = os.path.dirname
+Numeric = Union[int, float]
 
 
 def set_trace():
@@ -66,11 +67,33 @@ def int2str(x, leading_zeros=8):
     return f"{x:0{leading_zeros}d}"
 
 
-def average_over_seed(seq_of_seq):
-    min_len = min(len(seq) for seq in seq_of_seq)
-    seq_of_seq = [seq[:min_len] for seq in seq_of_seq]
-    seq_of_seq = np.array(seq_of_seq)
-    return seq_of_seq.mean(0), seq_of_seq.std(0)
+def average_metric_over_seeds(*seqs: Union[Sequence[Numeric], Sequence[Dict[str, Numeric]]]):
+    # seqs is an iterable. Each seq is a sequence of numbers or dicts to average over.
+    single_input = len(seqs) == 1
+    outputs = tuple(_average_metric_over_seeds_for_single_seq(seq) for seq in seqs)
+    if single_input:
+        return outputs[0]
+    return outputs
+
+
+def _average_metric_over_seeds_for_single_seq(seq: Union[Sequence[Numeric], Sequence[Dict[str, Numeric]]]):
+    # TODO: Enable further nesting, e.g., dict where values could be list or tuple.
+    if len(seq) == 0:
+        return ()
+    if isinstance(seq[0], (tuple, list)):
+        # Returns the mean and std.
+        return float(np.mean(seq)), float(np.std(seq))
+    elif isinstance(seq[0], dict):
+        # We assume each dict has the same set of keys.
+        # Returns a dict, each key maps to a tuple of mean and std.
+        keys = seq[0].keys()
+        output = dict()
+        for key in keys:
+            values = [seq_i[key] for seq_i in seq]
+            output[key] = (float(np.mean(values)), float(np.std(values)))
+        return output
+    else:
+        raise ValueError(f"Expected each elem of seq to be of type int, float, or dict, but found type: {type(seq[0])}")
 
 
 def single_standard_deviation(sample, return_type="tuple"):
