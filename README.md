@@ -39,3 +39,5 @@ pip install git+https://github.com/lxuechen/ml-swissknife.git
     - [x] Confidence interval utils
 - Data
     - [ ] UTKFaces
+- wandb
+    - [ ] Project-based helper for downloading files
