@@ -517,17 +517,8 @@ def run_tasks(
 
 
 def runs_tasks(*args, **kwargs):
-    logging.warning("`runs_tasks` will be deprecated in the future. Consider using `run_tasks_v2` instead.")
+    logging.warning("`runs_tasks` will be deprecated in the future. Consider using `run_tasks` instead.")
     return run_tasks(*args, **kwargs)
-
-
-def run_tasks_v2(task: str, *args, mode="locals", **kwargs):
-    if mode == "locals":
-        locals()[task](*args, **kwargs)
-    elif mode == "globals":
-        globals()[task](*args, **kwargs)
-    else:
-        raise ValueError(f"Unknown mode: {mode}. Expected one of `locals`, `globals`.")
 
 
 # Torch.
@@ -2968,6 +2959,7 @@ def e2e_metrics(
         f'    --python True '
     )
     if out_path is not None:
+        makedirs(dirname(out_path), exist_ok=True)
         cmd += f'    --out_path {out_path} '
     cmd = f"bash -c 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env_name} && {cmd}'"
 
@@ -3025,6 +3017,7 @@ def gem_metrics(
         f"./run_metrics.py {generation_path} -r {reference_path} --metric-list {metric_list} "
     )
     if out_path is not None:
+        makedirs(dirname(out_path), exist_ok=True)
         cmd += f'-o {out_path} '
     if heavy_metrics:
         cmd += '--heavy-metrics '
