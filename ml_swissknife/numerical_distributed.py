@@ -2,6 +2,8 @@
 
 How does this work? Well, the obvious observation is that matmul can be run easily in parallel by splitting mats
 into chunks.
+
+With this code, I have scaled spectral computation to a model with 50 million optimizable parameters.
 """
 from typing import Optional, Union, Callable, Tuple
 
@@ -94,11 +96,12 @@ def orthogonal_iteration(
     return eigenvalues, eigenvectors
 
 
-def _check_error(
+def check_error(
     loader: DataLoader,
     eigenvectors: torch.Tensor,
     disable_tqdm: bool,
 ):
+    """Check reconstruction error, i.e., norm of A - AQQ^t, where Q is the set of top eigenvectors of A^tA."""
     devices = _get_devices()
 
     evec_chunks = torch.tensor_split(eigenvectors, len(devices), dim=1)
