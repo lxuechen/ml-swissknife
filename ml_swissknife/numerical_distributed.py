@@ -3,7 +3,7 @@
 How does this work? Well, the obvious observation is that matmul can be run easily in parallel by splitting mats
 into chunks.
 """
-from typing import Optional, Union, Callable
+from typing import Optional, Union, Callable, Tuple
 
 import numpy as np
 import torch
@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, TensorDataset, Dataset
 from ml_swissknife import utils
 
 
+# TODO: Enable specifying chunk size for this algorithm.
 def orthogonal_iteration(
     input_mat: Union[DataLoader, Dataset, torch.Tensor],
     k: int,
@@ -97,11 +98,8 @@ def _check_error(
     loader: DataLoader,
     eigenvectors: torch.Tensor,
     disable_tqdm: bool,
-    **kwargs,
 ):
-    num_cuda_devices = torch.cuda.device_count()
-    assert num_cuda_devices > 0, "v2 is only supported in distributed settings."
-    devices = tuple(range(num_cuda_devices))
+    devices = _get_devices()
 
     evec_chunks = torch.tensor_split(eigenvectors, len(devices), dim=1)
     evec_chunks = tuple(evec_chunk.to(device) for evec_chunk, device in utils.zip_(evec_chunks, devices))
@@ -135,13 +133,8 @@ def _mem_saving_matmul(
     loader: DataLoader,
     eigenvectors: torch.Tensor,
     disable_tqdm: bool,
-    **kwargs,
 ):
-    num_cuda_devices = torch.cuda.device_count()
-    assert num_cuda_devices > 0, "v2 is only supported in distributed settings."
-    devices = tuple(range(num_cuda_devices))
-
-    out = torch.zeros_like(eigenvectors)
+    devices = _get_devices()
 
     evec_chunks = torch.tensor_split(eigenvectors, len(devices), dim=1)
     evec_chunks = tuple(evec_chunk.to(device) for evec_chunk, device in utils.zip_(evec_chunks, devices))
@@ -150,6 +143,7 @@ def _mem_saving_matmul(
     chunk_num_cols_cumsum = np.cumsum(chunk_num_cols)
     chunk_col_ranges = tuple(utils.zip_(chunk_num_cols_cumsum[:-1], chunk_num_cols_cumsum[1:]))
 
+    out = torch.zeros_like(eigenvectors)
     for (batch,) in tqdm.tqdm(loader, desc="batches", disable=disable_tqdm):
         outs = []
         for chunk in evec_chunks:
@@ -164,7 +158,8 @@ def _mem_saving_matmul(
 
 
 def _orthogonalize(matrix, disable_tqdm: bool, chunk_size):
-    devices = tuple(range(torch.cuda.device_count()))
+    devices = _get_devices()
+
     matrix_chunks = torch.tensor_split(matrix, len(devices), dim=1)
     matrix_chunks = tuple(
         matrix_chunk.to(matrix_device) for matrix_chunk, matrix_device in utils.zip_(matrix_chunks, devices)
@@ -213,9 +208,9 @@ def _eigenvectors_to_eigenvalues(
     loader: DataLoader,
     eigenvectors: torch.Tensor,
     disable_tqdm: bool,
-    **kwargs,
 ):
-    devices = tuple(range(torch.cuda.device_count()))
+    devices = _get_devices()
+
     evec_chunks = torch.tensor_split(eigenvectors, len(devices), dim=1)
     evec_chunks = tuple(evec_chunk.to(device) for evec_chunk, device in utils.zip_(evec_chunks, devices))
 
@@ -230,3 +225,7 @@ def _eigenvectors_to_eigenvalues(
     nums = [num.cpu() for num in nums]
     dens = [den.cpu() for den in dens]
     return torch.cat(nums) / torch.cat(dens)
+
+
+def _get_devices() -> Tuple[Union[str, int], ...]:
+    return tuple(range(torch.cuda.device_count())) if torch.cuda.is_available() else ('cpu',)
