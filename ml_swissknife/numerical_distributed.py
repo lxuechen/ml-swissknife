@@ -3,16 +3,14 @@
 How does this work? Well, the obvious observation is that matmul can be run easily in parallel by splitting mats
 into chunks.
 """
-import logging
-import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union, Callable
 
-import fire
 import numpy as np
 import torch
 import tqdm
-from ml_swissknife import utils
 from torch.utils.data import DataLoader, TensorDataset, Dataset
+
+from ml_swissknife import utils
 
 
 def orthogonal_iteration(
@@ -21,33 +19,34 @@ def orthogonal_iteration(
     num_power_iteration=1,
     disable_tqdm=False,
     dtype=torch.float,
-    device: Optional[torch.device] = None,
-    dump_dir=None,
     dim0_chunk_size=10,
-    chunk_size=100,
-    chunk_size_2=10,
-    eval_steps=5,
+    orthogonalization_chunk_size=10,
+    callback: Optional[Callable] = None,
 ):
     """Simultaneous iteration for finding eigenvectors with the largest eigenvalues in absolute value.
 
     The method is aka subspace iteration or orthogonal iteration.
 
     WARNING:
-        - good reconstruction of the data does not imply converged eigenvalues!
+        Good reconstruction of the data does not imply converged eigenvalues!
 
     Args:
-        input_mat: DataLoader or Dataset or torch.Tensor as data. Always assumes batch first.
+        input_mat: DataLoader or Dataset or torch.Tensor as data.
+            The underlying tensor is of size (n, p), and we want the eigenvalues and eigenvectors of a p x p matrix.
+            That is we always assume batch first.
         k: Number of principal components to return.
         num_power_iteration: Number of power iterations.
         disable_tqdm: If True, disable progress bar.
-        device: torch.device; defaults to CPU if None.
         dump_dir: Directory to dump the sequence of results.
         dtype: Precision in string format.
         dim0_chunk_size: Size of chunks for dim0 -- the batch dimension of input_mat.
-        chunk_size: Size of chunks for processing the dimension that loops over eigenvectors.
-        chunk_size_2: Size of chunks for orthogonalization.
+        orthogonalization_chunk_size: Size of chunks for orthogonalization.
         eval_steps: Number of steps before a data reconstruction evaluation.
-
+        callback: Optional function to be called after each iteration.
+            Takes in position arguments:
+                global_step: Int count of the update just run.
+                eigenvalues: CPU tensor of size (k,).
+                eigenvectors: CPU tensor of size (p, k).
     Returns:
         eigenvectors: Tensor of selected basis of size (p, k).
         eigenvalues: Tensor of eigenvalues of data.T @ data of size (k,).
@@ -74,46 +73,24 @@ def orthogonal_iteration(
     batch, = next(iter(loader))
     p = batch.size(1)
     k = min(k, p, n)
+
+    eigenvalues = None
     eigenvectors = torch.randn(size=(p, k), dtype=dtype)  # This step will be very slow for large models.
 
-    err_abs, err_rel = _check_error(
-        loader=loader, eigenvectors=eigenvectors, chunk_size=chunk_size,
-        device=device, disable_tqdm=disable_tqdm,
-    )
-    logging.warning(f"before iteration, abs error: {err_abs:.6f}, rel error: {err_rel:.6f}")
+    if callback is not None:
+        callback(0, eigenvalues, eigenvectors)
 
     for global_step in tqdm.tqdm(range(1, num_power_iteration + 1), desc="power iteration", disable=disable_tqdm):
-        matrix = _mem_saving_matmul(
-            loader=loader, eigenvectors=eigenvectors, chunk_size=chunk_size,
-            device=device, disable_tqdm=disable_tqdm
-        )
+        matrix = _mem_saving_matmul(loader=loader, eigenvectors=eigenvectors, disable_tqdm=disable_tqdm)
         eigenvectors = _orthogonalize(
-            matrix=matrix, chunk_size_2=chunk_size_2,
-            device=device, disable_tqdm=disable_tqdm
+            matrix=matrix, chunk_size=orthogonalization_chunk_size, disable_tqdm=disable_tqdm
         )  # (p, k).
-        eigenvalues = _eigenvectors_to_eigenvalues(
-            loader=loader, eigenvectors=eigenvectors, chunk_size=chunk_size,
-            device=device, disable_tqdm=disable_tqdm
-        )
+        eigenvalues = _eigenvectors_to_eigenvalues(loader=loader, eigenvectors=eigenvectors, disable_tqdm=disable_tqdm)
 
-        if dump_dir is not None:
-            utils.tsave(
-                dict(eigenvalues=eigenvalues, eigenvectors=eigenvectors),
-                utils.join(dump_dir, "all", f"global_step_{global_step:06d}.pt")
-            )
-            utils.tsave(
-                dict(eigenvalues=eigenvalues),
-                utils.join(dump_dir, "eigenvalues", f"global_step_{global_step:06d}.evals")
-            )
+        if callback is not None:
+            callback(global_step, eigenvalues, eigenvectors)
 
-        if global_step % eval_steps == 0:
-            err_abs, err_rel = _check_error(
-                loader=loader, eigenvectors=eigenvectors, chunk_size=chunk_size,
-                device=device, disable_tqdm=disable_tqdm,
-            )
-            logging.warning(f"global_step: {global_step}, abs error: {err_abs:.6f}, rel error: {err_rel:.6f}")
-
-    return eigenvalues, eigenvectors  # noqa
+    return eigenvalues, eigenvectors
 
 
 def _check_error(
@@ -186,12 +163,8 @@ def _mem_saving_matmul(
     return out
 
 
-def _orthogonalize(matrix, device, disable_tqdm: bool, chunk_size_2=20):
-    if device.type == "cuda":
-        devices = tuple(range(torch.cuda.device_count()))
-    else:
-        devices = (device,)
-
+def _orthogonalize(matrix, disable_tqdm: bool, chunk_size):
+    devices = tuple(range(torch.cuda.device_count()))
     matrix_chunks = torch.tensor_split(matrix, len(devices), dim=1)
     matrix_chunks = tuple(
         matrix_chunk.to(matrix_device) for matrix_chunk, matrix_device in utils.zip_(matrix_chunks, devices)
@@ -214,9 +187,9 @@ def _orthogonalize(matrix, device, disable_tqdm: bool, chunk_size_2=20):
         col_ = col_.to(rest_)
         start_idx = 0
         while start_idx < rest_.size(1):
-            batch = rest_[:, start_idx:start_idx + chunk_size_2]
+            batch = rest_[:, start_idx:start_idx + chunk_size]
             batch -= torch.sum(col_ * batch, dim=0) * col_
-            start_idx += chunk_size_2
+            start_idx += chunk_size
 
     for i in tqdm.tqdm(range(matrix.size(1)), desc="orthogonalize", disable=disable_tqdm):
         k, offset = col_idx_to_chunk_idx_and_offset(i)
@@ -237,14 +210,12 @@ def _orthogonalize(matrix, device, disable_tqdm: bool, chunk_size_2=20):
 
 
 def _eigenvectors_to_eigenvalues(
-    loader: DataLoader, eigenvectors: torch.Tensor,
+    loader: DataLoader,
+    eigenvectors: torch.Tensor,
     disable_tqdm: bool,
     **kwargs,
 ):
-    num_cuda_devices = torch.cuda.device_count()
-    assert num_cuda_devices > 0, "v2 is only supported in distributed settings."
-    devices = tuple(range(num_cuda_devices))
-
+    devices = tuple(range(torch.cuda.device_count()))
     evec_chunks = torch.tensor_split(eigenvectors, len(devices), dim=1)
     evec_chunks = tuple(evec_chunk.to(device) for evec_chunk, device in utils.zip_(evec_chunks, devices))
 
