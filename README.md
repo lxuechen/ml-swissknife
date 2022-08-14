@@ -40,4 +40,4 @@ pip install git+https://github.com/lxuechen/ml-swissknife.git
 - Data
     - [ ] UTKFaces
 - wandb
-    - [ ] Project-based helper for downloading files
+    - [x] Project-based helper for downloading files
