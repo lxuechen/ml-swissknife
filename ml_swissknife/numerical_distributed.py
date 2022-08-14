@@ -40,11 +40,9 @@ def orthogonal_iteration(
         k: Number of principal components to return.
         num_power_iteration: Number of power iterations.
         disable_tqdm: If True, disable progress bar.
-        dump_dir: Directory to dump the sequence of results.
         dtype: Precision in string format.
         dim0_chunk_size: Size of chunks for dim0 -- the batch dimension of input_mat.
         orthogonalization_chunk_size: Size of chunks for orthogonalization.
-        eval_steps: Number of steps before a data reconstruction evaluation.
         callback: Optional function to be called after each iteration.
             Takes in position arguments:
                 global_step: Int count of the update just run.
@@ -54,24 +52,7 @@ def orthogonal_iteration(
         eigenvectors: Tensor of selected basis of size (p, k).
         eigenvalues: Tensor of eigenvalues of data.T @ data of size (k,).
     """
-    if isinstance(input_mat, torch.Tensor):
-        input_mat = TensorDataset(input_mat)
-    if isinstance(input_mat, Dataset):
-        loader = DataLoader(
-            dataset=input_mat,
-            batch_size=dim0_chunk_size,
-            shuffle=False,
-            drop_last=False,
-            pin_memory=False,
-        )
-    elif isinstance(input_mat, DataLoader):
-        loader = input_mat
-    else:
-        raise ValueError(
-            f"Expected `input_mat` to be of type `torch.utils.data.DataLoader` or `torch.Tensor`, "
-            f"but found type={type(input_mat)}"
-        )
-
+    loader = _input_mat_to_loader(input_mat, dim0_chunk_size)
     n = sum(batch.size(0) for batch, in loader)
     batch, = next(iter(loader))
     p = batch.size(1)
@@ -96,12 +77,36 @@ def orthogonal_iteration(
     return eigenvalues, eigenvectors
 
 
+def _input_mat_to_loader(input_mat, dim0_chunk_size):
+    if isinstance(input_mat, torch.Tensor):
+        input_mat = TensorDataset(input_mat)
+    if isinstance(input_mat, Dataset):
+        loader = DataLoader(
+            dataset=input_mat,
+            batch_size=dim0_chunk_size,
+            shuffle=False,
+            drop_last=False,
+            pin_memory=False,
+        )
+    elif isinstance(input_mat, DataLoader):
+        loader = input_mat
+    else:
+        raise ValueError(
+            f"Expected `input_mat` to be of type `torch.utils.data.DataLoader` or `torch.Tensor`, "
+            f"but found type={type(input_mat)}"
+        )
+    return loader
+
+
 def check_error(
-    loader: DataLoader,
+    input_mat: Union[DataLoader, Dataset, torch.Tensor],
+    dim0_chunk_size: int,
     eigenvectors: torch.Tensor,
     disable_tqdm: bool,
 ):
     """Check reconstruction error, i.e., norm of A - AQQ^t, where Q is the set of top eigenvectors of A^tA."""
+    loader = _input_mat_to_loader(input_mat, dim0_chunk_size)
+
     devices = _get_devices()
 
     evec_chunks = torch.tensor_split(eigenvectors, len(devices), dim=1)
@@ -221,7 +226,7 @@ def _eigenvectors_to_eigenvalues(
     nums = [torch.zeros_like(den) for den in dens]
     for (batch,) in tqdm.tqdm(loader, disable=disable_tqdm, desc="evec2eval"):
         for chunk_id, chunk in enumerate(evec_chunks):
-            # Don't override `batch` here to prevent weird bugs. Moving batches across GPUs introduces weird issues!
+            # Don't override `batch` here to prevent weird bugs. Moving batches across GPUs introduces issues!
             gpu_batch = batch.to(chunk.device)
             vec = gpu_batch @ chunk  # (nj, ki).
             nums[chunk_id] += (vec ** 2.).sum(dim=0)
