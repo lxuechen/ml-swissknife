@@ -15,15 +15,15 @@ from torch.utils.data import DataLoader, TensorDataset, Dataset
 from ml_swissknife import utils
 
 
-# TODO: Enable specifying chunk size for this algorithm.
+# TODO: Enable further chunking along dim1 of eigenvectors (in matmul and rayleigh) to save memory.
 def orthogonal_iteration(
     input_mat: Union[DataLoader, Dataset, torch.Tensor],
     k: int,
     num_power_iteration=1,
     disable_tqdm=False,
     dtype=torch.float,
-    dim0_chunk_size=10,
     orthogonalization_chunk_size=10,
+    dim0_chunk_size: Optional[int] = None,
     callback: Optional[Callable] = None,
 ):
     """Simultaneous iteration for finding eigenvectors with the largest eigenvalues in absolute value.
@@ -42,7 +42,9 @@ def orthogonal_iteration(
         disable_tqdm: If True, disable progress bar.
         dtype: Precision in string format.
         dim0_chunk_size: Size of chunks for dim0 -- the batch dimension of input_mat.
+            Reduce to save memory in matmul and rayleigh quotient computation.
         orthogonalization_chunk_size: Size of chunks for orthogonalization.
+            Reduce to save memory in Gram-Schmidt.
         callback: Optional function to be called after each iteration.
             Takes in position arguments:
                 global_step: Int count of the update just run.
@@ -81,6 +83,8 @@ def _input_mat_to_loader(input_mat, dim0_chunk_size):
     if isinstance(input_mat, torch.Tensor):
         input_mat = TensorDataset(input_mat)
     if isinstance(input_mat, Dataset):
+        if dim0_chunk_size is None:
+            raise ValueError(f"`dim0_chunk_size` cannot be None when `input_mat` is a Tensor or Dataset.")
         loader = DataLoader(
             dataset=input_mat,
             batch_size=dim0_chunk_size,
@@ -100,9 +104,9 @@ def _input_mat_to_loader(input_mat, dim0_chunk_size):
 
 def check_error(
     input_mat: Union[DataLoader, Dataset, torch.Tensor],
-    dim0_chunk_size: int,
     eigenvectors: torch.Tensor,
-    disable_tqdm: bool,
+    disable_tqdm=False,
+    dim0_chunk_size: Optional[int] = None,
 ):
     """Check reconstruction error, i.e., norm of A - AQQ^t, where Q is the set of top eigenvectors of A^tA."""
     loader = _input_mat_to_loader(input_mat, dim0_chunk_size)
