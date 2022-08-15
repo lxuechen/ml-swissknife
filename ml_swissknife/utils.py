@@ -67,6 +67,13 @@ def int2str(x, leading_zeros=8):
     return f"{x:0{leading_zeros}d}"
 
 
+def average_over_seed(seq_of_seq):  # Here purely due to backward compatibility.
+    min_len = min(len(seq) for seq in seq_of_seq)
+    seq_of_seq = [seq[:min_len] for seq in seq_of_seq]
+    seq_of_seq = np.array(seq_of_seq)
+    return seq_of_seq.mean(0), seq_of_seq.std(0)
+
+
 def average_metric_over_seeds(*seqs: Union[Sequence[Numeric], Sequence[Dict[str, Numeric]]]):
     # seqs is an iterable. Each seq is a sequence of numbers or dicts to average over.
     single_input = len(seqs) == 1
