@@ -33,6 +33,8 @@ def orthogonal_iteration(
     WARNING:
         Good reconstruction of the data does not imply converged eigenvalues!
 
+    This function can be run on CPU, single GPU, or multiple GPUs on a single machine.
+
     Args:
         input_mat: DataLoader or Dataset or torch.Tensor as data.
             The underlying tensor is of size (n, p), and we want the eigenvalues and eigenvectors of a p x p matrix.
