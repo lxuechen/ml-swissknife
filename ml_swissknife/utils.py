@@ -2937,6 +2937,7 @@ def e2e_metrics(
     skip_coco=False,
     skip_mteval=False,
     conda_env_name="e2e_metrics",  # All evaluation is run a separate env so default env is not polluted.
+    use_standard_format_for_bleu_and_rouge_l=True,
 ) -> Optional[dict]:
     """Run e2e-metrics.
 
@@ -2989,6 +2990,11 @@ def e2e_metrics(
     os.system(cmd)
 
     if out_path is not None:
+        numbers = jload(out_path)
+        if use_standard_format_for_bleu_and_rouge_l:
+            numbers["BLEU"] = numbers["BLEU"] * 100.
+            numbers["ROUGE_L"] = numbers["ROUGE_L"] * 100.
+            jdump(out_path, numbers)
         return jload(out_path)
 
 
