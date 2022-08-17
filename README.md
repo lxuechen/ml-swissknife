@@ -25,12 +25,11 @@ pip install git+https://github.com/lxuechen/ml-swissknife.git
     - [x] simultaneous iteration
     - [x] Lanczos
     - [x] spectral density plotting
-    - [ ] distributed simultaneous iteration
+    - [x] distributed simultaneous iteration
 - NLP
     - [x] New token embedding for GPT-2
     - [x] Evaluation pipeline for generation
     - [x] Turk templates
-    - [ ] Decoding utils, fast dataset loading (w/ auto-download)
 - Misc
     - [ ] Fast two-sample test utils
     - [ ] Helper code for calibration metrics (reliability diagram, ECE, Brier score)
@@ -39,5 +38,6 @@ pip install git+https://github.com/lxuechen/ml-swissknife.git
     - [x] Confidence interval utils
 - Data
     - [ ] UTKFaces
+    - [ ] data2text
 - wandb
     - [x] Project-based helper for downloading files

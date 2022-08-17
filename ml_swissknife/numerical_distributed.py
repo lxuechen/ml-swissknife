@@ -21,7 +21,6 @@ def orthogonal_iteration(
     k: int,
     num_power_iteration=1,
     disable_tqdm=False,
-    dtype=torch.float,
     orthogonalization_chunk_size=10,
     dim0_chunk_size: Optional[int] = None,
     callback: Optional[Callable] = None,
@@ -33,6 +32,8 @@ def orthogonal_iteration(
     WARNING:
         Good reconstruction of the data does not imply converged eigenvalues!
 
+    This function can be run on CPU, single GPU, or multiple GPUs on a single machine.
+
     Args:
         input_mat: DataLoader or Dataset or torch.Tensor as data.
             The underlying tensor is of size (n, p), and we want the eigenvalues and eigenvectors of a p x p matrix.
@@ -40,7 +41,6 @@ def orthogonal_iteration(
         k: Number of principal components to return.
         num_power_iteration: Number of power iterations.
         disable_tqdm: If True, disable progress bar.
-        dtype: Precision in string format.
         dim0_chunk_size: Size of chunks for dim0 -- the batch dimension of input_mat.
             Reduce to save memory in matmul and rayleigh quotient computation.
         orthogonalization_chunk_size: Size of chunks for orthogonalization.
@@ -61,7 +61,7 @@ def orthogonal_iteration(
     k = min(k, p, n)
 
     eigenvalues = None
-    eigenvectors = torch.randn(size=(p, k), dtype=dtype)  # This step will be very slow for large models.
+    eigenvectors = torch.randn(size=(p, k), dtype=batch.dtype)  # This step will be very slow for large models.
 
     if callback is not None:
         callback(0, eigenvalues, eigenvectors)
