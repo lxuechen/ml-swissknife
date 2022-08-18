@@ -3001,7 +3001,7 @@ def e2e_metrics(
         if use_standard_format_for_bleu_and_rouge_l:
             numbers["BLEU"] = numbers["BLEU"] * 100.
             numbers["ROUGE_L"] = numbers["ROUGE_L"] * 100.
-            jdump(out_path, numbers)
+            jdump(numbers, out_path)
         return jload(out_path)
 
 
