@@ -3082,7 +3082,11 @@ def get_seq_len_dist_enc_dec(
     for split in splits:
         enc_counts_map, dec_counts_map, cat_counts_map = tuple(dict() for _ in range(3))  # seq_len -> count
         enc_counts_list, dec_counts_list, cat_counts_list = tuple([] for _ in range(3))
-        for idx, instance in tqdm.tqdm(enumerate(hf_datadict[split]), desc=split):
+        for idx, instance in tqdm.tqdm(
+            enumerate(hf_datadict[split]),
+            desc=split,
+            total=min(maxsize, len(hf_datadict[split])),
+        ):
             if idx >= maxsize:
                 break
 
