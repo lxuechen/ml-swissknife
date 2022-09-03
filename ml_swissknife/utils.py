@@ -3063,3 +3063,53 @@ def gem_metrics(
 
     if out_path is not None:
         return jload(out_path)
+
+
+# NLP stuff.
+def get_seq_len_dist_enc_dec(
+    tokenizer,
+    hf_datadict,
+    enc_key: str,
+    dec_key: str,
+    splits=("train", "test"),
+    verbose=True,
+):
+    """Get the sequence length distribution of an encoder-decoder setting."""
+    _increment_key_for_dict = lambda d, k: d.update({k: d[k] + 1}) if k in d else d.update({k: 1})
+
+    result = dict()
+    for split in splits:
+        enc_counts_map, dec_counts_map, cat_counts_map = tuple(dict() for _ in range(3))  # seq_len -> count
+        enc_counts_list, dec_counts_list, cat_counts_list = tuple([] for _ in range(3))
+        for instance in tqdm.tqdm(hf_datadict[split], desc=split):
+            enc_len = len(tokenizer(instance[enc_key])["input_ids"])
+            dec_len = len(tokenizer(instance[dec_key])["input_ids"])
+            cat_len = enc_len + dec_len  # length of concatenated sequence
+
+            _increment_key_for_dict(enc_counts_map, enc_len)
+            _increment_key_for_dict(dec_counts_map, dec_len)
+            _increment_key_for_dict(cat_counts_map, cat_len)
+
+            enc_counts_list.append(enc_len)
+            dec_counts_list.append(dec_len)
+            cat_counts_list.append(cat_len)
+
+        result[split] = dict(
+            enc_counts_map=enc_counts_map,
+            dec_counts_map=dec_counts_map,
+            cat_counts_map=cat_counts_map,
+            enc_counts_list=enc_counts_list,
+            dec_counts_list=dec_counts_list,
+            cat_counts_list=cat_counts_list,
+        )
+        if verbose:
+            print(jdumps(result, indent=4))
+            plot(
+                hists=[
+                    dict(x=enc_counts_list, label='enc'),
+                    dict(x=dec_counts_list, label='dec'),
+                    dict(x=cat_counts_list, label='cat'),
+                ],
+                options=dict(title=split),
+            )
+    return result
