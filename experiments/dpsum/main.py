@@ -163,7 +163,7 @@ def main(
 
     # training
     per_device_train_batch_size=2,
-    per_device_eval_batch_size=512,
+    per_device_eval_batch_size=2,
     gradient_accumulation_steps=256,
     lr=5e-4,
     num_warmup_steps=0,
@@ -237,6 +237,7 @@ def main(
             epochs=epochs,
         )
         privacy_engine.attach(optimizer)
+        logging.warning(f'Starting private training: \n{privacy_engine}')
 
     train(
         model, optimizer, lr_scheduler, train_dataloader, eval_dataloader,
