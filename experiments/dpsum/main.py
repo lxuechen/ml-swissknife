@@ -3,16 +3,18 @@ import logging
 import sys
 from dataclasses import dataclass
 from typing import Tuple, List, Union, Dict, Optional
-
+import wandb
 import fire
+import private_transformers
 import torch
 import torch.nn.functional as F
 import tqdm
 import transformers
-from ml_swissknife import utils
 from torch import optim
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset, DataLoader
+
+from ml_swissknife import utils
 
 ignore_index = -100  # In `F.cross_entropy`.
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -95,8 +97,7 @@ class DataCollatorForData2TextLanguageModeling:
 @torch.enable_grad()
 def train(
     model, optimizer, lr_scheduler, train_loader, eval_loader,
-    epochs: int, gradient_accumulation_steps: int,
-    non_private=True,
+    epochs: int, gradient_accumulation_steps: int, non_private: bool,
 ):
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
         optimizer.zero_grad()
@@ -151,7 +152,7 @@ def inference(model, loader, max_eval_batches=sys.maxsize):
 
 def main(
     # model
-    model_name_or_path="gpt2",
+    model_name_or_path="gpt2-xl",
     pad_token="[PAD]",
 
     # data
@@ -173,7 +174,23 @@ def main(
     clipping_mode="default",
     max_train_size=sys.maxsize,
     max_test_size=sys.maxsize,
+    lora_r=4,
+    lora_alpha=32.,
+    seed=42,
 ):
+    wandb.init(
+        project="sum-debug",
+        config=dict(
+            target_epsilon=target_epsilon,
+            lora_r=lora_r,
+            seed=seed,
+        ),
+        name=f"target_epsilon_{target_epsilon}_"
+             f"lora_r_{lora_r}_"
+             f"seed_{seed}"
+    )
+    utils.manual_seed(seed)
+
     tokenizer = transformers.GPT2Tokenizer.from_pretrained(model_name_or_path)
 
     train_dataset = SamsumDataset(tokenizer=tokenizer, path=train_dataset_path, max_size=max_train_size)
@@ -196,7 +213,9 @@ def main(
         special_tokens_dict=dict(pad_token=pad_token), model=model, tokenizer=tokenizer
     )
     # These lines are important for privacy engine to work properly!!!
-    model.train().requires_grad_(True)
+    private_transformers.lora_utils.convert_gpt2_attention_to_lora(model, lora_r=lora_r, lora_alpha=lora_alpha)
+    private_transformers.lora_utils.mark_only_lora_as_trainable(model)
+    model.train()
     optimizable_params = tuple(param for param in model.parameters() if param.requires_grad)
     optimizer = optim.Adam(params=optimizable_params, lr=lr, weight_decay=weight_decay)
     lr_scheduler = transformers.get_linear_schedule_with_warmup(
@@ -205,7 +224,6 @@ def main(
 
     non_private = target_epsilon is None or target_epsilon <= 0.
     if not non_private:
-        import private_transformers
         privacy_engine = private_transformers.PrivacyEngine(
             module=model,
             clipping_mode=clipping_mode,
@@ -220,8 +238,7 @@ def main(
 
     train(
         model, optimizer, lr_scheduler, train_dataloader, eval_dataloader,
-        epochs, gradient_accumulation_steps,
-        non_private
+        epochs, gradient_accumulation_steps, non_private
     )
 
 
