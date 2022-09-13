@@ -79,6 +79,7 @@ class SamsumPromptDataset(Dataset):  # Left pad prompt dataset.
 
         filtered_count = 0
         contexts = []
+        references = []
         for index, line in tqdm.tqdm(enumerate(lines), desc="load lines", total=min(max_size, len(lines))):
             if index >= max_size:
                 break
@@ -93,16 +94,21 @@ class SamsumPromptDataset(Dataset):  # Left pad prompt dataset.
                 filtered_count += 1
                 continue
             contexts.append(packet["context"])
+            references.append(packet["completion"])
 
-        tokenized = tokenizer(contexts, padding=True, return_tensors="pt")
-        self.input_ids = tokenized["input_ids"]
-        self.attention_mask = tokenized["attention_mask"]
+        contexts_tokenized = tokenizer(contexts, padding=True, return_tensors="pt")
+        self.input_ids = contexts_tokenized["input_ids"]
+        self.attention_mask = contexts_tokenized["attention_mask"]
+
+        references_tokenized = tokenizer(references, padding=True, return_tensors="pt")
+        self.references = references_tokenized["input_ids"]
 
         logging.warning(f'filtered {filtered_count} examples due to exceeding context window size.')
         logging.warning(f'sample size after filtering: {len(self.input_ids)}')
 
     def __getitem__(self, item: int):
-        return {"input_ids": self.input_ids[item], "attention_mask": self.attention_mask[item]}
+        return {"input_ids": self.input_ids[item], "attention_mask": self.attention_mask[item],
+                "references": self.references[item]}
 
     def __len__(self):
         return len(self.input_ids)
@@ -168,8 +174,11 @@ def train(
             )
 
             if global_step % eval_steps == 0:
-                refs, gens, fulls = decode(model, tokenizer, prompt_loader, max_eval_batches=max_eval_batches)
-                decoded = [dict(ref=ref, gen=gen, full=full) for ref, gen, full in utils.zip_(refs, gens, fulls)]
+                ctxs, gens, refs, fulls = decode(model, tokenizer, prompt_loader, max_eval_batches=max_eval_batches)
+                decoded = [
+                    dict(ctx=ctx, gen=gen, ref=ref, full=full)
+                    for ctx, gen, ref, full in utils.zip_(ctxs, gens, refs, fulls)
+                ]
                 utils.jdump(decoded, utils.join(train_dir, 'generations', f'eval_global_step_{global_step:06d}.txt'))
 
                 eval_loss = inference(model, eval_loader, max_eval_batches=max_eval_batches)
@@ -206,7 +215,7 @@ def inference(model, loader, max_eval_batches=sys.maxsize):
 @torch.inference_mode()
 def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=200, num_beams=4):
     logging.warning('decoding...')
-    references, full_generations, generations = [], [], []
+    contexts, generations, references, full_generations = [], [], [], []
 
     model.eval()
     for i, batch in tqdm.tqdm(enumerate(loader), desc="decode", total=min(max_eval_batches, len(loader))):
@@ -225,15 +234,16 @@ def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=20
             pad_token_id=tokenizer.pad_token_id,
         )
         completion_ids = output_ids[:, input_ids.size(dim=1):]
+        reference_ids = batch["references"]
 
         for target_list, tokens in utils.zip_(
-            (references, generations, full_generations), (input_ids, completion_ids, output_ids)
+            (contexts, generations, full_generations), (input_ids, completion_ids, reference_ids, output_ids)
         ):
             # Here, the `tokenizer.padding_side` doesn't quite matter.
             target_list.extend(
                 tokenizer.batch_decode(tokens, clean_up_tokenization_spaces=True, skip_special_tokens=True)
             )
-    return references, generations, full_generations
+    return contexts, generations, references, full_generations
 
 
 def main(
