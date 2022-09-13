@@ -102,6 +102,7 @@ def train(
         optimizer.zero_grad()
 
         for step, batch in tqdm.tqdm(enumerate(train_loader, 1), desc="one epoch", total=len(train_loader)):
+            model.train()
             loss = compute_loss(model, batch)
 
             if non_private:
@@ -138,6 +139,7 @@ def compute_loss(model, batch) -> torch.Tensor:  # 1-D tensor.
 
 @torch.inference_mode()
 def inference(model, loader, max_eval_batches=sys.maxsize):
+    model.eval()
     losses = []
     for i, batch in enumerate(loader):
         if i >= max_eval_batches:
@@ -193,8 +195,10 @@ def main(
     utils.smart_tokenizer_and_embedding_resize(
         special_tokens_dict=dict(pad_token=pad_token), model=model, tokenizer=tokenizer
     )
-
-    optimizer = optim.Adam(params=model.parameters(), lr=lr, weight_decay=weight_decay)
+    # These lines are important for privacy engine to work properly!!!
+    model.train().requires_grad_(True)
+    optimizable_params = tuple(param for param in model.parameters() if param.requires_grad)
+    optimizer = optim.Adam(params=optimizable_params, lr=lr, weight_decay=weight_decay)
     lr_scheduler = transformers.get_linear_schedule_with_warmup(
         optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=epochs,
     )
