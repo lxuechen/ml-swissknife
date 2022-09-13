@@ -67,6 +67,20 @@ def int2str(x, leading_zeros=8):
     return f"{x:0{leading_zeros}d}"
 
 
+def dict2str(d: dict):
+    """Return a pretty string version of the dictionary.
+
+    Useful for annotating runs based on hparams and configs.
+    """
+    output_str = ""
+    for index, (key, val) in enumerate(d.items(), 1):
+        if index < len(d):
+            output_str = output_str + f"{key}_{val}-"
+        else:
+            output_str = output_str + f"{key}_{val}"
+    return output_str
+
+
 def average_over_seed(seq_of_seq):  # Here purely due to backward compatibility.
     min_len = min(len(seq) for seq in seq_of_seq)
     seq_of_seq = [seq[:min_len] for seq in seq_of_seq]

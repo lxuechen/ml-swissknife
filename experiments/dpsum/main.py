@@ -182,7 +182,7 @@ def train(
                 utils.jdump(decoded, utils.join(train_dir, 'generations', f'eval_global_step_{global_step:06d}.txt'))
 
                 eval_loss = inference(model, eval_loader, max_eval_batches=max_eval_batches)
-                logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}")
+                logging.warning(f"epoch: {epoch}, global_step: {global_step}, eval_loss: {eval_loss:.4f}")
                 wandb.log({"eval_loss": eval_loss})
 
 
@@ -237,7 +237,8 @@ def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=20
         reference_ids = batch["references"]
 
         for target_list, tokens in utils.zip_(
-            (contexts, generations, full_generations), (input_ids, completion_ids, reference_ids, output_ids)
+            (contexts, generations, references, full_generations),
+            (input_ids, completion_ids, reference_ids, output_ids)
         ):
             # Here, the `tokenizer.padding_side` doesn't quite matter.
             target_list.extend(
@@ -246,8 +247,14 @@ def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=20
     return contexts, generations, references, full_generations
 
 
+class NoOpScheduler(object):
+    def step(self):
+        pass
+
+
 def main(
     # model
+    project="sum-debug",
     train_dir=utils.join(utils.home, "dump", "samsum"),
     model_name_or_path="gpt2-xl",
 
@@ -261,6 +268,7 @@ def main(
     per_device_prompt_batch_size=2,
     gradient_accumulation_steps=256,
     lr=5e-4,
+    lr_decay=False,
     num_warmup_steps=0,
     weight_decay=0.,
     epochs=5,
@@ -273,20 +281,22 @@ def main(
     clipping_mode="default",
     max_train_size=sys.maxsize,
     max_test_size=sys.maxsize,
-    lora_r=4,
+    lora_r=16,
     lora_alpha=32.,
     seed=42,
 ):
+    config = dict(
+        target_epsilon=target_epsilon,
+        lora_r=lora_r,
+        lr=lr,
+        lr_decay=lr_decay,
+        epochs=epochs,
+        seed=seed,
+    )
     wandb.init(
-        project="sum-debug",
-        config=dict(
-            target_epsilon=target_epsilon,
-            lora_r=lora_r,
-            seed=seed,
-        ),
-        name=f"target_epsilon_{target_epsilon}_"
-             f"lora_r_{lora_r}_"
-             f"seed_{seed}"
+        project=project,
+        config=config,
+        name=utils.dict2str(config)
     )
     utils.manual_seed(seed)
 
@@ -324,9 +334,12 @@ def main(
     optimizable_params = tuple(param for param in model.parameters() if param.requires_grad)
     optimizer = optim.Adam(params=optimizable_params, lr=lr, weight_decay=weight_decay)
     num_training_steps = (len(train_dataset) // (per_device_train_batch_size * gradient_accumulation_steps)) * epochs
-    lr_scheduler = transformers.get_linear_schedule_with_warmup(
-        optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps,
-    )
+    if lr_decay:
+        lr_scheduler = transformers.get_linear_schedule_with_warmup(
+            optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps,
+        )
+    else:
+        lr_scheduler = NoOpScheduler()
 
     non_private = target_epsilon is None or target_epsilon <= 0.
     if not non_private:
