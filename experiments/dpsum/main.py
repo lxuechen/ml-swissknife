@@ -163,7 +163,9 @@ def train(
                 else:
                     optimizer.virtual_step(loss=loss)
             global_step += 1
-            pbar.set_description(f"one epoch. train loss (ema): {train_loss_meter.item():.4f}")
+            pbar.set_description(
+                f"one epoch. train loss (ema): {train_loss_meter.item():.4f}, lr: {utils.get_lr(optimizer):.6f}"
+            )
 
             if global_step % eval_steps == 0:
                 refs, gens, fulls = decode(model, tokenizer, prompt_loader, max_eval_batches=max_eval_batches)
@@ -171,7 +173,7 @@ def train(
                 utils.jdump(decoded, utils.join(train_dir, 'generations', f'eval_global_step_{global_step:06d}.txt'))
 
                 eval_loss = inference(model, eval_loader, max_eval_batches=max_eval_batches)
-                logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}, lr: {utils.get_lr(optimizer)}")
+                logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}")
                 wandb.log({"eval_loss": eval_loss})
 
 
@@ -311,8 +313,9 @@ def main(
     model.train()
     optimizable_params = tuple(param for param in model.parameters() if param.requires_grad)
     optimizer = optim.Adam(params=optimizable_params, lr=lr, weight_decay=weight_decay)
+    num_training_steps = (len(train_dataset) // (per_device_train_batch_size * gradient_accumulation_steps)) * epochs
     lr_scheduler = transformers.get_linear_schedule_with_warmup(
-        optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=epochs,
+        optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps,
     )
 
     non_private = target_epsilon is None or target_epsilon <= 0.
