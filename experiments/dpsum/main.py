@@ -135,9 +135,10 @@ class DataCollatorForData2TextLanguageModeling:
 
 @torch.enable_grad()
 def train(
-    model, tokenizer, optimizer, lr_scheduler, train_loader, eval_loader, prompt_loader,
-    epochs: int, gradient_accumulation_steps: int, non_private: bool,
+    train_dir, model, tokenizer, optimizer, lr_scheduler, train_loader, eval_loader, prompt_loader,
+    epochs: int, gradient_accumulation_steps: int, non_private: bool, eval_steps: int, max_eval_batches: int,
 ):
+    global_step = 0
     train_loss_meter = utils.EMAMeter()
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
         optimizer.zero_grad()
@@ -161,14 +162,17 @@ def train(
                     lr_scheduler.step()
                 else:
                     optimizer.virtual_step(loss=loss)
+            global_step += 1
             pbar.set_description(f"one epoch. train loss (ema): {train_loss_meter.item():.4f}")
 
-        eval_loss = inference(model, eval_loader)
-        logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}, lr: {utils.get_lr(optimizer)}")
-        wandb.log({"eval_loss": eval_loss})
+            if global_step % eval_steps == 0:
+                refs, gens, fulls = decode(model, tokenizer, prompt_loader, max_eval_batches=max_eval_batches)
+                decoded = [dict(ref=ref, gen=gen, full=full) for ref, gen, full in utils.zip_(refs, gens, fulls)]
+                utils.jdump(decoded, utils.join(train_dir, 'generations', f'eval_global_step_{global_step:06d}.txt'))
 
-        # TODO: Upload generated text to wandb.
-        decode(model, tokenizer, prompt_loader)
+                eval_loss = inference(model, eval_loader, max_eval_batches=max_eval_batches)
+                logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}, lr: {utils.get_lr(optimizer)}")
+                wandb.log({"eval_loss": eval_loss})
 
 
 def compute_loss(model, batch) -> torch.Tensor:  # 1-D tensor.
@@ -227,11 +231,12 @@ def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=20
             target_list.extend(
                 tokenizer.batch_decode(tokens, clean_up_tokenization_spaces=True, skip_special_tokens=True)
             )
-    return references, full_generations, generations
+    return references, generations, full_generations
 
 
 def main(
     # model
+    train_dir=utils.join(utils.home, "dump", "samsum"),
     model_name_or_path="gpt2-xl",
 
     # data
@@ -247,6 +252,8 @@ def main(
     num_warmup_steps=0,
     weight_decay=0.,
     epochs=5,
+    eval_steps=500,
+    max_eval_batches=5,
 
     # privacy
     target_epsilon: Optional[float] = None,
@@ -325,8 +332,8 @@ def main(
         logging.warning(f'Starting private training: \n{privacy_engine}')
 
     train(
-        model, tokenizer, optimizer, lr_scheduler, train_dataloader, eval_dataloader, prompt_dataloader,
-        epochs, gradient_accumulation_steps, non_private
+        train_dir, model, tokenizer, optimizer, lr_scheduler, train_dataloader, eval_dataloader, prompt_dataloader,
+        epochs, gradient_accumulation_steps, non_private, eval_steps, max_eval_batches,
     )
 
 
