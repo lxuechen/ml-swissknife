@@ -138,15 +138,18 @@ def train(
     model, tokenizer, optimizer, lr_scheduler, train_loader, eval_loader, prompt_loader,
     epochs: int, gradient_accumulation_steps: int, non_private: bool,
 ):
+    train_loss_meter = utils.EMAMeter()
     for epoch in tqdm.tqdm(range(epochs), desc="epochs"):
         optimizer.zero_grad()
 
-        for step, batch in tqdm.tqdm(enumerate(train_loader, 1), desc="one epoch", total=len(train_loader)):
+        pbar = tqdm.tqdm(enumerate(train_loader, 1), desc="one epoch", total=len(train_loader))
+        for step, batch in pbar:
             model.train()
             loss = compute_loss(model, batch)
+            train_loss_meter.step(loss.mean(dim=0).item())
 
             if non_private:
-                loss.mean(dim=0).backward()
+                (loss.mean(dim=0) / gradient_accumulation_steps).backward()
                 if step % gradient_accumulation_steps == 0:
                     optimizer.step()
                     optimizer.zero_grad()
@@ -158,6 +161,7 @@ def train(
                     lr_scheduler.step()
                 else:
                     optimizer.virtual_step(loss=loss)
+            pbar.set_description(f"one epoch. train loss (ema): {train_loss_meter.item():.4f}")
 
         eval_loss = inference(model, eval_loader)
         logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}, lr: {utils.get_lr(optimizer)}")
