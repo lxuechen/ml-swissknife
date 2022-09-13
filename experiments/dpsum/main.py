@@ -159,11 +159,12 @@ def train(
                 else:
                     optimizer.virtual_step(loss=loss)
 
-            decode(model, tokenizer, prompt_loader)
-
         eval_loss = inference(model, eval_loader)
         logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}, lr: {utils.get_lr(optimizer)}")
         wandb.log({"eval_loss": eval_loss})
+
+        # TODO: Upload generated text to wandb.
+        decode(model, tokenizer, prompt_loader)
 
 
 def compute_loss(model, batch) -> torch.Tensor:  # 1-D tensor.
@@ -193,11 +194,12 @@ def inference(model, loader, max_eval_batches=sys.maxsize):
 
 
 @torch.inference_mode()
-def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=200, num_beams=5):
+def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=200, num_beams=4):
+    logging.warning('decoding...')
     references, full_generations, generations = [], [], []
 
     model.eval()
-    for i, batch in enumerate(loader):
+    for i, batch in tqdm.tqdm(enumerate(loader), desc="decode", total=min(max_eval_batches, len(loader))):
         if i >= max_eval_batches:
             break
         input_ids = batch["input_ids"].to(device)
@@ -235,7 +237,7 @@ def main(
     # training
     per_device_train_batch_size=2,
     per_device_eval_batch_size=4,
-    per_device_prompt_batch_size=1,
+    per_device_prompt_batch_size=2,
     gradient_accumulation_steps=256,
     lr=5e-4,
     num_warmup_steps=0,
