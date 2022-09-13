@@ -3,7 +3,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from typing import Tuple, List, Union, Dict, Optional
-import wandb
+
 import fire
 import private_transformers
 import torch
@@ -14,6 +14,7 @@ from torch import optim
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset, DataLoader
 
+import wandb
 from ml_swissknife import utils
 
 ignore_index = -100  # In `F.cross_entropy`.
@@ -122,6 +123,7 @@ def train(
 
         eval_loss = inference(model, eval_loader)
         logging.warning(f"epoch: {epoch}, eval_loss: {eval_loss:.4f}, lr: {utils.get_lr(optimizer)}")
+        wandb.log({"eval_loss": eval_loss})
 
 
 def compute_loss(model, batch) -> torch.Tensor:  # 1-D tensor.
@@ -160,13 +162,13 @@ def main(
     eval_dataset_path="/home/t-lc/software_v2/GPT3/nlg_datasets/instruct_samsum/test.txt",
 
     # training
-    per_device_train_batch_size=4,
+    per_device_train_batch_size=2,
     per_device_eval_batch_size=512,
-    gradient_accumulation_steps=128,
-    lr=1e-3,
+    gradient_accumulation_steps=256,
+    lr=5e-4,
     num_warmup_steps=0,
     weight_decay=0.,
-    epochs=10,
+    epochs=5,
 
     # privacy
     target_epsilon: Optional[float] = None,
