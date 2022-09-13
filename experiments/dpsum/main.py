@@ -164,7 +164,7 @@ def train(
                     optimizer.virtual_step(loss=loss)
             global_step += 1
             pbar.set_description(
-                f"one epoch. train loss (ema): {train_loss_meter.item():.4f}, lr: {utils.get_lr(optimizer):.6f}"
+                f"one epoch. train loss (ema): {train_loss_meter.item():.4f}, lr: {utils.get_lr(optimizer):.8f}"
             )
 
             if global_step % eval_steps == 0:
