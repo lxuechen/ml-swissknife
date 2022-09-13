@@ -255,7 +255,6 @@ class NoOpScheduler(object):
 def main(
     # model
     project="sum-debug",
-    train_dir=utils.join(utils.home, "dump", "samsum"),
     model_name_or_path="gpt2-xl",
 
     # data
@@ -264,7 +263,7 @@ def main(
 
     # training
     per_device_train_batch_size=2,
-    per_device_eval_batch_size=4,
+    per_device_eval_batch_size=2,
     per_device_prompt_batch_size=2,
     gradient_accumulation_steps=256,
     lr=5e-4,
@@ -281,7 +280,7 @@ def main(
     clipping_mode="default",
     max_train_size=sys.maxsize,
     max_test_size=sys.maxsize,
-    lora_r=16,
+    lora_r=8,
     lora_alpha=32.,
     seed=42,
 ):
@@ -293,11 +292,9 @@ def main(
         epochs=epochs,
         seed=seed,
     )
-    wandb.init(
-        project=project,
-        config=config,
-        name=utils.dict2str(config)
-    )
+    config_str = utils.dict2str(config)
+    train_dir = utils.join(utils.home, project, config_str)
+    wandb.init(project=project, config=config, name=config_str)
     utils.manual_seed(seed)
 
     tokenizer = transformers.GPT2Tokenizer.from_pretrained(model_name_or_path)
