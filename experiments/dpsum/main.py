@@ -142,7 +142,8 @@ class DataCollatorForData2TextLanguageModeling:
 @torch.enable_grad()
 def train(
     train_dir, model, tokenizer, optimizer, lr_scheduler, train_loader, eval_loader, prompt_loader,
-    epochs: int, gradient_accumulation_steps: int, non_private: bool, eval_steps: int, max_eval_batches: int,
+    epochs: int, gradient_accumulation_steps: int, non_private: bool,
+    eval_steps: int, max_eval_batches: int, decode_steps: int, max_decode_batches: int,
 ):
     global_step = 0
     train_loss_meter = utils.EMAMeter()
@@ -174,16 +175,28 @@ def train(
             )
 
             if global_step % eval_steps == 0:
-                ctxs, gens, refs, fulls = decode(model, tokenizer, prompt_loader, max_eval_batches=max_eval_batches)
+                eval_loss = inference(model, eval_loader, max_eval_batches=max_eval_batches)
+                logging.warning(f"epoch: {epoch}, global_step: {global_step}, eval_loss: {eval_loss:.4f}")
+                wandb.log({"eval_loss": eval_loss})
+
+            if global_step % decode_steps == 0:
+                ctxs, gens, refs, fulls = decode(model, tokenizer, prompt_loader, max_decode_batches=max_decode_batches)
                 decoded = [
                     dict(ctx=ctx, gen=gen, ref=ref, full=full)
                     for ctx, gen, ref, full in utils.zip_(ctxs, gens, refs, fulls)
                 ]
                 utils.jdump(decoded, utils.join(train_dir, 'generations', f'eval_global_step_{global_step:06d}.txt'))
 
-                eval_loss = inference(model, eval_loader, max_eval_batches=max_eval_batches)
-                logging.warning(f"epoch: {epoch}, global_step: {global_step}, eval_loss: {eval_loss:.4f}")
-                wandb.log({"eval_loss": eval_loss})
+    # eval and decode at the end.
+    eval_loss = inference(model, eval_loader)
+    logging.warning(f"final, eval_loss: {eval_loss:.4f}")
+    wandb.log({"eval_loss": eval_loss})
+
+    ctxs, gens, refs, fulls = decode(model, tokenizer, prompt_loader)
+    decoded = [
+        dict(ctx=ctx, gen=gen, ref=ref, full=full) for ctx, gen, ref, full in utils.zip_(ctxs, gens, refs, fulls)
+    ]
+    utils.jdump(decoded, utils.join(train_dir, 'generations', f'eval_final.txt'))
 
 
 def compute_loss(model, batch) -> torch.Tensor:  # 1-D tensor.
@@ -213,13 +226,13 @@ def inference(model, loader, max_eval_batches=sys.maxsize):
 
 
 @torch.inference_mode()
-def decode(model, tokenizer, loader, max_eval_batches=sys.maxsize, max_length=200, num_beams=4):
+def decode(model, tokenizer, loader, max_decode_batches=sys.maxsize, max_length=200, num_beams=4):
     logging.warning('decoding...')
     contexts, generations, references, full_generations = [], [], [], []
 
     model.eval()
-    for i, batch in tqdm.tqdm(enumerate(loader), desc="decode", total=min(max_eval_batches, len(loader))):
-        if i >= max_eval_batches:
+    for i, batch in tqdm.tqdm(enumerate(loader), desc="decode", total=min(max_decode_batches, len(loader))):
+        if i >= max_decode_batches:
             break
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
@@ -271,8 +284,10 @@ def main(
     num_warmup_steps=0,
     weight_decay=0.,
     epochs=5,
-    eval_steps=500,
+    eval_steps=5000,
     max_eval_batches=5,
+    decode_steps=5000,
+    max_decode_batches=sys.maxsize,
 
     # privacy
     target_epsilon: Optional[float] = None,
@@ -356,7 +371,7 @@ def main(
 
     train(
         train_dir, model, tokenizer, optimizer, lr_scheduler, train_dataloader, eval_dataloader, prompt_dataloader,
-        epochs, gradient_accumulation_steps, non_private, eval_steps, max_eval_batches,
+        epochs, gradient_accumulation_steps, non_private, eval_steps, max_eval_batches, decode_steps, max_decode_batches
     )
 
 

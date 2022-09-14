@@ -10,7 +10,9 @@ def _get_cmd(project, target_epsilon, lr, lr_decay, seed):
         --lr_decay {lr_decay} \
         --per_device_train_batch_size 2 \
         --gradient_accumulation_steps 256 \
-        --max_eval_batches 1000 \
+        --max_eval_batches 4 \
+        --max_decode_batches 4 \
+        --decode_steps 5000 \
         --epochs 5 \
         --seed {seed}
     '''
