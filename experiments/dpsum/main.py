@@ -316,7 +316,7 @@ def main(
         seed=seed,
     )
     config_str = utils.dict2str(config)
-    train_dir = utils.join(utils.home, project, config_str)
+    train_dir = utils.join(utils.home, 'dump', project, config_str)
     wandb.init(project=project, config=config, name=config_str)
     utils.manual_seed(seed)
 

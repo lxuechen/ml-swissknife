@@ -1,4 +1,6 @@
+# gpt2-xl lora samsum epsilon=1
 import fire
+
 from ml_swissknife import utils
 
 
@@ -20,8 +22,8 @@ def _get_cmd(project, target_epsilon, lr, lr_decay, seed):
 
 def main(
     seeds=(42, 1000, 1023929),
-    project="samsum-091322",
-    target_epsilon=4,
+    project="samsum_091422",
+    target_epsilon=1,
     lr=1e-4,
     lr_decay=False,
 ):
