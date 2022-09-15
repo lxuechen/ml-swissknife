@@ -1,3 +1,11 @@
+"""Install requirements
+
+pip install git+https://github.com/lxuechen/private-transformers.git
+pip install ml-swissknife
+pip install transformers evaluate
+(also install torch with cuda support)
+"""
+
 import copy
 import json
 import logging
@@ -271,8 +279,8 @@ def main(
     model_name_or_path="gpt2-xl",
 
     # data
-    train_dataset_path="/home/t-lc/software_v2/GPT3/nlg_datasets/instruct_samsum/train.jsonl",
-    eval_dataset_path="/home/t-lc/software_v2/GPT3/nlg_datasets/instruct_samsum/test.txt",
+    train_dataset_path="./instruct_samsum/train.jsonl",
+    eval_dataset_path="./instruct_samsum/test.txt",
 
     # training
     per_device_train_batch_size=2,
