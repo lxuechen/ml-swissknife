@@ -19,11 +19,12 @@ def samsum_rouge(
     return results
 
 
-# TODO: avg over seed
 seeds = (1000, 42, 1023929)
 res = []
 for seed in seeds:
     out_file = f"/home/t-lc/samsum-091322/target_epsilon_4-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
+    out_file = f"/home/t-lc/dump/samsum_091422/target_epsilon_1-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
+    out_file = f"/home/t-lc/dump/samsum_091422_v2/target_epsilon_0-lora_r_8-lr_0.0001-lr_decay_True-epochs_5-seed_{seed}/generations/eval_final.txt"
     res.append(samsum_rouge(out_file))
 print(res)
 print(
