@@ -306,6 +306,7 @@ def main(
     lora_r=8,
     lora_alpha=32.,
     seed=42,
+    eps_error=0.1,
 ):
     config = dict(
         target_epsilon=target_epsilon,
@@ -373,6 +374,7 @@ def main(
             max_grad_norm=max_grad_norm,
             epochs=epochs,
             accounting_mode="glw",
+            eps_error=eps_error,
         )
         privacy_engine.attach(optimizer)
         logging.warning(f'Starting private training: \n{privacy_engine}')
