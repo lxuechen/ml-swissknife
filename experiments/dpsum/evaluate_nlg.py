@@ -25,8 +25,12 @@ for seed in seeds:
     out_file = f"/home/t-lc/samsum-091322/target_epsilon_4-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
     out_file = f"/home/t-lc/dump/samsum_091422/target_epsilon_1-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
     out_file = f"/home/t-lc/dump/samsum_091422_v2/target_epsilon_0-lora_r_8-lr_0.0001-lr_decay_True-epochs_5-seed_{seed}/generations/eval_final.txt"
+    out_file = f"/home/t-lc/dump/samsum_091522/target_epsilon_0.25-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
     res.append(samsum_rouge(out_file))
-print(res)
+print('original score')
+print(utils.jdumps(res))
+
+print('avg score')
 print(
-    utils.average_metric_over_seeds(res)
+    utils.jdumps(utils.average_metric_over_seeds(res))
 )
