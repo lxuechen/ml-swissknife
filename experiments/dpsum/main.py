@@ -303,7 +303,7 @@ def main(
     clipping_mode="default",
     max_train_size=sys.maxsize,
     max_test_size=sys.maxsize,
-    lora_r=8,
+    lora_r=16,
     lora_alpha=32.,
     seed=42,
     eps_error=0.1,
