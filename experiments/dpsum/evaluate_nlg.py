@@ -20,17 +20,13 @@ def samsum_rouge(
 
 
 seeds = (1000, 42, 1023929)
-res = []
-for seed in seeds:
-    out_file = f"/home/t-lc/samsum-091322/target_epsilon_4-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
-    out_file = f"/home/t-lc/dump/samsum_091422/target_epsilon_1-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
-    out_file = f"/home/t-lc/dump/samsum_091422_v2/target_epsilon_0-lora_r_8-lr_0.0001-lr_decay_True-epochs_5-seed_{seed}/generations/eval_final.txt"
-    out_file = f"/home/t-lc/dump/samsum_091522/target_epsilon_0.25-lora_r_8-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
-    res.append(samsum_rouge(out_file))
-print('original score')
-print(utils.jdumps(res))
-
-print('avg score')
-print(
-    utils.jdumps(utils.average_metric_over_seeds(res))
-)
+target_epsilons = ("0.25", "1.0", "4.0")
+for target_epsilon in target_epsilons:
+    res = []
+    for seed in seeds:
+        fpath = f"/home/t-lc/dump/samsum_092022/target_epsilon_{target_epsilon}-lora_r_16-lr_0.0001-lr_decay_False-epochs_5-seed_{seed}/generations/eval_final.txt"
+        res.append(samsum_rouge(fpath))
+    print(f'target_epsilon: {target_epsilon}, avg score:')
+    print(
+        utils.jdumps(utils.average_metric_over_seeds(res))
+    )
