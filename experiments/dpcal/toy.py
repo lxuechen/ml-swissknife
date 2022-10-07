@@ -56,6 +56,8 @@ def main(ntrain=100000, ntest=20000, batch_size=5000, epochs=30, lr=1e-1, target
     utils.manual_seed(seed)
 
     (xtrain, ytrain), (xtest, ytest) = make_data(ntrain=ntrain, ntest=ntest)
+    print(f'xtrain mean: {xtrain.mean(dim=0)}')
+
     train_dataset = TensorDataset(xtrain, ytrain)
     test_dataset = TensorDataset(xtest, ytest)
 
@@ -86,18 +88,28 @@ def main(ntrain=100000, ntest=20000, batch_size=5000, epochs=30, lr=1e-1, target
 
         tr_loss = evaluate(train_dataloader, model)
         te_loss = evaluate(test_dataloader, model)
-        print(f'epoch: {epoch}, tr loss: {tr_loss.item():.4f}, te loss: {te_loss.item():.4f}')
+        print(
+            f'epoch: {epoch}, '
+            f'target_epsilon={target_epsilon}, '
+            f'train loss: {tr_loss.item():.4f}, '
+            f'test loss: {te_loss.item():.4f}'
+        )
 
     # Plot train and test model confidence.
     tr_confidences = get_confidences(train_dataloader, model)
     te_confidences = get_confidences(test_dataloader, model)
 
-    plt.hist(x=tr_confidences.numpy(), bins=100, label="train", alpha=0.4, density=True)
-    plt.hist(x=te_confidences.numpy(), bins=100, label="test", alpha=0.4, density=True)
-    plt.xlabel("Confidence: P($\hat{y} = 0$)")
-    plt.ylabel("Density")
-    plt.title(f"$\epsilon={target_epsilon}$")
-    plt.show()
+    utils.plot(
+        hists=(
+            dict(x=tr_confidences.numpy(), bins=100, label="train", alpha=0.4, density=True),
+            dict(x=te_confidences.numpy(), bins=100, label="test", alpha=0.4, density=True),
+        ),
+        options=dict(
+            xlabel="Confidence: P($\hat{y} = 0$)",
+            ylabel="Density",
+            title=f"$\epsilon={target_epsilon}$",
+        )
+    )
 
     # evaluate ece
     tr_logits, tr_labels = get_logits_and_labels(train_dataloader, model)
@@ -106,7 +118,7 @@ def main(ntrain=100000, ntest=20000, batch_size=5000, epochs=30, lr=1e-1, target
     ECE = utils.ECELoss()
     tr_ece = ECE(tr_logits, tr_labels)
     te_ece = ECE(te_logits, te_labels)
-    print(tr_ece, te_ece)
+    print(f'final train ece: {tr_ece.item():.4f}, test ece: {te_ece.item():.4f}')
 
 
 if __name__ == "__main__":
