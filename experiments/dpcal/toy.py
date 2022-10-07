@@ -1,4 +1,5 @@
 import fire
+import seaborn as sns
 import matplotlib.pyplot as plt
 import opacus
 import torch
@@ -93,6 +94,9 @@ def main(ntrain=100000, ntest=20000, batch_size=5000, epochs=30, lr=1e-1, target
 
     plt.hist(x=tr_confidences.numpy(), bins=100, label="train", alpha=0.4, density=True)
     plt.hist(x=te_confidences.numpy(), bins=100, label="test", alpha=0.4, density=True)
+    plt.xlabel("Confidence: P($\hat{y} = 0$)")
+    plt.ylabel("Density")
+    plt.title(f"$\epsilon={target_epsilon}$")
     plt.show()
 
     # evaluate ece
