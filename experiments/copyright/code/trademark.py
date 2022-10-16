@@ -3,7 +3,9 @@ import os
 import fire
 import openai
 import torch
+import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 from ml_swissknife import utils
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -26,16 +28,17 @@ codex_model_names = [
 def main(
     prompt="MODULE_AUTHOR(",  # Linux kernel source.
     load_in_8bit=True,
-    num_return_sequences=100,
     top_p=1.,
     temperature=0.7,
-    max_tokens=100,
+    max_tokens=50,
     output_path=None,
+    num_return_sequences=None,
 ):
     record = dict()
 
     for model_name in codex_model_names + codegen_model_names:
         if 'openai' in model_name:
+            this_num_return_sequences = 1000 if num_return_sequences is None else num_return_sequences
             real_model_name = model_name.split('/')[1]
             raw_outputs = openai.Completion.create(
                 model=real_model_name,
@@ -48,6 +51,7 @@ def main(
             outputs = [prompt + choice["text"] for choice in raw_outputs["choices"]]
             record[model_name] = outputs
         else:
+            this_num_return_sequences = 100 if num_return_sequences is None else num_return_sequences
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 cache_dir=hf_cache_dir,
@@ -58,7 +62,7 @@ def main(
             input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
 
             outputs = []
-            for _ in range(num_return_sequences):  # micro batch size of 1.
+            for _ in tqdm.tqdm(range(num_return_sequences), desc=f"{model_name}"):  # micro batch size of 1.
                 samples = model.generate(
                     input_ids,
                     do_sample=True,

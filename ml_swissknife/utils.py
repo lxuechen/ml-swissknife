@@ -170,7 +170,9 @@ def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False,
     Returns:
         None.
     """
-    os.makedirs(os.path.dirname(f), exist_ok=True)
+    dirname_ = os.path.dirname(f)
+    if len(dirname_) > 0:
+        os.makedirs(dirname_, exist_ok=True)
     with open(f, mode=mode) as file:
         if isinstance(obj, (dict, list)):
             json.dump(obj, file, indent=indent, default=default)
@@ -3156,6 +3158,7 @@ class ECELoss(nn.Module):
     Shameless copy from
         https://github.com/gpleiss/temperature_scaling/blob/master/temperature_scaling.py
     """
+
     def __init__(self, n_bins=15):
         """
         n_bins (int): number of confidence interval bins
