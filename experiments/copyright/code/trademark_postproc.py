@@ -23,6 +23,16 @@ def main(
         print(f"{model_name}: {len(extracted)}")
     utils.jdump(new_file, opath)
 
+    # output pure text so that copying is easy.
+    with open(opath + ".txt", "w") as f:
+        for model_name in new_file:
+            f.write(model_name)
+            f.write("\n")
+            for line in new_file[model_name]:
+                f.write(line.strip())
+                f.write("\n")
+            f.write("\n")
+
 
 if __name__ == '__main__':
     fire.Fire(main)
