@@ -1,4 +1,5 @@
 import os
+import time
 
 import fire
 import openai
@@ -39,8 +40,10 @@ def main(
     record = dict()
 
     if only_codex:
+        #  python trademark.py --output_path "extraction_codex.json"   --only_codex True
         model_names = codex_model_names
     elif only_codegen:
+        #  python trademark.py --output_path "extraction_codegen.json"   --only_codegen True
         model_names = codegen_model_names
     else:
         model_names = codex_model_names + codegen_model_names
@@ -48,16 +51,23 @@ def main(
     for model_name in model_names:
         if 'openai' in model_name:
             this_num_return_sequences = 1000 if num_return_sequences is None else num_return_sequences
+            rate_limit_micro_batch_size = 10  # Annoying rate limit on tokens.
             real_model_name = model_name.split('/')[1]
-            raw_outputs = openai.Completion.create(
-                model=real_model_name,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                n=this_num_return_sequences,
-            )
-            outputs = [prompt + choice["text"] for choice in raw_outputs["choices"]]
+
+            outputs = []
+            for _ in tqdm.tqdm(range(this_num_return_sequences // rate_limit_micro_batch_size)):
+                raw_outputs = openai.Completion.create(
+                    model=real_model_name,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    n=rate_limit_micro_batch_size,
+                )
+                time.sleep(5)  # Annoying rate limit on requests.
+                outputs.extend(
+                    [prompt + choice["text"] for choice in raw_outputs["choices"]]
+                )
             record[model_name] = outputs
         else:
             this_num_return_sequences = 100 if num_return_sequences is None else num_return_sequences
