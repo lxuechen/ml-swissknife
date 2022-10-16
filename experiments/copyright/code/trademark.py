@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 
@@ -56,18 +57,25 @@ def main(
 
             outputs = []
             for _ in tqdm.tqdm(range(this_num_return_sequences // rate_limit_micro_batch_size)):
-                raw_outputs = openai.Completion.create(
-                    model=real_model_name,
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    n=rate_limit_micro_batch_size,
-                )
-                time.sleep(10)  # Annoying rate limit on requests.
-                outputs.extend(
-                    [prompt + choice["text"] for choice in raw_outputs["choices"]]
-                )
+
+                while True:
+                    try:
+                        raw_outputs = openai.Completion.create(
+                            model=real_model_name,
+                            prompt=prompt,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            top_p=top_p,
+                            n=rate_limit_micro_batch_size,
+                        )
+                        outputs.extend(
+                            [prompt + choice["text"] for choice in raw_outputs["choices"]]
+                        )
+                        break
+                    except openai.error.RateLimitError as e:
+                        logging.warning('Hit request rate limit; retrying...')
+                        time.sleep(10)  # Annoying rate limit on requests.
+
             record[model_name] = outputs
         else:
             this_num_return_sequences = 100 if num_return_sequences is None else num_return_sequences
