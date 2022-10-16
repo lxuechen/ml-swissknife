@@ -64,7 +64,7 @@ def main(
                     top_p=top_p,
                     n=rate_limit_micro_batch_size,
                 )
-                time.sleep(5)  # Annoying rate limit on requests.
+                time.sleep(10)  # Annoying rate limit on requests.
                 outputs.extend(
                     [prompt + choice["text"] for choice in raw_outputs["choices"]]
                 )
@@ -75,6 +75,8 @@ def main(
                 model_name,
                 cache_dir=hf_cache_dir,
                 device_map='auto',
+                # 8-bit inference example
+                # https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing
                 load_in_8bit=load_in_8bit,
             ).to(device)
             tokenizer = AutoTokenizer.from_pretrained(model_name)
