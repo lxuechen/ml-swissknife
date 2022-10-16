@@ -26,7 +26,7 @@ def main(
     # output pure text so that copying is easy.
     with open(opath + ".txt", "w") as f:
         for model_name in new_file:
-            f.write(model_name)
+            f.write(model_name + f": {len(new_file[model_name]) / 1000}")
             f.write("\n")
             for line in new_file[model_name]:
                 f.write(line.strip())
