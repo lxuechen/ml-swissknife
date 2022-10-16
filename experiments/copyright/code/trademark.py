@@ -16,7 +16,9 @@ hf_cache_dir = "/u/scr/nlp/data/lxuechen-data/hfcache"
 
 codegen_model_names = [
     f"Salesforce/codegen-{model_size}-{data}"
-    for model_size in ("350M", "2B", "6B", "16B")
+    # Things don't always work for 16B on 1 A100.
+    # for model_size in ("350M", "2B", "6B", "16B")
+    for model_size in ("350M", "2B", "6B",)
     for data in ("nl", "multi", "mono")
 ]
 
