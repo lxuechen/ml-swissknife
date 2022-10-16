@@ -11,7 +11,7 @@ from ml_swissknife import utils
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-hf_cache_dir = "/nlp/scr/lxuechen/hfcache"
+hf_cache_dir = "/u/scr/nlp/data/lxuechen-data/hfcache"
 
 codegen_model_names = [
     f"Salesforce/codegen-{model_size}-{data}"
