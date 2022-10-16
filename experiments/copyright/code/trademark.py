@@ -33,10 +33,19 @@ def main(
     max_tokens=50,
     output_path=None,
     num_return_sequences=None,
+    only_codex=False,
+    only_codegen=False,
 ):
     record = dict()
 
-    for model_name in codex_model_names + codegen_model_names:
+    if only_codex:
+        model_names = codex_model_names
+    elif only_codegen:
+        model_names = codegen_model_names
+    else:
+        model_names = codex_model_names + codegen_model_names
+
+    for model_name in model_names:
         if 'openai' in model_name:
             this_num_return_sequences = 1000 if num_return_sequences is None else num_return_sequences
             real_model_name = model_name.split('/')[1]
@@ -46,7 +55,7 @@ def main(
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
-                n=num_return_sequences,
+                n=this_num_return_sequences,
             )
             outputs = [prompt + choice["text"] for choice in raw_outputs["choices"]]
             record[model_name] = outputs
@@ -62,7 +71,7 @@ def main(
             input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
 
             outputs = []
-            for _ in tqdm.tqdm(range(num_return_sequences), desc=f"{model_name}"):  # micro batch size of 1.
+            for _ in tqdm.tqdm(range(this_num_return_sequences), desc=f"{model_name}"):  # micro batch size of 1.
                 samples = model.generate(
                     input_ids,
                     do_sample=True,
