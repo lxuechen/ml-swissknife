@@ -51,6 +51,7 @@ join = os.path.join
 pathexists = os.path.exists
 makedirs = os.makedirs
 dirname = os.path.dirname
+basename = os.path.basename
 Numeric = Union[int, float]
 
 
