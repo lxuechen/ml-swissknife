@@ -7,7 +7,7 @@ import os
 import sys
 import numpy as np
 import transformers
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def main():

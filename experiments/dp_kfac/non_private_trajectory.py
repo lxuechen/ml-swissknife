@@ -12,7 +12,7 @@ import fire
 import torch
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 from . import common
 
 

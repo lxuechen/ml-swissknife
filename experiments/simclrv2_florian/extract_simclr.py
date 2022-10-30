@@ -168,7 +168,7 @@ def _extract_single(
         ytest = ytest.reshape(-1)
     elif dataset in ("cinic-10", "cinic-10-pure"):
         import imageio
-        from swissknife import utils
+        from ml_swissknife import utils
 
         img_shape = (32, 32, 3)  # Prescribed shape -- some images don't have this shape => fail!
         base_dir = "/nlp/scr/lxuechen/data/CINIC-10"

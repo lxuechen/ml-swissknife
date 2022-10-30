@@ -26,7 +26,7 @@ from torch import optim, nn
 import torch.nn.functional as F
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 from . import models
 from . import solvers
 from .custom_datasets import get_loaders

@@ -7,7 +7,7 @@ import os
 
 import fire
 
-from swissknife import utils
+from ml_swissknife import utils
 from ...simclrv2_florian.download import available_simclr_models
 
 

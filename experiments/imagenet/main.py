@@ -10,7 +10,7 @@ import os
 import fire
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 DOG_CLASS_IDS = tuple(range(151, 269))
 IMAGENET_SOURCE_DIR = "/u/scr/nlp/data/imagenet"

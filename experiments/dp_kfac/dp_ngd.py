@@ -5,7 +5,7 @@ import fire
 from private_transformers.privacy_utils.accounting import rdp_accounting
 import torch
 
-from swissknife import utils
+from ml_swissknife import utils
 from .common import make_data
 
 DEFAULT_ALPHAS = tuple(1 + x / 10.0 for x in range(1, 100)) + tuple(range(12, 64))

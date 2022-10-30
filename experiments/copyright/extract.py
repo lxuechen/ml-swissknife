@@ -9,7 +9,7 @@ from nltk.tokenize.treebank import TreebankWordTokenizer
 import torch
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 import transformers
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

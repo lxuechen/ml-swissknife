@@ -8,7 +8,7 @@ import fire
 from nltk.tokenize.treebank import TreebankWordDetokenizer, TreebankWordTokenizer
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 # @formatter:off
 # Maps book name to first chunk of each popular book. Used to search for start of book.

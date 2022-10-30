@@ -9,7 +9,7 @@ import os
 import fire
 import torch
 
-from swissknife import utils
+from ml_swissknife import utils
 from .BLIP.models import blip, blip_vqa
 from .misc import load_image_pil, load_image_tensor, show
 

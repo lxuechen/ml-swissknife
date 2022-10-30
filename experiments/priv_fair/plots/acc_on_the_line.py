@@ -7,7 +7,7 @@ python -m experiments.priv_fair.plots.acc_on_the_line
 import fire
 import numpy as np
 
-from swissknife import utils
+from ml_swissknife import utils
 from ...simclrv2_florian.download import available_simclr_models
 
 dataset2name = {

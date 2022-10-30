@@ -10,7 +10,7 @@ from sklearn.metrics import roc_curve
 import torch
 import torch.nn.functional as F
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def main():

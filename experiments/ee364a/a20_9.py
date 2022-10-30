@@ -5,7 +5,7 @@ import fire
 import numpy as np
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def run(Q, C, D, seed=1):

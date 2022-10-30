@@ -12,7 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from swissknife import utils
+from ml_swissknife import utils
 from . import folder
 
 

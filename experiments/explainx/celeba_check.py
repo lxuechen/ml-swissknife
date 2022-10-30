@@ -17,7 +17,7 @@ import torch
 import torchvision
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 from . import misc
 from .common import make_image2text_model, root
 

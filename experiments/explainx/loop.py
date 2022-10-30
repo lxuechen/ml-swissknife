@@ -21,7 +21,7 @@ from torchvision import datasets as D
 from torchvision import transforms as T
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 import transformers
 from .common import root
 from .misc import CHANNEL_MEAN, CHANNEL_STD
