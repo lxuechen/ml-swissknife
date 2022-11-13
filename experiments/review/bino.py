@@ -13,7 +13,7 @@ import fire
 import numpy as np
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def main(

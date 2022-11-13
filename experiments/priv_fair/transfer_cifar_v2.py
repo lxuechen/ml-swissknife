@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from swissknife import utils
+from ml_swissknife import utils
 from .misc.dp_utils import ORDERS, get_privacy_spent, get_renyi_divergence
 from .misc.log import Logger
 from .misc.train_utils import train, test, test_by_groups

@@ -2,7 +2,7 @@ import cvxpy as cp
 import fire
 import numpy as np
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def main():

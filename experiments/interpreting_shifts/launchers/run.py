@@ -31,7 +31,7 @@ import os
 
 import fire
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def _get_command(

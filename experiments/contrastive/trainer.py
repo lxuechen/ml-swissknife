@@ -16,7 +16,7 @@ from transformers.trainer_callback import DefaultFlowCallback, ProgressCallback
 from transformers.trainer_utils import IntervalStrategy, EvaluationStrategy, TrainOutput
 from transformers.utils import logging
 
-from swissknife import utils
+from ml_swissknife import utils
 from .compiled_args import DynamicTrainingArguments as TrainingArguments
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]

@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import tqdm
 import transformers
 
-from swissknife import utils
+from ml_swissknife import utils
 
 min_lines = 20  # Only retain functions with more than min_lines.
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

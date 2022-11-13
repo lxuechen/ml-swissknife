@@ -19,7 +19,7 @@ from nltk.tokenize.treebank import TreebankWordDetokenizer, TreebankWordTokenize
 import numpy as np
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 nltk.download('punkt')
 

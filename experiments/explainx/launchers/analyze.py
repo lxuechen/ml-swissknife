@@ -24,7 +24,7 @@ def main():
     '''
     commands.append(command)
 
-    from swissknife import utils
+    from ml_swissknife import utils
     utils.gpu_scheduler(commands, log=False)
 
 

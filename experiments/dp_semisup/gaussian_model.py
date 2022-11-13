@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def make_labeled_data(n, d, sigma, prob, mu, group_id=2):

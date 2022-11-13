@@ -15,7 +15,7 @@ from opacus import PrivacyEngine
 import torch
 import torch.nn as nn
 
-from swissknife import utils
+from ml_swissknife import utils
 from .misc.data import get_data
 from .misc.dp_utils import ORDERS, get_privacy_spent, get_renyi_divergence
 from .misc.log import Logger

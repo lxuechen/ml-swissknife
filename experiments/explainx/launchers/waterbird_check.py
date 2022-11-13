@@ -1,7 +1,7 @@
 # python -m explainx.launchers.waterbird_check
 import fire
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def _get_command(dump_file, contrastive_mode):

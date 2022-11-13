@@ -100,7 +100,7 @@ def main():
 
     plots.append(dict(x=x, y=y, label='same s'))
 
-    from swissknife import utils
+    from ml_swissknife import utils
     utils.plot_wrapper(
         plots=plots,
         options=dict(xlabel="E", ylabel="T"),

@@ -7,7 +7,7 @@ import torch
 from torch import nn, optim
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def make_data(n_train, n_test, d, obs_noise_std=1):

@@ -1,6 +1,6 @@
 import os
 
-from swissknife import utils
+from ml_swissknife import utils
 from .BLIP.models import blip, blip_vqa
 
 # Constants.

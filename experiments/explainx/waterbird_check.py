@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 from .common import make_image2text_model, make_vqa_model
 from .misc import load_image_tensor
 

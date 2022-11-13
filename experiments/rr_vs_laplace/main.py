@@ -12,7 +12,7 @@ import torch
 from torch import distributions
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 torch.set_default_dtype(torch.float64)
 

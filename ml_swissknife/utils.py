@@ -43,13 +43,14 @@ import transformers
 from scipy import stats
 from torch import nn, optim
 from torch.utils import data
+import functools
 
 # Misc.
 home = os.path.expanduser("~")
 home_data = os.path.join(home, 'data')
 join = os.path.join
 pathexists = os.path.exists
-makedirs = os.makedirs
+makedirs = functools.partial(os.makedirs, exist_ok=True)
 dirname = os.path.dirname
 basename = os.path.basename
 Numeric = Union[int, float]
@@ -1376,9 +1377,12 @@ def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fi
     for i, entry in enumerate(bars):
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'height'}
         kwargs.pop('aux', None)
+        bar_label = kwargs.pop('bar_label', False)  # If True, give bars numbers at top (or right, if horizontal).
         # Each bar has width, the starting position is - (l-1) / 2 * width.
         x, height = [np.array(entry[key]) for key in ('x', 'height')]
-        ax.bar(x - width * (len(bars) - 1) / 2 + width * i, height, width=width, **kwargs)
+        bars = ax.bar(x - width * (len(bars) - 1) / 2 + width * i, height, width=width, **kwargs)
+        if bar_label:
+            ax.bar_label(bars)
 
     for entry in annotates:
         kwargs = copy.deepcopy(entry)

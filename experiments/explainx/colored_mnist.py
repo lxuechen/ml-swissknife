@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torchvision import datasets
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def color_grayscale_arr(arr, red=True):

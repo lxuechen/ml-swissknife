@@ -33,7 +33,7 @@ from torchvision import transforms
 import torchvision as tv
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 from ..simclrv2_florian.resnet import get_resnet, name_to_params
 
 base_dir = "/nlp/scr/lxuechen/simclr-ckpts"

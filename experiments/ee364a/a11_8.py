@@ -77,7 +77,7 @@ def main(seed=0, t=0.5, mu=8):
         soln=soln_init, prob=prob, t=t, mu=mu, verbose=True
     )
     # duality gap vs cumulative Newton steps
-    from swissknife import utils
+    from ml_swissknife import utils
     utils.plot_wrapper(
         img_path=utils.join('.', 'ee364a', 'plots', 'a11_8'),
         suffixes=(".png", '.pdf'),

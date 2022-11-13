@@ -28,7 +28,7 @@ import numpy as np
 import torch
 import tqdm
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 @dataclass

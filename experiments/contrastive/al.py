@@ -13,7 +13,7 @@ import transformers
 from transformers import GlueDataset
 from transformers.data.data_collator import default_data_collator
 
-from swissknife import utils
+from ml_swissknife import utils
 from . import compiled_args
 
 

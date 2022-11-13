@@ -4,7 +4,7 @@ import fire
 import numpy as np
 from scipy.special import logsumexp
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def sinkhorn_knopp_unbalanced(M, reg, reg_a, reg_b, numItermax=1000,

@@ -5,7 +5,7 @@ python -m explainx.launchers.mar1122
 
 import fire
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def _get_command(linear_probe, model_name, date):

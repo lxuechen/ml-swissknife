@@ -1,7 +1,7 @@
 # python -m explainx.launchers.mar0222
 import fire
 
-from swissknife import utils
+from ml_swissknife import utils
 
 
 def _get_command(dump_dir, contrastive_mode, black_first, gender_target):
