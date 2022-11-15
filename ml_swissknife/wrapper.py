@@ -11,17 +11,25 @@ JAGUPARD_MACHINES = ",".join(tuple(f"jagupard{i}" for i in range(10, 28)))
 def gpu_job_wrapper(
     command,
     logs_prefix="/nlp/scr/lxuechen/logs",
+    conda_env="lxuechen-torch",
+    cpu_count=None,
+    gpu_type=None,  # `nlprun --help` to see all options.
+    gpu_count=None,
     priority="standard",
+    queue="jag",
     train_dir=None,
     job_name=None,
     salt_length=8,
-    conda_env="lxuechen-torch",
     memory="16G",
-    gpu=None,
     time="3-0",  # Timeout, e.g., "10-0" means 10 days and 0 hours.
+    # If True, submit the job held and rely on background fetcher to run: /afs/cs.stanford.edu/u/lxuechen/scripts/job_manager.sh.
     hold_job=True,
     log_path=None,
 ):
+    """Create a string version of the command to be run that can be written to file.
+
+    Why bother to write the script to file? Well, it helps check if you've made stupid mistakes :)
+    """
     if log_path is None:
         if train_dir is not None:
             log_path = f"{train_dir}/log.out"
@@ -34,9 +42,14 @@ def gpu_job_wrapper(
         f"-o {log_path} "
         f"-p {priority} "
         f"--memory {memory} "
+        f"--queue {queue} "
     )
-    if gpu is not None:
-        wrapped_command += f"-d {gpu} "
+    if cpu_count is not None:
+        wrapped_command += f"-c {cpu_count} "
+    if gpu_type is not None:
+        wrapped_command += f"-d {gpu_type} "
+    if gpu_count is not None:
+        wrapped_command += f"-g {gpu_count} "
     if time is not None:
         wrapped_command += f"-t {time} "
     if hold_job:
