@@ -35,6 +35,7 @@ def gpu_job_wrapper(
             log_path = f"{train_dir}/log.out"
         else:
             log_path = f"{logs_prefix}/{create_random_job_id()}.out"
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
     # Don't need to exclude jagupard[4-8] per https://stanfordnlp.slack.com/archives/C0FSH01PY/p1621469284003100
     wrapped_command = (
         f"nlprun -x=john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15 "
