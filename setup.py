@@ -17,7 +17,7 @@ setuptools.setup(
     url="https://github.com/lxuechen/ml-swissknife",
     install_requires=[
         'torch', 'torchvision', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers',
-        'datasets', 'gdown>=4.4.0', 'pandas', 'pytest', 'matplotlib', 'seaborn', 'cvxpy', 'imageio', 'wandb', 'openai'
+        'datasets', 'gdown>=4.4.0', 'pandas', 'pytest', 'matplotlib', 'seaborn', 'cvxpy', 'imageio', 'wandb', 'openai', 'numba'
     ],
     extras_require=extras_require,
     python_requires='~=3.7',
