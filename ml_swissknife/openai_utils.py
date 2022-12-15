@@ -67,6 +67,7 @@ def _openai_completion(
                 completions.extend(completion_batch.choices)
                 break
             except Exception as e:
+                print(e)
                 logging.warning('Hit request rate limit; retrying...')
                 time.sleep(sleep_time)  # Annoying rate limit on requests.
 
