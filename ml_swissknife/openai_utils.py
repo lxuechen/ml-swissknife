@@ -30,7 +30,7 @@ class DecodingArguments(object):
 
 
 def _openai_completion(
-    model_name, prompts: Union[str, list, tuple], decoding_args, sleep_time=2, batch_size=1,
+    prompts: Union[str, list, tuple], decoding_args, model_name='text-davinci-003', sleep_time=2, batch_size=1,
     max_batches=sys.maxsize,  # This should only be used during testing.
 ):
     is_single_prompt = isinstance(prompts, str)
