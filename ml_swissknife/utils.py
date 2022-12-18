@@ -19,6 +19,7 @@ import contextlib
 import copy
 import csv
 import datetime
+import functools
 import gc
 import io
 import json
@@ -43,7 +44,6 @@ import transformers
 from scipy import stats
 from torch import nn, optim
 from torch.utils import data
-import functools
 
 # Misc.
 home = os.path.expanduser("~")
@@ -81,6 +81,12 @@ def dict2str(d: dict):
         else:
             output_str = output_str + f"{key}_{val}"
     return output_str
+
+
+def mean(*seqs: Sequence[Numeric]) -> Union[Numeric, Sequence[Numeric]]:
+    singleton = len(seqs) == 1
+    means = [float(np.mean(seq)) for seq in seqs]
+    return means[0] if singleton else means
 
 
 def average_over_seed(seq_of_seq):  # Here purely due to backward compatibility.
