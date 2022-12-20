@@ -1,13 +1,16 @@
 """Light wrapper around OpenAI API.
 
 Should not rewrite these multiple times for different projects...
+
+For reference:
+    https://beta.openai.com/docs/api-reference/completions/create
 """
 import dataclasses
 import logging
 import math
 import sys
 import time
-from typing import Union, Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import openai
 import tqdm
@@ -27,10 +30,11 @@ class DecodingArguments(object):
 
 
 def _openai_completion(
-    model_name, prompts: Union[str, list, tuple], decoding_args, sleep_time=2, batch_size=1,
+    prompts: Union[str, list, tuple], decoding_args, model_name='text-davinci-003', sleep_time=2, batch_size=1,
     max_batches=sys.maxsize,  # This should only be used during testing.
 ):
-    if isinstance(prompts, str):
+    is_single_prompt = isinstance(prompts, str)
+    if is_single_prompt:
         prompts = [prompts]
 
     num_prompts = len(prompts)
@@ -63,7 +67,14 @@ def _openai_completion(
                 completions.extend(completion_batch.choices)
                 break
             except Exception as e:
+                print(e)
                 logging.warning('Hit request rate limit; retrying...')
                 time.sleep(sleep_time)  # Annoying rate limit on requests.
 
+    if is_single_prompt and decoding_args.n == 1:
+        completions, = completions  # Return non-tuple if only 1 input and 1 generation.
     return completions
+
+
+# Keep the private function for backwards compat.
+openai_completion = _openai_completion
