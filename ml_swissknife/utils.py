@@ -3104,7 +3104,10 @@ def get_seq_len_dist_enc_dec(
     verbose=True,
     maxsize=sys.maxsize,
 ):
-    """Get the sequence length distribution of an encoder-decoder setting."""
+    """Get the sequence length distribution of an encoder-decoder setting.
+
+    hf_datadict takes form {split: [{enc_key: str, dec_key: str}, ...]}
+    """
     _increment_key_for_dict = lambda d, k: d.update({k: d[k] + 1}) if k in d else d.update({k: 1})
 
     result = dict()
@@ -3135,6 +3138,7 @@ def get_seq_len_dist_enc_dec(
             enc_counts_map=enc_counts_map,
             dec_counts_map=dec_counts_map,
             cat_counts_map=cat_counts_map,
+
             enc_counts_list=enc_counts_list,
             dec_counts_list=dec_counts_list,
             cat_counts_list=cat_counts_list,

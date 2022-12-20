@@ -1,6 +1,6 @@
 import setuptools
 
-version = "0.1.9"
+version = "0.1.10"
 
 extras_require = {
     "latex": ("bibtexparser",)
