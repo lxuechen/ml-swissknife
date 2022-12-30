@@ -221,16 +221,22 @@ def read_csv(f: Union[str, io.IOBase], mode="r", delimiter='\t'):
 def write_csv(
     f: str,
     fieldnames: Union[List, Tuple],
-    rows: Union[Tuple, List],  # Each line is a list with corresponding columns.
+    # Each entry in rows is either a sequence or a dict.
+    rows: Sequence[Union[Sequence, Dict]],
     mode="w",
-    delimiter='\t'
+    delimiter='\t',
+    **open_kwargs,
 ):
-    os.makedirs(os.path.dirname(f), exist_ok=True)
-    f = open(f, mode=mode)
-    writer = csv.writer(f, delimiter=delimiter)
-    writer.writerow(fieldnames)
-    for row in rows:
-        writer.writerow(row)
+    makedirs(os.path.dirname(f))
+    f = open(f, mode=mode, **open_kwargs)
+    if isinstance(rows[0], dict):
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
+        writer.writeheader()
+        writer.writerows(rows)
+    else:
+        writer = csv.writer(f, delimiter=delimiter)
+        writer.writerow(fieldnames)
+        writer.writerows(rows)
     f.close()
 
 
