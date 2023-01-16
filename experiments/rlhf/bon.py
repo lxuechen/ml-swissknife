@@ -1,6 +1,7 @@
 import fire
 import numpy as np
 import torch
+from scipy.special import softmax
 
 from ml_swissknife import utils
 
@@ -30,7 +31,7 @@ def bon_binning(
     n=5,
 
     # control accuracy of binning.
-    k=50000,
+    k=200000,
 ):
     # python -m bon --task bon_binning
     # draw k samples
@@ -50,14 +51,29 @@ def bon_analytical(
     # python -m bon --task bon_analytical
     choices = len(p)
     ascending = r.argsort()
-    p_re = p[ascending]
-    print(p_re)
+    p = p[ascending]
     c = torch.tensor([0.] + p.cumsum(0).tolist())
     q = torch.tensor([
         c[i] ** n - c[i - 1] ** n
         for i in range(1, choices + 1)
     ])
-    print(q)
+    return q.numpy()
+
+
+def bon_compare(
+    reps=10,
+    choices=5,  # size of sample space.
+    n=5,
+):
+    # python -m bon --task bon_compare
+    for _ in range(reps):
+        p = softmax(np.random.rand(choices), axis=0)
+        r = np.random.rand(choices)
+        ans1 = bon_analytical(p=p, r=r, n=n)
+        ans2 = bon_binning(p=p, r=r, n=n)
+        print(ans1)
+        print(ans2)
+        breakpoint()
 
 
 def kl(p, q):
