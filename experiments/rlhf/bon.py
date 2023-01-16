@@ -11,16 +11,10 @@ def bon_draw(
     n,  # number of draws
     k,  # total samples
 ):
-    choices = len(p)
-
-    samples = np.random.choice(choices, p=p, size=(k, n), replace=True)
+    samples = np.random.choice(len(p), p=p, size=(k, n), replace=True)
     rewards = r[samples]
     best_indices = rewards.argmax(1)
-
-    ret = [
-        sample[index] for sample, index in utils.zip_(samples, best_indices)
-    ]
-    return np.array(ret)
+    return np.array([sample[index] for sample, index in utils.zip_(samples, best_indices)])
 
 
 def bon_binning(
@@ -35,11 +29,7 @@ def bon_binning(
     # python -m bon --task bon_binning
     # draw k samples
     out = bon_draw(p=p, r=r, n=n, k=k)
-    choices = len(p)
-    p_hat = np.array(
-        [(out == choice).mean() for choice in range(choices)]
-    )
-    return p_hat
+    return np.array([(out == choice).mean() for choice in range(len(p))])
 
 
 def bon_analytical(
@@ -48,14 +38,10 @@ def bon_analytical(
     n=5,
 ):
     # python -m bon --task bon_analytical
-    choices = len(p)
     ascending_indices = r.argsort()
     ascending_p = p[ascending_indices]
     c = np.array([0.] + ascending_p.cumsum(0).tolist())
-    q = np.array([
-        c[i] ** n - c[i - 1] ** n
-        for i in range(1, choices + 1)
-    ])
+    q = np.array([c[i] ** n - c[i - 1] ** n for i in range(1, len(p) + 1)])
     q_ret = np.zeros_like(q)
     for i, index in enumerate(ascending_indices):
         q_ret[index] = q[i]
