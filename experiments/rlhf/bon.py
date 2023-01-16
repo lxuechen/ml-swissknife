@@ -50,14 +50,17 @@ def bon_analytical(
 ):
     # python -m bon --task bon_analytical
     choices = len(p)
-    ascending = r.argsort()
-    p = p[ascending]
-    c = torch.tensor([0.] + p.cumsum(0).tolist())
-    q = torch.tensor([
+    ascending_indices = r.argsort()
+    ascending_p = p[ascending_indices]
+    c = np.array([0.] + ascending_p.cumsum(0).tolist())
+    q = np.array([
         c[i] ** n - c[i - 1] ** n
         for i in range(1, choices + 1)
     ])
-    return q.numpy()
+    q_ret = np.zeros_like(q)
+    for index in ascending_indices:
+        q_ret[index] = q[index]
+    return q_ret
 
 
 def bon_compare(
