@@ -1,12 +1,11 @@
 import fire
 import numpy as np
 import torch
-from scipy.special import softmax
 
 from ml_swissknife import utils
 
 
-def bon(
+def bon_draw(
     p,
     r,
     n,  # number of draws
@@ -31,11 +30,11 @@ def bon_binning(
     n=5,
 
     # control accuracy of binning.
-    k=200000,
+    k=500000,
 ):
     # python -m bon --task bon_binning
     # draw k samples
-    out = bon(p=p, r=r, n=n, k=k)
+    out = bon_draw(p=p, r=r, n=n, k=k)
     choices = len(p)
     p_hat = np.array(
         [(out == choice).mean() for choice in range(choices)]
@@ -58,8 +57,9 @@ def bon_analytical(
         for i in range(1, choices + 1)
     ])
     q_ret = np.zeros_like(q)
-    for index in ascending_indices:
-        q_ret[index] = q[index]
+    for i, index in enumerate(ascending_indices):
+        q_ret[index] = q[i]
+    assert np.allclose(q_ret.sum(), 1)
     return q_ret
 
 
@@ -69,6 +69,13 @@ def bon_compare(
     n=5,
 ):
     # python -m bon --task bon_compare
+    from scipy.special import softmax
+    p = np.array([1 / 3, 2 / 3])
+    r = np.array([2, 1])
+    ans1 = bon_binning(p=p, r=r, n=n)
+    ans2 = bon_analytical(p=p, r=r, n=n)
+    print(ans1)
+    print(ans2)
     for _ in range(reps):
         p = softmax(np.random.rand(choices), axis=0)
         r = np.random.rand(choices)
