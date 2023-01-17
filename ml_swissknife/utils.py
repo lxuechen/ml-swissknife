@@ -40,10 +40,14 @@ import six
 import torch
 import torch.nn.functional as F
 import tqdm
-import transformers
 from scipy import stats
 from torch import nn, optim
 from torch.utils import data
+
+try:
+    import transformers
+except ImportError:
+    logging.warning("`transformers` not installed. Passing...")
 
 # Misc.
 home = os.path.expanduser("~")
