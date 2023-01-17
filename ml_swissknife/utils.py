@@ -44,11 +44,6 @@ from scipy import stats
 from torch import nn, optim
 from torch.utils import data
 
-try:
-    import transformers
-except ImportError:
-    logging.warning("`transformers` not installed. Passing...")
-
 # Misc.
 home = os.path.expanduser("~")
 home_data = os.path.join(home, 'data')
@@ -2952,8 +2947,8 @@ def is_wandb_available():
 # NLP.
 def smart_tokenizer_and_embedding_resize(
     special_tokens_dict,
-    tokenizer: transformers.PreTrainedTokenizer,
-    model: transformers.PreTrainedModel
+    tokenizer,
+    model,
 ):
     """Resize tokenizer and embedding in a smart way.
 
