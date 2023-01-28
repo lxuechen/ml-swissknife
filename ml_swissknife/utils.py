@@ -205,6 +205,9 @@ def jload(f: Union[str, io.IOBase], mode="r"):
     return jdict
 
 
+jloads = json.loads
+
+
 def read_csv(f: Union[str, io.IOBase], mode="r", delimiter='\t'):
     if not isinstance(f, io.IOBase):
         f = open(f, mode=mode)
