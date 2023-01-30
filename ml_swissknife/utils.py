@@ -163,7 +163,7 @@ def confidence_interval(sample, alpha=0.05):
     return dict(low=low, high=high, delta=delta, mean=sample_mean)
 
 
-def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False, default=None):
+def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False, default=str):
     """Dump a str or dictionary to a file in json format.
 
     Args:
@@ -172,14 +172,12 @@ def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False,
         mode: Mode for opening the file.
         indent: Indent for storing json dictionaries.
         to_gcs: Upload the file to cloud storage.
-        default: A function to handle non-serializable entries; defaults to `None`.
-
-    Returns:
-        None.
+        default: A function to handle non-serializable entries; defaults to `str`.
     """
-    dirname_ = os.path.dirname(f)
-    if len(dirname_) > 0:
-        os.makedirs(dirname_, exist_ok=True)
+    f_dirname = os.path.dirname(f)
+    if f_dirname != "":
+        makedirs(f_dirname)
+
     with open(f, mode=mode) as file:
         if isinstance(obj, (dict, list)):
             json.dump(obj, file, indent=indent, default=default)
@@ -192,10 +190,6 @@ def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False,
         logging.warning(f"Uploading to gcs: {f}")
 
 
-def jdumps(obj, indent=4, default=str):
-    return json.dumps(obj, indent=indent, default=default)
-
-
 def jload(f: Union[str, io.IOBase], mode="r"):
     """Load a .json file into a dictionary."""
     if not isinstance(f, io.IOBase):
@@ -203,6 +197,25 @@ def jload(f: Union[str, io.IOBase], mode="r"):
     jdict = json.load(f)
     f.close()
     return jdict
+
+
+def jdumps(obj, indent=4, default=str):
+    return json.dumps(obj, indent=indent, default=default)
+
+
+jloads = json.loads
+
+
+def jldump(seq: Sequence[dict], f: str, mode="w", indent=4, default=str):
+    """Dump a sequence of dictionaries into a .jsonl file."""
+    f_dirname = os.path.dirname(f)
+    if f_dirname != "":
+        makedirs(f_dirname)
+
+    with open(f, mode=mode) as file:
+        for item in seq:
+            assert isinstance(item, dict), f"Unexpected type: {type(item)}"
+            file.write(json.dumps(item, indent=indent, default=default))
 
 
 def jlload(f: Union[str, io.IOBase], mode="r", strip=True):
