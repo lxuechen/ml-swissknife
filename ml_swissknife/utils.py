@@ -205,6 +205,11 @@ def jload(f: Union[str, io.IOBase], mode="r"):
     return jdict
 
 
+def jlload(f: Union[str, io.IOBase], mode="r", strip=True):
+    """Load a .jsonl file into a list of dictionaries."""
+    return [json.loads(line) for line in readlines(f, mode=mode, strip=strip)]
+
+
 def read_csv(f: Union[str, io.IOBase], mode="r", delimiter='\t'):
     if not isinstance(f, io.IOBase):
         f = open(f, mode=mode)
