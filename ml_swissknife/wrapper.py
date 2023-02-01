@@ -25,6 +25,7 @@ def gpu_job_wrapper(
     # If True, submit the job held and rely on background fetcher to run: /afs/cs.stanford.edu/u/lxuechen/scripts/job_manager.sh.
     hold_job=True,
     log_path=None,
+    exclusion="john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15",
 ):
     """Create a string version of the command to be run that can be written to file.
 
@@ -38,7 +39,7 @@ def gpu_job_wrapper(
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
     # Don't need to exclude jagupard[4-8] per https://stanfordnlp.slack.com/archives/C0FSH01PY/p1621469284003100
     wrapped_command = (
-        f"nlprun -x=john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15 "
+        f"nlprun -x={exclusion} "
         f"-a {conda_env} "
         f"-o {log_path} "
         f"-p {priority} "
@@ -66,6 +67,45 @@ def gpu_job_wrapper(
         # First mkdir, then execute the command.
         wrapped_command = f'mkdir -p "{train_dir}"\n' + wrapped_command
     return wrapped_command
+
+
+def high_end_gpu_job_wrapper(
+    command,
+    logs_prefix="/nlp/scr/lxuechen/logs",
+    conda_env="lxuechen-torch",
+    cpu_count=None,
+    gpu_type=None,  # `nlprun --help` to see all options.
+    gpu_count=None,
+    priority="standard",
+    train_dir=None,
+    job_name=None,
+    salt_length=8,
+    memory="16G",
+    time="3-0",  # Timeout, e.g., "10-0" means 10 days and 0 hours.
+    # If True, submit the job held and rely on background fetcher to run: /afs/cs.stanford.edu/u/lxuechen/scripts/job_manager.sh.
+    hold_job=True,
+    log_path=None,
+):
+    """Schedule jobs on machines with A100 80G."""
+    exclusion = "john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15,sphinx1,sphinx2,sphinx3"
+    return gpu_job_wrapper(
+        command=command,
+        logs_prefix=logs_prefix,
+        conda_env=conda_env,
+        cpu_count=cpu_count,
+        gpu_type=gpu_type,
+        gpu_count=gpu_count,
+        priority=priority,
+        queue="sphinx",
+        train_dir=train_dir,
+        job_name=job_name,
+        salt_length=salt_length,
+        memory=memory,
+        time=time,
+        hold_job=hold_job,
+        log_path=log_path,
+        exclusion=exclusion,
+    )
 
 
 def cpu_job_wrapper(
