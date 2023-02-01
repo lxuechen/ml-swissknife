@@ -31,6 +31,12 @@ def gpu_job_wrapper(
 
     Why bother to write the script to file? Well, it helps check if you've made stupid mistakes :)
     """
+    if not isinstance(memory, str):
+        raise ValueError(
+            f"`memory` expects a string argument, but found argument of type: {type(memory)}. "
+            f"Usage example: `memory=16G`"
+        )
+
     if log_path is None:
         if train_dir is not None:
             log_path = f"{train_dir}/log.out"
