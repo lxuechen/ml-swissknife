@@ -8,6 +8,7 @@ For reference:
 import dataclasses
 import logging
 import math
+import os
 import sys
 import time
 from typing import Optional, Tuple, Union
@@ -33,6 +34,10 @@ def _openai_completion(
     prompts: Union[str, list, tuple], decoding_args, model_name='text-davinci-003', sleep_time=2, batch_size=1,
     max_batches=sys.maxsize,  # This should only be used during testing.
 ):
+    openai_org = os.getenv('OPENAI_ORG')
+    if openai_org is not None:
+        openai.organization = openai_org
+
     is_single_prompt = isinstance(prompts, str)
     if is_single_prompt:
         prompts = [prompts]
