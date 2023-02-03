@@ -94,7 +94,7 @@ if __name__ == "__main__":
 #   --fsdp_transformer_layer_cls_to_wrap "T5Block"
 
 # Things to note:
-# 0. upgrade to latest transformers lib.
+# 0. Upgrade to latest transformers lib.
 # 1. Replace cache_dir and output_dir with your own paths.
 # 2. The script also works with num_gpus<8
 # 3. Don't use fp16 mixed precision for T5; you get divergence. Use bf16 instead.
