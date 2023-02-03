@@ -18,4 +18,5 @@ python -m torch.distributed.launch --nproc_per_node="${num_gpus}" ft_t5.py \
   --evaluation_strategy "steps" \
   --logging_steps 1 \
   --fsdp "full_shard auto_wrap offload" \
-  --fsdp_transformer_layer_cls_to_wrap "T5Block"
+  --fsdp_transformer_layer_cls_to_wrap "T5Block" \
+  --cache_dir "/nlp/scr/lxuechen/cache"
