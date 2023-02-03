@@ -1,7 +1,8 @@
-python -m torch.distributed.launch --nproc_per_node=2 ft_t5.py \
+num_gpus=8
+python -m torch.distributed.launch --nproc_per_node="${num_gpus}" ft_t5.py \
   --fp16 False \
   --bf16 True \
-  --model_name_or_path "google/flan-t5-small" \
+  --model_name_or_path "google/flan-t5-xxl" \
   --output_dir "/nlp/scr/lxuechen/tests/ft_t5" \
   --num_train_epochs 1 \
   --per_device_train_batch_size 1 \
@@ -18,5 +19,3 @@ python -m torch.distributed.launch --nproc_per_node=2 ft_t5.py \
   --logging_steps 1 \
   --fsdp "full_shard auto_wrap offload" \
   --fsdp_transformer_layer_cls_to_wrap "T5Block"
-
-#  --model_name_or_path "google/flan-t5-xxl" \
