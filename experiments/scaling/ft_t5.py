@@ -75,7 +75,7 @@ if __name__ == "__main__":
 #   --fp16 False \
 #   --bf16 True \
 #   --model_name_or_path "google/flan-t5-xxl" \
-#   --cache_dir "/nlp/scr/lxuechen/cache"
+#   --cache_dir "/nlp/scr/lxuechen/cache" \
 #   --output_dir "/nlp/scr/lxuechen/tests/ft_t5" \
 #   --num_train_epochs 1 \
 #   --per_device_train_batch_size 1 \
@@ -91,9 +91,10 @@ if __name__ == "__main__":
 #   --evaluation_strategy "steps" \
 #   --logging_steps 1 \
 #   --fsdp "full_shard auto_wrap offload" \
-#   --fsdp_transformer_layer_cls_to_wrap "T5Block" \
+#   --fsdp_transformer_layer_cls_to_wrap "T5Block"
 
 # Things to note:
+# 0. upgrade to latest transformers lib.
 # 1. Replace cache_dir and output_dir with your own paths.
 # 2. The script also works with num_gpus<8
 # 3. Don't use fp16 mixed precision for T5; you get divergence. Use bf16 instead.
