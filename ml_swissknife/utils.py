@@ -267,6 +267,16 @@ def readlines(f: Union[str, io.IOBase], mode="r", strip=True):
     return lines
 
 
+def read(f: Union[str, io.IOBase], mode="r", strip=True):
+    if not isinstance(f, io.IOBase):
+        f = open(f, mode=mode)
+    content = f.read()
+    if strip:
+        content = content.strip()
+    f.close()
+    return content
+
+
 def listdir(directory, skip_suffixes: Union[Sequence, str] = (), full_path: Optional[bool] = False):
     """Convenience function to replace `os.listdir` for skipping annoying mac hidden files."""
     if isinstance(skip_suffixes, str):
