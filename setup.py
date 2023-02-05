@@ -1,6 +1,15 @@
+import os
+import re
+
 import setuptools
 
-version = "0.1.12"
+here = os.path.realpath(os.path.dirname(__file__))
+with open(os.path.join(here, 'ml_swissknife', '__init__.py')) as f:
+    meta_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", f.read(), re.M)
+    if meta_match:
+        version = meta_match.group(1)
+    else:
+        raise RuntimeError("Unable to find __version__ string.")
 
 extras_require = {
     "latex": ("bibtexparser",)
