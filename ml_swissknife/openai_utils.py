@@ -23,7 +23,7 @@ if openai_org is not None:
 
 
 @dataclasses.dataclass
-class DecodingArguments(object):
+class OpenAIDecodingArguments(object):
     max_tokens: int = 1800
     temperature: float = 0.2
     top_p: float = 1.
@@ -36,8 +36,13 @@ class DecodingArguments(object):
 
 
 def _openai_completion(
-    prompts: Union[str, list, tuple], decoding_args, model_name='text-davinci-003', sleep_time=2, batch_size=1,
-    max_batches=sys.maxsize,  # This should only be used during testing.
+    prompts: Union[str, list, tuple],
+    decoding_args: OpenAIDecodingArguments,
+    model_name='text-davinci-003',
+    sleep_time=2,
+    batch_size=1,
+    max_batches=sys.maxsize,  # This is useful during testing.
+    return_text=False,  # Return text instead of full completion object (which contains things like logprob).
 ):
     is_single_prompt = isinstance(prompts, str)
     if is_single_prompt:
@@ -77,6 +82,8 @@ def _openai_completion(
                 logging.warning('Hit request rate limit; retrying...')
                 time.sleep(sleep_time)  # Annoying rate limit on requests.
 
+    if return_text:
+        completions = [completion.text for completion in completions]
     if is_single_prompt and decoding_args.n == 1:
         completions, = completions  # Return non-tuple if only 1 input and 1 generation.
     return completions
