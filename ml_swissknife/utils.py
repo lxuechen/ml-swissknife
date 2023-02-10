@@ -26,6 +26,7 @@ import json
 import logging
 import math
 import os
+import pathlib
 import random
 import shutil
 import signal
@@ -53,11 +54,7 @@ makedirs = functools.partial(os.makedirs, exist_ok=True)
 dirname = os.path.dirname
 basename = os.path.basename
 Numeric = Union[int, float]
-
-
-def set_trace():
-    import pdb
-    pdb.set_trace()
+PathOrIOBase = Union[str, pathlib.Path, io.IOBase]
 
 
 def float2str(x, precision=8):
@@ -163,7 +160,22 @@ def confidence_interval(sample, alpha=0.05):
     return dict(low=low, high=high, delta=delta, mean=sample_mean)
 
 
-def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False, default=str):
+def _make_w_io_base(f: PathOrIOBase, mode: str):
+    if not isinstance(f, io.IOBase):
+        f_dirname = os.path.dirname(f)
+        if f_dirname != "":
+            makedirs(f_dirname)
+        f = open(f, mode=mode)
+    return f
+
+
+def _make_r_io_base(f: PathOrIOBase, mode: str):
+    if not isinstance(f, io.IOBase):
+        f = open(f, mode=mode)
+    return f
+
+
+def jdump(obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, default=str):
     """Dump a str or dictionary to a file in json format.
 
     Args:
@@ -171,29 +183,21 @@ def jdump(obj: Union[str, dict, list], f: str, mode="w", indent=4, to_gcs=False,
         f: A string path to the location on disk.
         mode: Mode for opening the file.
         indent: Indent for storing json dictionaries.
-        to_gcs: Upload the file to cloud storage.
         default: A function to handle non-serializable entries; defaults to `str`.
     """
-    f_dirname = os.path.dirname(f)
-    if f_dirname != "":
-        makedirs(f_dirname)
-
-    with open(f, mode=mode) as file:
-        if isinstance(obj, (dict, list)):
-            json.dump(obj, file, indent=indent, default=default)
-        elif isinstance(obj, str):
-            file.write(obj)
-        else:
-            raise ValueError(f'Unexpected type: {type(obj)}')
-    if to_gcs:
-        gs_upload_from_path(f)
-        logging.warning(f"Uploading to gcs: {f}")
+    f = _make_w_io_base(f, mode)
+    if isinstance(obj, (dict, list)):
+        json.dump(obj, f, indent=indent, default=default)
+    elif isinstance(obj, str):
+        f.write(obj)
+    else:
+        raise ValueError(f'Unexpected type: {type(obj)}')
+    f.close()
 
 
-def jload(f: Union[str, io.IOBase], mode="r"):
+def jload(f: PathOrIOBase, mode="r"):
     """Load a .json file into a dictionary."""
-    if not isinstance(f, io.IOBase):
-        f = open(f, mode=mode)
+    f = _make_r_io_base(f, mode)
     jdict = json.load(f)
     f.close()
     return jdict
@@ -206,26 +210,23 @@ def jdumps(obj, indent=4, default=str):
 jloads = json.loads
 
 
-def jldump(seq: Sequence[dict], f: str, mode="w", indent=4, default=str):
+def jldump(seq: Sequence[dict], f: PathOrIOBase, mode="w", indent=4, default=str):
     """Dump a sequence of dictionaries into a .jsonl file."""
-    f_dirname = os.path.dirname(f)
-    if f_dirname != "":
-        makedirs(f_dirname)
-
-    with open(f, mode=mode) as file:
-        for item in seq:
-            assert isinstance(item, dict), f"Unexpected type: {type(item)}"
-            file.write(json.dumps(item, indent=indent, default=default))
+    if not all(isinstance(item, dict) for item in seq):
+        raise ValueError("Input is not of type Sequence[dict].")
+    f = _make_w_io_base(f, mode)
+    for item in seq:
+        f.write(json.dumps(item, indent=indent, default=default))
+    f.close()
 
 
-def jlload(f: Union[str, io.IOBase], mode="r", strip=True):
+def jlload(f: PathOrIOBase, mode="r", strip=True):
     """Load a .jsonl file into a list of dictionaries."""
     return [json.loads(line) for line in readlines(f, mode=mode, strip=strip)]
 
 
-def read_csv(f: Union[str, io.IOBase], mode="r", delimiter='\t'):
-    if not isinstance(f, io.IOBase):
-        f = open(f, mode=mode)
+def read_csv(f: PathOrIOBase, mode="r", delimiter='\t'):
+    f = _make_r_io_base(f, mode)
     reader = csv.DictReader(f, delimiter=delimiter)
     out = dict(
         fieldnames=reader.fieldnames,
@@ -236,16 +237,14 @@ def read_csv(f: Union[str, io.IOBase], mode="r", delimiter='\t'):
 
 
 def write_csv(
-    f: str,
+    f: PathOrIOBase,
     fieldnames: Union[List, Tuple],
     # Each entry in rows is either a sequence or a dict.
     rows: Sequence[Union[Sequence, Dict]],
     mode="w",
     delimiter='\t',
-    **open_kwargs,
 ):
-    makedirs(os.path.dirname(f))
-    f = open(f, mode=mode, **open_kwargs)
+    f = _make_w_io_base(f, mode)
     if isinstance(rows[0], dict):
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
         writer.writeheader()
@@ -257,9 +256,8 @@ def write_csv(
     f.close()
 
 
-def readlines(f: Union[str, io.IOBase], mode="r", strip=True):
-    if not isinstance(f, io.IOBase):
-        f = open(f, mode=mode)
+def readlines(f: Union[str, pathlib.Path, io.IOBase], mode="r", strip=True):
+    f = _make_r_io_base(f, mode)
     lines = f.readlines()
     if strip:
         lines = [line.strip() for line in lines]
@@ -267,7 +265,7 @@ def readlines(f: Union[str, io.IOBase], mode="r", strip=True):
     return lines
 
 
-def read(f: Union[str, io.IOBase], mode="r", strip=True):
+def read(f: Union[str, pathlib.Path, io.IOBase], mode="r", strip=True):
     if not isinstance(f, io.IOBase):
         f = open(f, mode=mode)
     content = f.read()
