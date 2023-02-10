@@ -50,6 +50,13 @@ def _openai_completion(
     max_batches=sys.maxsize,  # This is useful during testing.
     return_text=False,  # Return text instead of full completion object (which contains things like logprob).
 ):
+    """Decode with OpenAI API.
+
+    If prompts is a string, returns a single completion object (which may contain things like logprob).
+    If prompts is a sequence, returns a list of completions objects.
+    If return_text is True, the completion objects are all strings.
+    If decoding_args.n > 1, returns a nested list, where each entry is a list of completion objects for the same prompt.
+    """
     is_single_prompt = isinstance(prompts, str)
     if is_single_prompt:
         prompts = [prompts]
@@ -84,7 +91,12 @@ def _openai_completion(
 
     if return_text:
         completions = [completion.text for completion in completions]
-    if is_single_prompt and decoding_args.n == 1:
+    if decoding_args.n > 1:
+        # make completions a nested list, where each entry is a consecutive decoding_args.n of original entries.
+        completions = [
+            completions[i: i + decoding_args.n] for i in range(0, len(completions), decoding_args.n)
+        ]
+    if is_single_prompt:
         completions, = completions  # Return non-tuple if only 1 input and 1 generation.
     return completions
 
