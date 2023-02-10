@@ -24,13 +24,19 @@ if openai_org is not None:
 
 @dataclasses.dataclass
 class OpenAIDecodingArguments(object):
+    suffix: Optional[str] = None
     max_tokens: int = 1800
     temperature: float = 0.2
     top_p: float = 1.
     n: int = 1
-    stop: Optional[Tuple[str, ...]] = None
+    stream: bool = False
     logprobs: Optional[int] = None
     echo: bool = False
+    stop: Optional[Tuple[str, ...]] = None
+    presence_penalty: float = 0.0
+    frequency_penalty: float = 0.0
+    best_of: int = 1
+    logit_bias: Optional[dict] = None
     # Heuristic stop when about to generate next function.
     # stop: Optional[Tuple[str, ...]] = ("}\n\nstatic", "}\n\n/*")
 
@@ -67,13 +73,7 @@ def _openai_completion(
                 completion_batch = openai.Completion.create(
                     model=model_name,
                     prompt=prompt_batch,
-                    max_tokens=decoding_args.max_tokens,
-                    temperature=decoding_args.temperature,
-                    top_p=decoding_args.top_p,
-                    n=decoding_args.n,
-                    stop=decoding_args.stop,
-                    logprobs=decoding_args.logprobs,
-                    echo=decoding_args.echo,
+                    **decoding_args.__dict__,
                 )
                 completions.extend(completion_batch.choices)
                 break
