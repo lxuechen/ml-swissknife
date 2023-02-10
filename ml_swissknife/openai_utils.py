@@ -36,7 +36,7 @@ class OpenAIDecodingArguments(object):
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
     best_of: int = 1
-    logit_bias: Optional[dict] = None
+    # logit_bias: dict = None
     # Heuristic stop when about to generate next function.
     # stop: Optional[Tuple[str, ...]] = ("}\n\nstatic", "}\n\n/*")
 
@@ -49,6 +49,7 @@ def _openai_completion(
     batch_size=1,
     max_batches=sys.maxsize,  # This is useful during testing.
     return_text=False,  # Return text instead of full completion object (which contains things like logprob).
+    **decoding_kwargs,
 ):
     """Decode with OpenAI API.
 
@@ -81,6 +82,7 @@ def _openai_completion(
                     model=model_name,
                     prompt=prompt_batch,
                     **decoding_args.__dict__,
+                    **decoding_kwargs,
                 )
                 completions.extend(completion_batch.choices)
                 break
