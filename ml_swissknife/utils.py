@@ -160,6 +160,21 @@ def confidence_interval(sample, alpha=0.05):
     return dict(low=low, high=high, delta=delta, mean=sample_mean)
 
 
+def _make_w_io_base(f: PathOrIOBase, mode: str):
+    if not isinstance(f, io.IOBase):
+        f_dirname = os.path.dirname(f)
+        if f_dirname != "":
+            makedirs(f_dirname)
+        f = open(f, mode=mode)
+    return f
+
+
+def _make_r_io_base(f: PathOrIOBase, mode: str):
+    if not isinstance(f, io.IOBase):
+        f = open(f, mode=mode)
+    return f
+
+
 def jdump(obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, default=str):
     """Dump a str or dictionary to a file in json format.
 
@@ -170,12 +185,7 @@ def jdump(obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, defa
         indent: Indent for storing json dictionaries.
         default: A function to handle non-serializable entries; defaults to `str`.
     """
-    if not isinstance(f, io.IOBase):
-        f_dirname = os.path.dirname(f)
-        if f_dirname != "":
-            makedirs(f_dirname)
-        f = open(f, mode=mode)
-
+    f = _make_w_io_base(f, mode)
     if isinstance(obj, (dict, list)):
         json.dump(obj, f, indent=indent, default=default)
     elif isinstance(obj, str):
@@ -187,8 +197,7 @@ def jdump(obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, defa
 
 def jload(f: PathOrIOBase, mode="r"):
     """Load a .json file into a dictionary."""
-    if not isinstance(f, io.IOBase):
-        f = open(f, mode=mode)
+    f = _make_r_io_base(f, mode)
     jdict = json.load(f)
     f.close()
     return jdict
@@ -205,11 +214,7 @@ def jldump(seq: Sequence[dict], f: PathOrIOBase, mode="w", indent=4, default=str
     """Dump a sequence of dictionaries into a .jsonl file."""
     if not all(isinstance(item, dict) for item in seq):
         raise ValueError("Input is not of type Sequence[dict].")
-    if not isinstance(f, io.IOBase):
-        f_dirname = os.path.dirname(f)
-        if f_dirname != "":
-            makedirs(f_dirname)
-        f = open(f, mode=mode)
+    f = _make_w_io_base(f, mode)
     for item in seq:
         f.write(json.dumps(item, indent=indent, default=default))
     f.close()
@@ -221,8 +226,7 @@ def jlload(f: PathOrIOBase, mode="r", strip=True):
 
 
 def read_csv(f: PathOrIOBase, mode="r", delimiter='\t'):
-    if not isinstance(f, io.IOBase):
-        f = open(f, mode=mode)
+    f = _make_r_io_base(f, mode)
     reader = csv.DictReader(f, delimiter=delimiter)
     out = dict(
         fieldnames=reader.fieldnames,
@@ -240,11 +244,7 @@ def write_csv(
     mode="w",
     delimiter='\t',
 ):
-    if not isinstance(f, io.IOBase):
-        f_dirname = os.path.dirname(f)
-        if f_dirname != "":
-            makedirs(f_dirname)
-        f = open(f, mode=mode)
+    f = _make_w_io_base(f, mode)
     if isinstance(rows[0], dict):
         writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
         writer.writeheader()
@@ -257,8 +257,7 @@ def write_csv(
 
 
 def readlines(f: Union[str, pathlib.Path, io.IOBase], mode="r", strip=True):
-    if not isinstance(f, io.IOBase):
-        f = open(f, mode=mode)
+    f = _make_r_io_base(f, mode)
     lines = f.readlines()
     if strip:
         lines = [line.strip() for line in lines]
