@@ -54,7 +54,7 @@ makedirs = functools.partial(os.makedirs, exist_ok=True)
 dirname = os.path.dirname
 basename = os.path.basename
 Numeric = Union[int, float]
-PathOrIO = Union[str, pathlib.Path, io.IOBase]
+PathOrIOBase = Union[str, pathlib.Path, io.IOBase]
 
 
 def float2str(x, precision=8):
@@ -160,7 +160,7 @@ def confidence_interval(sample, alpha=0.05):
     return dict(low=low, high=high, delta=delta, mean=sample_mean)
 
 
-def jdump(obj: Union[str, dict, list], f: PathOrIO, mode="w", indent=4, default=str):
+def jdump(obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, default=str):
     """Dump a str or dictionary to a file in json format.
 
     Args:
@@ -185,7 +185,7 @@ def jdump(obj: Union[str, dict, list], f: PathOrIO, mode="w", indent=4, default=
     f.close()
 
 
-def jload(f: PathOrIO, mode="r"):
+def jload(f: PathOrIOBase, mode="r"):
     """Load a .json file into a dictionary."""
     if not isinstance(f, io.IOBase):
         f = open(f, mode=mode)
@@ -201,7 +201,7 @@ def jdumps(obj, indent=4, default=str):
 jloads = json.loads
 
 
-def jldump(seq: Sequence[dict], f: PathOrIO, mode="w", indent=4, default=str):
+def jldump(seq: Sequence[dict], f: PathOrIOBase, mode="w", indent=4, default=str):
     """Dump a sequence of dictionaries into a .jsonl file."""
     if not all(isinstance(item, dict) for item in seq):
         raise ValueError("Input is not of type Sequence[dict].")
@@ -215,12 +215,12 @@ def jldump(seq: Sequence[dict], f: PathOrIO, mode="w", indent=4, default=str):
     f.close()
 
 
-def jlload(f: PathOrIO, mode="r", strip=True):
+def jlload(f: PathOrIOBase, mode="r", strip=True):
     """Load a .jsonl file into a list of dictionaries."""
     return [json.loads(line) for line in readlines(f, mode=mode, strip=strip)]
 
 
-def read_csv(f: PathOrIO, mode="r", delimiter='\t'):
+def read_csv(f: PathOrIOBase, mode="r", delimiter='\t'):
     if not isinstance(f, io.IOBase):
         f = open(f, mode=mode)
     reader = csv.DictReader(f, delimiter=delimiter)
@@ -233,7 +233,7 @@ def read_csv(f: PathOrIO, mode="r", delimiter='\t'):
 
 
 def write_csv(
-    f: PathOrIO,
+    f: PathOrIOBase,
     fieldnames: Union[List, Tuple],
     # Each entry in rows is either a sequence or a dict.
     rows: Sequence[Union[Sequence, Dict]],
