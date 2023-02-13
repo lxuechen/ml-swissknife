@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# TODO: this should be loaded from database.helpers but streamlit doesn't like importing from another
-#   directory (even if it's in the sys path)
 import sqlite3
 from contextlib import contextmanager
 
