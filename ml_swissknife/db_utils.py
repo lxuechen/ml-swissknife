@@ -56,7 +56,7 @@ def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
                     df.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
                 except:
                     rows_errors.append(i)
-            print(f"Failed to add {len(rows_errors)} rows our of {len(df)} to {table_name} with error: {e}")
+            print(f"Failed to add {len(rows_errors)} rows out of {len(df)} to {table_name} with error: {e}")
 
             # saves the error rows to a csv file to avoid losing the data
             df_errors = df.iloc[rows_errors]
