@@ -52,7 +52,7 @@ def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
     with create_connection(database) as conn:
         try:
             df.to_sql(table_name, conn, if_exists="append", index=index)
-            print(f"Added df to {table_name}")
+            print(f"Added {len(df)} rows to {table_name}")
         except sqlite3.Error as e:
             # if there is an error, it tries to add the rows one by one
             rows_errors = []
