@@ -44,6 +44,11 @@ def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
     recovery_path : str, optional
         Path to the folder where to save the error rows in case of failure.
     """
+    if not index:
+        # if the index should not be considered as a column then there might be duplicates
+        # so we remove them as this would cause an error
+        df = df.drop_duplicates()
+
     with create_connection(database) as conn:
         try:
             df.to_sql(table_name, conn, if_exists="append", index=index)
