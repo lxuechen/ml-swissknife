@@ -24,6 +24,52 @@ import sqlite3
 from contextlib import contextmanager
 
 
+def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
+    """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe to add to the database.
+
+    database : str
+        Path to the database.
+
+    table_name : str
+        Name of the table to add the dataframe to.
+
+    index : bool, optional
+        Whether to add the index of the dataframe as a column.
+
+    recovery_path : str, optional
+        Path to the folder where to save the error rows in case of failure.
+    """
+    if not index:
+        # if the index should not be considered as a column then there might be duplicates
+        # so we remove them as this would cause an error
+        df = df.drop_duplicates()
+
+    with create_connection(database) as conn:
+        try:
+            df.to_sql(table_name, conn, if_exists="append", index=index)
+            print(f"Added df to {table_name}")
+        except sqlite3.Error as e:
+            # if there is an error, it tries to add the rows one by one
+            rows_errors = []
+            for i in range(len(df)):
+                try:
+                    df.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
+                except:
+                    rows_errors.append(i)
+            print(f"Failed to add {len(rows_errors)} rows out of {len(df)} to {table_name} with error: {e}")
+
+            # saves the error rows to a csv file to avoid losing the data
+            df_errors = df.iloc[rows_errors]
+            recovery_path = Path(recovery_path) / f"failed_add_to_{table_name}_{random.randint(10**5, 10**6)}.csv"
+            df_errors.to_csv(recovery_path, index=index)
+            print(f"Saved errors to {recovery_path}")
+
+
 @contextmanager
 def create_connection(db_file):
     """Create a database connection to a SQLite database """
