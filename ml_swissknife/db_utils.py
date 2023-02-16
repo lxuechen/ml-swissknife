@@ -27,12 +27,14 @@ from pathlib import Path
 import pandas as pd
 
 
-def prepare_to_add_to_db(df_to_add, database, table_name):
+def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=False):
     """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
     and columns not in the database."""
     with create_connection(database) as conn:
         df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
     columns = [c for c in df_db.columns if c in df_to_add.columns]
+    if is_subset_columns:
+        df_db = df_db[columns]
     df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
     df_delta = get_delta_df(df_all, df_db)
     return df_delta
