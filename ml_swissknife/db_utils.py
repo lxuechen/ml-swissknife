@@ -27,6 +27,17 @@ from pathlib import Path
 import pandas as pd
 
 
+def prepare_to_add_to_db(df_to_add, database, table_name):
+    """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
+    and columns not in the database."""
+    with create_connection(database) as conn:
+        df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+    columns = [c for c in df_db.columns if c in df_to_add.columns]
+    df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+    df_delta = get_delta_df(df_all, df_db)
+    return df_delta
+
+
 def get_delta_df(df_all, df_subset):
     """return the complement of df_subset"""
     columns = list(df_all.columns)
@@ -34,7 +45,7 @@ def get_delta_df(df_all, df_subset):
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
-def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=".", is_clean_df=True):
+def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=".", is_prepare_to_add_to_db=True):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
     Parameters
@@ -54,17 +65,12 @@ def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=
     recovery_path : str, optional
         Path to the folder where to save the error rows in case of failure.
 
-    is_clean_df : bool, optional
+    prepare_to_add_to_db : bool, optional
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
     """
-    if is_clean_df:
-        assert not index
-        with create_connection(database) as conn:
-            df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
-        columns = [c for c in df_db.columns if c in df_to_add.columns]
-        df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
-        df_delta = get_delta_df(df_all, df_db)
+    if is_prepare_to_add_to_db:
+        df_delta = prepare_to_add_to_db(df_to_add, database, table_name)
     else:
         df_delta = df_to_add
 
