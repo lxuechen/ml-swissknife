@@ -24,6 +24,7 @@ import random
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+import pandas as pd
 
 
 def get_delta_df(df_all, df_subset):
