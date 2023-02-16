@@ -24,12 +24,19 @@ import sqlite3
 from contextlib import contextmanager
 
 
-def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
+def get_delta_df(df_all, df_subset):
+    """return the complement of df_subset"""
+    columns = list(df_all.columns)
+    df_ind = df_all.merge(df_subset.drop_duplicates(), on=columns, how="left", indicator=True)
+    return df_ind.query("_merge == 'left_only' ")[columns]
+
+
+def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=".", is_clean_df=True):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df_to_add : pd.DataFrame
         Dataframe to add to the database.
 
     database : str
@@ -43,31 +50,43 @@ def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
 
     recovery_path : str, optional
         Path to the folder where to save the error rows in case of failure.
+
+    is_clean_df : bool, optional
+        Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
+        remove columns that are not in the database.
     """
-    if not index:
-        # if the index should not be considered as a column then there might be duplicates
-        # so we remove them as this would cause an error
-        df = df.drop_duplicates()
+    if is_clean_df:
+        assert not index
+        with create_connection(database) as conn:
+            df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+        columns = [c for c in df_db.columns if c in df_to_add.columns]
+        df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+        df_delta = get_delta_df(df_all, df_db)
+    else:
+        df_delta = df_to_add
 
     with create_connection(database) as conn:
         try:
-            df.to_sql(table_name, conn, if_exists="append", index=index)
-            print(f"Added {len(df)} rows to {table_name}")
+            df_delta.to_sql(table_name, conn, if_exists="append", index=index)
+            print(f"Added {len(df_delta)} rows to {table_name}")
         except sqlite3.Error as e:
             # if there is an error, it tries to add the rows one by one
             rows_errors = []
-            for i in range(len(df)):
+            for i in range(len(df_delta)):
                 try:
-                    df.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
+                    df_delta.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
                 except:
                     rows_errors.append(i)
-            print(f"Failed to add {len(rows_errors)} rows out of {len(df)} to {table_name} with error: {e}")
+            print(f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name} with error: {e}")
 
             # saves the error rows to a csv file to avoid losing the data
-            df_errors = df.iloc[rows_errors]
-            recovery_path = Path(recovery_path) / f"failed_add_to_{table_name}_{random.randint(10**5, 10**6)}.csv"
-            df_errors.to_csv(recovery_path, index=index)
-            print(f"Saved errors to {recovery_path}")
+            df_errors = df_delta.iloc[rows_errors]
+            random_idx = random.randint(10 ** 5, 10 ** 6)
+            recovery_error_path = Path(recovery_path) / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
+            recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+            df_errors.to_csv(recovery_error_path, index=index)
+            df_to_add.to_csv(recovery_all_path, index=index)
+            print(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
 
 
 @contextmanager
