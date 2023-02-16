@@ -20,8 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import random
 import sqlite3
 from contextlib import contextmanager
+from pathlib import Path
 
 
 def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
@@ -58,14 +60,14 @@ def append_df_to_db(df, database, table_name, index=False, recovery_path="."):
             rows_errors = []
             for i in range(len(df)):
                 try:
-                    df.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
+                    df.iloc[i: i + 1].to_sql(table_name, conn, if_exists="append", index=index)
                 except:
                     rows_errors.append(i)
             print(f"Failed to add {len(rows_errors)} rows out of {len(df)} to {table_name} with error: {e}")
 
             # saves the error rows to a csv file to avoid losing the data
             df_errors = df.iloc[rows_errors]
-            recovery_path = Path(recovery_path) / f"failed_add_to_{table_name}_{random.randint(10**5, 10**6)}.csv"
+            recovery_path = Path(recovery_path) / f"failed_add_to_{table_name}_{random.randint(10 ** 5, 10 ** 6)}.csv"
             df_errors.to_csv(recovery_path, index=index)
             print(f"Saved errors to {recovery_path}")
 
