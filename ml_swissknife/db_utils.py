@@ -67,7 +67,7 @@ def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=
     recovery_path : str, optional
         Path to the folder where to save the error rows in case of failure.
 
-    prepare_to_add_to_db : bool, optional
+    is_prepare_to_add_to_db : bool, optional
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
     """
@@ -95,8 +95,11 @@ def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=
             random_idx = random.randint(10 ** 5, 10 ** 6)
             recovery_error_path = Path(recovery_path) / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
             recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
-            df_errors.to_csv(recovery_error_path, index=index)
-            df_to_add.to_csv(recovery_all_path, index=index)
+
+            # save json as a list of dict if you don't want to keep index, else dict of dict
+            orient = "index" if index else "records"
+            df_errors.to_json(recovery_error_path, orient=orient, indent=2)
+            df_to_add.to_json(recovery_all_path, orient=orient, indent=2)
             print(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
 
 
