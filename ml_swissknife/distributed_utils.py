@@ -4,11 +4,21 @@ Last tweaks were made in Feb. 2021, so might be outdated.
 """
 import os
 import sys
+from typing import Optional
 
+import torch
 import torch.distributed as dist
 
 
-def setup(rank, world_size):
+def setup(rank: Optional[int] = None, world_size: Optional[int] = None):
+    if rank is None:
+        rank = get_local_rank()
+    if world_size is None:
+        world_size = get_world_size()
+
+    if world_size <= 1:
+        return
+
     if sys.platform == 'win32':
         # Distributed package only covers collective communications with Gloo
         # backend and FileStore on Windows platform. Set init_method parameter
@@ -21,10 +31,10 @@ def setup(rank, world_size):
             rank=rank,
             world_size=world_size
         )
-    else:
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
+    elif torch.cuda.is_available():
         dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    else:
+        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
 
 def cleanup():
@@ -32,7 +42,11 @@ def cleanup():
 
 
 def get_local_rank():
-    return os.getenv("LOCAL_RANK", -1)
+    return int(os.getenv("LOCAL_RANK", -1))
+
+
+def get_world_size():
+    return int(os.getenv("WORLD_SIZE", 1))
 
 
 def should_save():
