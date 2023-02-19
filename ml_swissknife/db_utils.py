@@ -27,6 +27,19 @@ from pathlib import Path
 import pandas as pd
 
 
+def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=False):
+    """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
+    and columns not in the database."""
+    with create_connection(database) as conn:
+        df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+    columns = [c for c in df_db.columns if c in df_to_add.columns]
+    if is_subset_columns:
+        df_db = df_db[columns]
+    df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+    df_delta = get_delta_df(df_all, df_db)
+    return df_delta
+
+
 def get_delta_df(df_all, df_subset):
     """return the complement of df_subset"""
     columns = list(df_all.columns)
@@ -34,7 +47,7 @@ def get_delta_df(df_all, df_subset):
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
-def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=".", is_clean_df=True):
+def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=".", is_prepare_to_add_to_db=True):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
     Parameters
@@ -54,17 +67,12 @@ def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=
     recovery_path : str, optional
         Path to the folder where to save the error rows in case of failure.
 
-    is_clean_df : bool, optional
+    is_prepare_to_add_to_db : bool, optional
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
     """
-    if is_clean_df:
-        assert not index
-        with create_connection(database) as conn:
-            df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
-        columns = [c for c in df_db.columns if c in df_to_add.columns]
-        df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
-        df_delta = get_delta_df(df_all, df_db)
+    if is_prepare_to_add_to_db:
+        df_delta = prepare_to_add_to_db(df_to_add, database, table_name)
     else:
         df_delta = df_to_add
 
@@ -87,8 +95,11 @@ def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=
             random_idx = random.randint(10 ** 5, 10 ** 6)
             recovery_error_path = Path(recovery_path) / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
             recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
-            df_errors.to_csv(recovery_error_path, index=index)
-            df_to_add.to_csv(recovery_all_path, index=index)
+
+            # save json as a list of dict if you don't want to keep index, else dict of dict
+            orient = "index" if index else "records"
+            df_errors.to_json(recovery_error_path, orient=orient, indent=2)
+            df_to_add.to_json(recovery_all_path, orient=orient, indent=2)
             print(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
 
 
