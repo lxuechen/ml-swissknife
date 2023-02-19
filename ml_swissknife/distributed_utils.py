@@ -1,6 +1,6 @@
 """Utilities for PyTorch's distributed training.
 
-Last tweaks were made in Feb. 2021, so might be outdated.
+Compatible with torchrun / elastic and torch.distributed.launch.
 """
 import os
 import sys
@@ -17,24 +17,27 @@ def setup(rank: Optional[int] = None, world_size: Optional[int] = None):
         world_size = get_world_size()
 
     if world_size <= 1:
-        return
+        return rank, world_size
 
-    if sys.platform == 'win32':
-        # Distributed package only covers collective communications with Gloo
-        # backend and FileStore on Windows platform. Set init_method parameter
-        # in init_process_group to a local file.
-        # Example init_method="file:///f:/libtmp/some_file"
-        init_method = "file:///f:/libtmp/dist-tmp"
-        dist.init_process_group(
-            backend="gloo",
-            init_method=init_method,
-            rank=rank,
-            world_size=world_size
-        )
-    elif torch.cuda.is_available():
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    else:
-        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    if not dist.is_initialized():
+        if sys.platform == 'win32':
+            # Distributed package only covers collective communications with Gloo
+            # backend and FileStore on Windows platform. Set init_method parameter
+            # in init_process_group to a local file.
+            # Example init_method="file:///f:/libtmp/some_file"
+            init_method = "file:///f:/libtmp/dist-tmp"
+            dist.init_process_group(
+                backend="gloo",
+                init_method=init_method,
+                rank=rank,
+                world_size=world_size
+            )
+        elif torch.cuda.is_available():
+            dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+        else:
+            dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    return rank, world_size
 
 
 def cleanup():
@@ -50,8 +53,8 @@ def get_world_size():
 
 
 def should_save():
-    """Return True if the current process is the main process.
-
-    This function is compatible with torchrun / elastic and torch.distributed.launch.
-    """
+    """Return True if the current process is the main process."""
     return get_local_rank() <= 0
+
+
+is_main_process = should_save
