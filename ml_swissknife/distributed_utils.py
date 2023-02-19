@@ -31,10 +31,13 @@ def cleanup():
     dist.destroy_process_group()
 
 
+def get_local_rank():
+    return os.getenv("LOCAL_RANK", -1)
+
+
 def should_save():
     """Return True if the current process is the main process.
 
     This function is compatible with torchrun / elastic and torch.distributed.launch.
     """
-    local_rank = os.getenv("LOCAL_RANK", -1)
-    return local_rank <= 0
+    return get_local_rank() <= 0
