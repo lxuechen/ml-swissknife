@@ -5,10 +5,7 @@ Last tweaks were made in Feb. 2021, so might be outdated.
 import os
 import sys
 
-import torch
 import torch.distributed as dist
-
-from lxuechen_utils import utils
 
 
 def setup(rank, world_size):
@@ -34,15 +31,10 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def prep(train_dir, task_folder, seed):
-    utils.manual_seed(seed)
-    utils.show_env()
+def should_save():
+    """Return True if the current process is the main process.
 
-    world_size = torch.cuda.device_count()
-
-    ckpts_dir = os.path.join(train_dir, task_folder, "ckpts")
-    results_dir = os.path.join(train_dir, task_folder, "results")
-    os.makedirs(ckpts_dir, exist_ok=True)
-    os.makedirs(results_dir, exist_ok=True)
-
-    return world_size, ckpts_dir, results_dir
+    This function is compatible with torchrun / elastic and torch.distributed.launch.
+    """
+    local_rank = os.getenv("LOCAL_RANK", -1)
+    return local_rank <= 0
