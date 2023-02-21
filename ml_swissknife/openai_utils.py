@@ -74,6 +74,7 @@ def _openai_completion(
         desc="prompt_batches",
         total=min(len(prompt_batches), max_batches),
     ):
+        batch_decoding_args = dataclasses.replace(decoding_args) # cloning the decoding_args
         if batch_id >= max_batches:
             break
         while True:
@@ -81,15 +82,19 @@ def _openai_completion(
                 completion_batch = openai.Completion.create(
                     model=model_name,
                     prompt=prompt_batch,
-                    **decoding_args.__dict__,
+                    **batch_decoding_args.__dict__,
                     **decoding_kwargs,
                 )
                 completions.extend(completion_batch.choices)
                 break
-            except Exception as e:
-                print(e)
-                logging.warning('Hit request rate limit; retrying...')
-                time.sleep(sleep_time)  # Annoying rate limit on requests.
+            except openai.error.OpenAIError as e:
+                print(f"OpenAIError: {e}.")
+                if "Please reduce your prompt" in str(e):
+                    batch_decoding_args.max_tokens = int(batch_decoding_args.max_tokens * 0.8)
+                    logging.warning(f"Reducing target length to {batch_decoding_args.max_tokens}, Retrying...")
+                else:
+                    logging.warning('Hit request rate limit; retrying...')
+                    time.sleep(sleep_time)  # Annoying rate limit on requests.
 
     if return_text:
         completions = [completion.text for completion in completions]
