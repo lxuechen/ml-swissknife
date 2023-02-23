@@ -216,7 +216,7 @@ def jldump(seq: Sequence[dict], f: PathOrIOBase, mode="w", indent=4, default=str
         raise ValueError("Input is not of type Sequence[dict].")
     f = _make_w_io_base(f, mode)
     for item in seq:
-        f.write(json.dumps(item, indent=indent, default=default))
+        f.write(json.dumps(item, indent=indent, default=default) + '\n')
     f.close()
 
 
