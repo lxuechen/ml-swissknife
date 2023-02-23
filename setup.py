@@ -21,8 +21,8 @@ setuptools.setup(
     version=version,
     license="MIT",
     description="Reusable ML research primitives for fast prototyping.",
-    author="Xuechen Li",
-    author_email="lxuechen@cs.toronto.edu",
+    author="Xuechen Li, Yann Dubois, Tianyi Zhang",
+    author_email="lxuechen@cs.toronto.edu, yanndubs@stanford.edu, tz58@stanford.edu",
     url="https://github.com/lxuechen/ml-swissknife",
     install_requires=[
         'torch', 'torchvision', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers',
