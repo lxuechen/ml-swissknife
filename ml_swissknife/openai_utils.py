@@ -11,7 +11,7 @@ import math
 import os
 import sys
 import time
-from typing import Optional, Tuple, Union
+from typing import Optional, Sequence, Union
 
 import openai
 import tqdm
@@ -32,7 +32,7 @@ class OpenAIDecodingArguments(object):
     stream: bool = False
     logprobs: Optional[int] = None
     echo: bool = False
-    stop: Optional[Tuple[str, ...]] = None
+    stop: Optional[Sequence[str]] = None
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
     best_of: int = 1
@@ -42,7 +42,7 @@ class OpenAIDecodingArguments(object):
 
 
 def _openai_completion(
-    prompts: Union[str, list, tuple],
+    prompts: Union[str, Sequence[str]],
     decoding_args: OpenAIDecodingArguments,
     model_name='text-davinci-003',
     sleep_time=2,

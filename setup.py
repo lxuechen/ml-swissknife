@@ -27,7 +27,7 @@ setuptools.setup(
     install_requires=[
         'torch', 'torchvision', 'spacy', 'tqdm', 'numpy', 'scipy', 'gputil', 'fire', 'requests', 'nltk', 'transformers',
         'datasets', 'gdown>=4.4.0', 'pandas', 'pytest', 'matplotlib', 'seaborn', 'cvxpy', 'imageio', 'wandb', 'openai',
-        'numba'
+        'numba', 'crfm-helm'
     ],
     extras_require=extras_require,
     python_requires='~=3.7',
