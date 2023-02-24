@@ -42,7 +42,7 @@ def crfm_completion(
     max_instances=sys.maxsize,
     return_text=False,  # Return text instead of full completion object (which contains things like logprob).
     crfm_api_key: Optional[str] = None,
-    random=None,
+    random: Optional[str] = None,
     **unused_kwargs,
 ):
     """Mirrors `openai_utils._openai_completion`."""
@@ -102,6 +102,7 @@ def main(**kwargs):
         prompts=["Life is"],
         decoding_args=openai_utils.OpenAIDecodingArguments(n=2),
         return_text=True,
+        random="1000",
     )
     print(out)
     out = crfm_completion(
