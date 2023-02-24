@@ -47,7 +47,7 @@ from torch.utils import data
 
 # Misc.
 home = os.path.expanduser("~")
-home_data = os.path.join(home, 'data')
+home_data = os.path.join(home, "data")
 join = os.path.join
 pathexists = os.path.exists
 makedirs = functools.partial(os.makedirs, exist_ok=True)
@@ -58,7 +58,7 @@ PathOrIOBase = Union[str, pathlib.Path, io.IOBase]
 
 
 def float2str(x, precision=8):
-    return f"{x:.{precision}f}".replace('.', "_")
+    return f"{x:.{precision}f}".replace(".", "_")
 
 
 def int2str(x, leading_zeros=8):
@@ -92,7 +92,9 @@ def average_over_seed(seq_of_seq):  # Here purely due to backward compatibility.
     return seq_of_seq.mean(0), seq_of_seq.std(0)
 
 
-def average_metric_over_seeds(*seqs: Union[Sequence[Numeric], Sequence[Dict[str, Numeric]]]):
+def average_metric_over_seeds(
+    *seqs: Union[Sequence[Numeric], Sequence[Dict[str, Numeric]]]
+):
     # seqs is an iterable. Each seq is a sequence of numbers or dicts to average over.
     single_input = len(seqs) == 1
     outputs = tuple(_average_metric_over_seeds_for_single_seq(seq) for seq in seqs)
@@ -101,7 +103,9 @@ def average_metric_over_seeds(*seqs: Union[Sequence[Numeric], Sequence[Dict[str,
     return outputs
 
 
-def _average_metric_over_seeds_for_single_seq(seq: Union[Sequence[Numeric], Sequence[Dict[str, Numeric]]]):
+def _average_metric_over_seeds_for_single_seq(
+    seq: Union[Sequence[Numeric], Sequence[Dict[str, Numeric]]]
+):
     # TODO: Enable further nesting, e.g., dict where values could be list or tuple.
     if len(seq) == 0:
         return ()
@@ -118,7 +122,9 @@ def _average_metric_over_seeds_for_single_seq(seq: Union[Sequence[Numeric], Sequ
             output[key] = (float(np.mean(values)), float(np.std(values)))
         return output
     else:
-        raise ValueError(f"Expected each elem of seq to be of type int, float, or dict, but found type: {type(seq[0])}")
+        raise ValueError(
+            f"Expected each elem of seq to be of type int, float, or dict, but found type: {type(seq[0])}"
+        )
 
 
 def single_standard_deviation(sample, return_type="tuple"):
@@ -175,7 +181,9 @@ def _make_r_io_base(f: PathOrIOBase, mode: str):
     return f
 
 
-def jdump(obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, default=str):
+def jdump(
+    obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, default=str
+):
     """Dump a str or dictionary to a file in json format.
 
     Args:
@@ -191,7 +199,7 @@ def jdump(obj: Union[str, dict, list], f: PathOrIOBase, mode="w", indent=4, defa
     elif isinstance(obj, str):
         f.write(obj)
     else:
-        raise ValueError(f'Unexpected type: {type(obj)}')
+        raise ValueError(f"Unexpected type: {type(obj)}")
     f.close()
 
 
@@ -216,7 +224,7 @@ def jldump(seq: Sequence[dict], f: PathOrIOBase, mode="w", indent=4, default=str
         raise ValueError("Input is not of type Sequence[dict].")
     f = _make_w_io_base(f, mode)
     for item in seq:
-        f.write(json.dumps(item, indent=indent, default=default) + '\n')
+        f.write(json.dumps(item, indent=indent, default=default) + "\n")
     f.close()
 
 
@@ -225,13 +233,10 @@ def jlload(f: PathOrIOBase, mode="r", strip=True):
     return [json.loads(line) for line in readlines(f, mode=mode, strip=strip)]
 
 
-def read_csv(f: PathOrIOBase, mode="r", delimiter='\t'):
+def read_csv(f: PathOrIOBase, mode="r", delimiter="\t"):
     f = _make_r_io_base(f, mode)
     reader = csv.DictReader(f, delimiter=delimiter)
-    out = dict(
-        fieldnames=reader.fieldnames,
-        rows=tuple(line for line in reader)
-    )
+    out = dict(fieldnames=reader.fieldnames, rows=tuple(line for line in reader))
     f.close()
     return out
 
@@ -242,7 +247,7 @@ def write_csv(
     # Each entry in rows is either a sequence or a dict.
     rows: Sequence[Union[Sequence, Dict]],
     mode="w",
-    delimiter='\t',
+    delimiter="\t",
 ):
     f = _make_w_io_base(f, mode)
     if isinstance(rows[0], dict):
@@ -275,7 +280,11 @@ def read(f: Union[str, pathlib.Path, io.IOBase], mode="r", strip=True):
     return content
 
 
-def listdir(directory, skip_suffixes: Union[Sequence, str] = (), full_path: Optional[bool] = False):
+def listdir(
+    directory,
+    skip_suffixes: Union[Sequence, str] = (),
+    full_path: Optional[bool] = False,
+):
     """Convenience function to replace `os.listdir` for skipping annoying mac hidden files."""
     if isinstance(skip_suffixes, str):
         skip_suffixes = (skip_suffixes,)
@@ -283,7 +292,9 @@ def listdir(directory, skip_suffixes: Union[Sequence, str] = (), full_path: Opti
 
     file_names = os.listdir(directory)
     for skip_suffix in skip_suffixes:
-        file_names = [file_name for file_name in file_names if not file_name.endswith(skip_suffix)]
+        file_names = [
+            file_name for file_name in file_names if not file_name.endswith(skip_suffix)
+        ]
 
     if full_path:
         file_names = [os.path.join(directory, file_name) for file_name in file_names]
@@ -296,9 +307,15 @@ def list_file_paths(directory, skip_suffixes: Union[Sequence, str] = ()):
         skip_suffixes = (skip_suffixes,)
     skip_suffixes = tuple(skip_suffixes) + (".DS_Store",)
 
-    file_paths = [os.path.join(root, file) for root, dirs, files in os.walk(directory) for file in files]
+    file_paths = [
+        os.path.join(root, file)
+        for root, dirs, files in os.walk(directory)
+        for file in files
+    ]
     for suffix in skip_suffixes:
-        file_paths = [file_path for file_path in file_paths if not file_path.endswith(suffix)]
+        file_paths = [
+            file_path for file_path in file_paths if not file_path.endswith(suffix)
+        ]
     return file_paths
 
 
@@ -308,7 +325,7 @@ listfiles = list_file_paths
 
 def listfds():
     """List all open file descriptors."""
-    return sorted(list(set(os.listdir('/proc/self/fd/'))))
+    return sorted(list(set(os.listdir("/proc/self/fd/"))))
 
 
 def compress(path: str, out_path: Optional[str] = None):
@@ -355,12 +372,18 @@ def alleq(l: Sequence, f: Optional[Callable] = lambda x, y: x == y):
 
 def zip_(*args: Sequence):
     """Assert sequences of same length before zipping."""
-    if len(args) == 0: return []
+    if len(args) == 0:
+        return []
     assert alleq(args, lambda x, y: len(x) == len(y))
     return zip(*args)
 
 
-def write_config(args: argparse.Namespace, file_name='argparse.json', config_path=None, attr="train_dir"):
+def write_config(
+    args: argparse.Namespace,
+    file_name="argparse.json",
+    config_path=None,
+    attr="train_dir",
+):
     """Creates folders and write config.
 
     Doesn't write if in `eval` mode.
@@ -376,20 +399,26 @@ def write_config(args: argparse.Namespace, file_name='argparse.json', config_pat
     if config_path is None:
         config_path = os.path.join(train_dir, file_name)
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
-    with open(config_path, 'w') as f:
+    with open(config_path, "w") as f:
         json.dump(args.__dict__, f, indent=4)
     logging.warning(f"Wrote config: {config_path}")
 
-    if ((hasattr(args, 'cloud_storage') and args.cloud_storage) or
-        (hasattr(args, 'to_gcs') and args.to_gcs)):
+    if (hasattr(args, "cloud_storage") and args.cloud_storage) or (
+        hasattr(args, "to_gcs") and args.to_gcs
+    ):
         gs_upload_from_path(config_path, remove_local=False)
         logging.warning(f"Uploaded to cloud: {config_path}")
 
 
-def load_config(args: argparse.Namespace, file_name='argparse.json', config_path=None, replace_exclude=()):
+def load_config(
+    args: argparse.Namespace,
+    file_name="argparse.json",
+    config_path=None,
+    replace_exclude=(),
+):
     if config_path is None:
         config_path = os.path.join(args.train_dir, file_name)
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         config = json.load(f)
     for key in replace_exclude:
         config.pop(key, None)
@@ -397,15 +426,20 @@ def load_config(args: argparse.Namespace, file_name='argparse.json', config_path
 
 
 def str2bool(v):
-    if isinstance(v, bool): return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'): return True
-    if v.lower() in ('no', 'false', 'f', 'n', '0'): return False
-    raise argparse.ArgumentTypeError('Boolean value expected.')
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    if v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 def str2int(v):
-    if isinstance(v, int): return v
-    if v.lower() in ("none",): return None
+    if isinstance(v, int):
+        return v
+    if v.lower() in ("none",):
+        return None
     return int(v)
 
 
@@ -419,9 +453,9 @@ def gather_args(parser: argparse.ArgumentParser):
 
     key = None
     for arg in unknown_args:
-        if arg.startswith('--'):
+        if arg.startswith("--"):
             key = arg[2:]
-        elif arg.startswith('-'):
+        elif arg.startswith("-"):
             key = arg[1:]
         else:
             unknown_options[key].append(arg)
@@ -439,7 +473,10 @@ def flatten_nested_pystruct(sequence: Sequence):
 def parallel_sort(*args, key=None, reverse=False):
     """Parallel sort of multiple lists."""
     # args: A bunch of sequences.
-    if key is None: key = lambda inputs: inputs[0]  # Parallel sort based on the order of the first list.
+    if key is None:
+        key = lambda inputs: inputs[
+            0
+        ]  # Parallel sort based on the order of the first list.
     ret = sorted(zip_(*args), key=key, reverse=reverse)
     return tuple([ret_i[j] for ret_i in ret] for j in range(len(args)))
 
@@ -469,7 +506,7 @@ class _SuppressAssertions(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is AssertionError:
-            self.tqdm_range.write('Caught AssertionError: ' + str(exc_val))
+            self.tqdm_range.write("Caught AssertionError: " + str(exc_val))
             return True
 
 
@@ -478,10 +515,16 @@ def show_env(args_or_device=None):
         if hasattr(args_or_device, "device"):
             args_or_device = args_or_device.device
         elif hasattr(args_or_device, "no_gpu"):
-            args_or_device = "cuda" if torch.cuda.is_available() and not args_or_device.no_gpu else "cpu"
+            args_or_device = (
+                "cuda"
+                if torch.cuda.is_available() and not args_or_device.no_gpu
+                else "cpu"
+            )
         logging.warning(f"Running on device: {args_or_device}")
     logging.warning(f"CUDA device count: {torch.cuda.device_count()}")
-    logging.warning(f"Running Python: \n{sys.version}; \nversion info: \n{sys.version_info}")
+    logging.warning(
+        f"Running Python: \n{sys.version}; \nversion info: \n{sys.version_info}"
+    )
     logging.warning(f"Running PyTorch: {torch.__version__}")
     logging.warning(f"Running six: {six.__version__}")
 
@@ -491,7 +534,7 @@ def download_file_from_google_drive(id, destination, timeout=120):
 
     def get_confirm_token(response):
         for key, value in response.cookies.items():
-            if key.startswith('download_warning'):
+            if key.startswith("download_warning"):
                 return value
 
         return None
@@ -506,11 +549,11 @@ def download_file_from_google_drive(id, destination, timeout=120):
 
     URL = "https://docs.google.com/uc?export=download"
     session = requests.Session()
-    response = session.get(URL, params={'id': id}, stream=True, timeout=timeout)
+    response = session.get(URL, params={"id": id}, stream=True, timeout=timeout)
     token = get_confirm_token(response)
 
     if token:
-        params = {'id': id, 'confirm': token}
+        params = {"id": id, "confirm": token}
         response = session.get(URL, params=params, stream=True, timeout=timeout)
 
     os.makedirs(os.path.dirname(destination), exist_ok=True)
@@ -518,13 +561,13 @@ def download_file_from_google_drive(id, destination, timeout=120):
 
 
 def isdigit(x):
-    if len(x) > 0 and x[0] in ('-', '+'):
+    if len(x) > 0 and x[0] in ("-", "+"):
         return x[1:].isdigit()
     return x.isdigit()
 
 
 class Timeout(contextlib.ContextDecorator):
-    def __init__(self, seconds: Union[float, int], error_message='Timeout'):
+    def __init__(self, seconds: Union[float, int], error_message="Timeout"):
         self.seconds = seconds
         self.error_message = error_message
 
@@ -532,7 +575,9 @@ class Timeout(contextlib.ContextDecorator):
         raise TimeoutError(self.error_message)  # This doesn't work in Py2.
 
     def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handle_timeout)  # Create custom handler for SIGALRM.
+        signal.signal(
+            signal.SIGALRM, self.handle_timeout
+        )  # Create custom handler for SIGALRM.
         # `signal.ITIMER_REAL` will deliver SIGALRM in `self.seconds`.
         # Better than directly sending SIGALRM, which doesn't allow floating-point seconds.
         signal.setitimer(signal.ITIMER_REAL, self.seconds)
@@ -564,10 +609,10 @@ def mvdir(src: str, tgt: str, tmp: str):
     moving /home/path -> /home/path/sub.
     Note naive `mv` does not work for this case!
     """
-    os.system(f'mv {src} {tmp}')
-    os.system(f'mkdir -p {tgt}')
-    os.system(f'mv {tmp}/* {tgt}')
-    os.system(f'rm -r {tmp}')
+    os.system(f"mv {src} {tmp}")
+    os.system(f"mkdir -p {tgt}")
+    os.system(f"mv {tmp}/* {tgt}")
+    os.system(f"rm -r {tmp}")
 
 
 def handle_unused_kwargs(unused_kwargs, msg=None):
@@ -580,7 +625,7 @@ def handle_unused_kwargs(unused_kwargs, msg=None):
 
 class ContainerMeta(type):
     def all(cls):
-        return sorted(getattr(cls, x) for x in dir(cls) if not x.startswith('__'))
+        return sorted(getattr(cls, x) for x in dir(cls) if not x.startswith("__"))
 
     def __str__(cls):
         return str(cls.all())
@@ -602,7 +647,9 @@ def run_tasks(
 
 
 def runs_tasks(*args, **kwargs):
-    logging.warning("`runs_tasks` will be deprecated in the future. Consider using `run_tasks` instead.")
+    logging.warning(
+        "`runs_tasks` will be deprecated in the future. Consider using `run_tasks` instead."
+    )
     return run_tasks(*args, **kwargs)
 
 
@@ -617,34 +664,46 @@ def collect_tensors(verbose=False):
     count = 0
     for obj in gc.get_objects():
         try:
-            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            if torch.is_tensor(obj) or (
+                hasattr(obj, "data") and torch.is_tensor(obj.data)
+            ):
                 if verbose:
                     print(type(obj), obj.size())
             count += 1
         except Exception:
             pass
-    logging.warning(f'Total number of tensors: {count}')
+    logging.warning(f"Total number of tensors: {count}")
 
 
 def log_shape(*args):
     for i, arg in enumerate(args):
-        logging.warning(f'tensor {i}, shape: {arg.shape}')
+        logging.warning(f"tensor {i}, shape: {arg.shape}")
 
 
 def flatten(possibly_sequence: Union[torch.Tensor, Sequence[torch.Tensor]]):
-    if torch.is_tensor(possibly_sequence): return possibly_sequence.reshape(-1)
-    return torch.cat([p.reshape(-1) for p in possibly_sequence]) if len(possibly_sequence) > 0 else torch.tensor([])
+    if torch.is_tensor(possibly_sequence):
+        return possibly_sequence.reshape(-1)
+    return (
+        torch.cat([p.reshape(-1) for p in possibly_sequence])
+        if len(possibly_sequence) > 0
+        else torch.tensor([])
+    )
 
 
 def flatten_nested(possibly_sequence: Union[torch.Tensor, Sequence]):
-    if torch.is_tensor(possibly_sequence): return possibly_sequence.reshape(-1)
+    if torch.is_tensor(possibly_sequence):
+        return possibly_sequence.reshape(-1)
     flat_tensors = [flatten_nested(entry) for entry in possibly_sequence]
     return torch.cat(flat_tensors, dim=0) if len(flat_tensors) > 0 else torch.tensor([])
 
 
-def ravel_pytree(possibly_sequence: Union[Sequence, torch.Tensor]) -> Tuple[torch.Tensor, Callable]:
+def ravel_pytree(
+    possibly_sequence: Union[Sequence, torch.Tensor]
+) -> Tuple[torch.Tensor, Callable]:
     if torch.is_tensor(possibly_sequence):
-        return possibly_sequence.reshape(-1), lambda x: x.reshape(possibly_sequence.size())
+        return possibly_sequence.reshape(-1), lambda x: x.reshape(
+            possibly_sequence.size()
+        )
 
     def make_unravel(size):  # Need this function to copy size!
         return lambda x: x.reshape(size)
@@ -661,7 +720,10 @@ def ravel_pytree(possibly_sequence: Union[Sequence, torch.Tensor]) -> Tuple[torc
         numels.append(flat_i.numel())
 
     def unravel(flat: torch.Tensor):
-        return [unravel_(flat_) for flat_, unravel_ in zip_(flat.split(split_size=numels), unravels)]
+        return [
+            unravel_(flat_)
+            for flat_, unravel_ in zip_(flat.split(split_size=numels), unravels)
+        ]
 
     return torch.cat(flats) if len(flats) > 0 else torch.tensor([]), unravel
 
@@ -711,11 +773,19 @@ def flat_to_shape(flat_tensor: torch.Tensor, shapes: Sequence):
     `flat_tensor` must have exactly the number of elements as stated in `shapes`.
     """
     numels = [shape.numel() for shape in shapes]
-    return [flat.reshape(shape) for flat, shape in zip_(flat_tensor.split(split_size=numels), shapes)]
+    return [
+        flat.reshape(shape)
+        for flat, shape in zip_(flat_tensor.split(split_size=numels), shapes)
+    ]
 
 
-def convert_none_to_zeros(sequence: Sequence[Union[torch.Tensor, type(None)]], like_sequence: Sequence[torch.Tensor]):
-    return [torch.zeros_like(q) if p is None else p for p, q in zip(sequence, like_sequence)]
+def convert_none_to_zeros(
+    sequence: Sequence[Union[torch.Tensor, type(None)]],
+    like_sequence: Sequence[torch.Tensor],
+):
+    return [
+        torch.zeros_like(q) if p is None else p for p, q in zip(sequence, like_sequence)
+    ]
 
 
 def make_seq_requires_grad(sequence: Sequence[torch.Tensor]):
@@ -745,7 +815,9 @@ def isnan_or_isinf(*args, **kwargs):
 def vjp(outputs, inputs, **kwargs):
     if torch.is_tensor(inputs):
         inputs = [inputs]
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+    _dummy_inputs = [
+        torch.as_strided(i, (), ()) for i in inputs
+    ]  # Workaround for PyTorch bug #39784.
 
     if torch.is_tensor(outputs):
         outputs = [outputs]
@@ -758,7 +830,9 @@ def vjp(outputs, inputs, **kwargs):
 def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     if torch.is_tensor(inputs):
         inputs = [inputs]
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+    _dummy_inputs = [
+        torch.as_strided(i, (), ()) for i in inputs
+    ]  # Workaround for PyTorch bug #39784.
 
     if torch.is_tensor(outputs):
         outputs = [outputs]
@@ -766,22 +840,30 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
 
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
     first_kwargs = copy.deepcopy(kwargs)
-    first_kwargs['create_graph'] = True
+    first_kwargs["create_graph"] = True
     _vjp = torch.autograd.grad(
-        outputs, inputs, grad_outputs=dummy_outputs, **first_kwargs)  # Must create graph to backprop a second time.
+        outputs, inputs, grad_outputs=dummy_outputs, **first_kwargs
+    )  # Must create graph to backprop a second time.
     _jvp = torch.autograd.grad(_vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
     return convert_none_to_zeros(_jvp, dummy_outputs)
 
 
 def to_numpy(*possibly_tensors: Union[torch.Tensor, np.ndarray, float]):
     arrays = possibly_tensors
-    arrays = [t.item() if isinstance(t, torch.Tensor) and t.numel() == 1 else t for t in arrays]
-    arrays = [t.detach().cpu().numpy() if isinstance(t, torch.Tensor) else t for t in arrays]
+    arrays = [
+        t.item() if isinstance(t, torch.Tensor) and t.numel() == 1 else t
+        for t in arrays
+    ]
+    arrays = [
+        t.detach().cpu().numpy() if isinstance(t, torch.Tensor) else t for t in arrays
+    ]
     return arrays[0] if len(arrays) == 1 else arrays
 
 
-def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True, disable_tf=True):
-    if hasattr(args_or_seed, 'seed'):
+def manual_seed(
+    args_or_seed: Union[int, argparse.Namespace], hardcore=True, disable_tf=True
+):
+    if hasattr(args_or_seed, "seed"):
         args_or_seed = args_or_seed.seed
     random.seed(args_or_seed)
     np.random.seed(args_or_seed)
@@ -791,13 +873,14 @@ def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True, dis
         # Avoid letting cudnn heuristics affect results.
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-        os.environ['PYTHONHASHSEED'] = str(args_or_seed)
+        os.environ["PYTHONHASHSEED"] = str(args_or_seed)
     if not disable_tf:
         try:
             import tensorflow as tf
+
             tf.random.set_seed(args_or_seed)
         except ModuleNotFoundError:
-            logging.warning('Tensorflow not installed; ignoring set seed for tf.')
+            logging.warning("Tensorflow not installed; ignoring set seed for tf.")
 
 
 def get_dtype(dtype_str: str):
@@ -812,10 +895,10 @@ def get_dtype(dtype_str: str):
 
 
 def manual_dtype(args_or_dtype: Union[str, argparse.Namespace]):
-    dtype = args_or_dtype.dtype if hasattr(args_or_dtype, 'dtype') else args_or_dtype
-    if dtype in ('float64', 'double'):
+    dtype = args_or_dtype.dtype if hasattr(args_or_dtype, "dtype") else args_or_dtype
+    if dtype in ("float64", "double"):
         torch.set_default_dtype(torch.float64)
-    elif dtype in ('float16', 'half'):
+    elif dtype in ("float16", "half"):
         torch.set_default_dtype(torch.float16)
 
 
@@ -823,7 +906,8 @@ def trainable_parameters(*modules: nn.Module):
     """Return the parameters which require gradient."""
     single_module = len(modules) == 1
     outs = [
-        [param for param in module.parameters() if param.requires_grad] for module in modules
+        [param for param in module.parameters() if param.requires_grad]
+        for module in modules
     ]
     if single_module:
         return outs[0]
@@ -834,20 +918,28 @@ def count_parameters(*modules: nn.Module, only_differentiable: Optional[bool] = 
     """Count the number of parameters for each module."""
     param_lists = [list(m.parameters()) for m in modules]
     if only_differentiable:
-        param_lists = [[p for p in param_list if p.requires_grad] for param_list in param_lists]
+        param_lists = [
+            [p for p in param_list if p.requires_grad] for param_list in param_lists
+        ]
     numels = [sum(p.numel() for p in param_list) for param_list in param_lists]
     return numels[0] if len(modules) == 1 else numels
 
 
-def count_parameter_tensors(*modules: nn.Module, only_differentiable: Optional[bool] = False):
+def count_parameter_tensors(
+    *modules: nn.Module, only_differentiable: Optional[bool] = False
+):
     param_lists = [list(m.parameters()) for m in modules]
     if only_differentiable:
-        param_lists = [[p for p in param_list if p.requires_grad] for param_list in param_lists]
+        param_lists = [
+            [p for p in param_list if p.requires_grad] for param_list in param_lists
+        ]
     lens = [len(param_list) for param_list in param_lists]
     return lens[0] if len(modules) == 1 else lens
 
 
-def count_tensor_list_size(tensor_list: Union[torch.Tensor, Sequence, Iterator], format="byte"):
+def count_tensor_list_size(
+    tensor_list: Union[torch.Tensor, Sequence, Iterator], format="byte"
+):
     """Approximately count the size of a list of tensors in terms of bytes."""
     if torch.is_tensor(tensor_list):
         tensor_list = [tensor_list]
@@ -857,9 +949,9 @@ def count_tensor_list_size(tensor_list: Union[torch.Tensor, Sequence, Iterator],
     elif format == "kb":
         return _bytes / 1024
     elif format == "mb":
-        return _bytes / 1024 ** 2
+        return _bytes / 1024**2
     elif format == "gb":
-        return _bytes / 1024 ** 3
+        return _bytes / 1024**3
     else:
         raise ValueError(f"Unknown format: {format}")
 
@@ -885,7 +977,7 @@ class FuncWrapper(nn.Module):
 class NormalizedEmbedding(nn.Embedding):
     def __init__(self, *args, **kwargs):
         super(NormalizedEmbedding, self).__init__(*args, **kwargs)
-        nn.init.normal_(self.weight, std=self.embedding_dim ** -0.5)
+        nn.init.normal_(self.weight, std=self.embedding_dim**-0.5)
 
 
 def subsequent_mask(size, device=None):
@@ -904,15 +996,17 @@ def masks_from_lengths(lengths: torch.Tensor):
     return torch.arange(max(lengths), device=lengths.device)[None, :] < lengths[:, None]
 
 
-def evaluate_prettiness(sampler=None,
-                        folder=None,
-                        input_2='cifar10-train',
-                        n=50000,
-                        batch_size=1000,
-                        clean_afterwards=False,
-                        fid=False,
-                        isc=False,
-                        kid=False):
+def evaluate_prettiness(
+    sampler=None,
+    folder=None,
+    input_2="cifar10-train",
+    n=50000,
+    batch_size=1000,
+    clean_afterwards=False,
+    fid=False,
+    isc=False,
+    kid=False,
+):
     """Evaluate a generative model in terms of IS, FID, or KID.
 
     At least one of `model` or `folder` must be present.
@@ -936,16 +1030,16 @@ def evaluate_prettiness(sampler=None,
 
     if folder is None:
         now = datetime.datetime.now().strftime("%d:%m:%Y-%H:%M:%S")
-        folder = os.path.join(os.path.expanduser("~"), 'evaluate_prettiness', f'{now}')
+        folder = os.path.join(os.path.expanduser("~"), "evaluate_prettiness", f"{now}")
         os.makedirs(folder, exist_ok=True)
 
         idx = 0
-        for _ in tqdm.tqdm(range(n // batch_size), desc='spawn samples'):
+        for _ in tqdm.tqdm(range(n // batch_size), desc="spawn samples"):
             batch = sampler(batch_size=batch_size).detach().cpu().numpy()
             if batch.shape[1] == 3:
                 batch = batch.transpose((0, 2, 3, 1))
             for img in batch:
-                img_path = os.path.join(folder, f'{idx:06d}.png')
+                img_path = os.path.join(folder, f"{idx:06d}.png")
                 plt.imsave(img_path, img)
                 idx += 1
 
@@ -984,7 +1078,7 @@ def coos2adj(coos: Sequence[torch.Tensor], lengths: torch.Tensor, device=None):
             ).to_dense()
             for coo in coos
         ],
-        dim=0
+        dim=0,
     )
 
 
@@ -1012,19 +1106,25 @@ def select_optimizer(optimizer):
 
     def optimizer_factory(params, **kwargs):
         if optimizer == "adam":
-            keys = ('lr', 'betas', 'eps', 'weight_decay', 'amsgrad')
+            keys = ("lr", "betas", "eps", "weight_decay", "amsgrad")
             return optim.Adam(params=params, **trim_dict(kwargs, keys))
         elif optimizer == "sgd":
-            keys = ('lr', 'momentum', 'dampening', 'weight_decay', 'nesterov')
+            keys = ("lr", "momentum", "dampening", "weight_decay", "nesterov")
             return optim.SGD(params=params, **trim_dict(kwargs, keys))
         elif optimizer == "adagrad":
-            keys = ('lr', 'lr_decay', 'weight_decay', 'initial_accumulator_value', 'eps')
+            keys = (
+                "lr",
+                "lr_decay",
+                "weight_decay",
+                "initial_accumulator_value",
+                "eps",
+            )
             return optim.Adagrad(params=params, **trim_dict(kwargs, keys))
         elif optimizer == "adamax":
-            keys = ('lr', 'betas', 'eps', 'weight_decay')
+            keys = ("lr", "betas", "eps", "weight_decay")
             return optim.Adamax(params=params, **trim_dict(kwargs, keys))
         elif optimizer == "adadelta":
-            keys = ('lr', 'rho', 'eps', 'weight_decay')
+            keys = ("lr", "rho", "eps", "weight_decay")
             return optim.Adadelta(params=params, **trim_dict(kwargs, keys))
         else:
             raise ValueError(f"Unknown optimizer: {optimizer}")
@@ -1049,13 +1149,13 @@ def scatter_nd(indices, updates, shape=None, out=None, accumulate=True, inplace=
         out.index_put_(
             indices=[indices[:, i] for i in range(indices.size(1))],
             values=updates,  # noqa
-            accumulate=accumulate
+            accumulate=accumulate,
         )  # noqa
     else:
         out = out.index_put(
             indices=[indices[:, i] for i in range(indices.size(1))],
             values=updates,  # noqa
-            accumulate=accumulate
+            accumulate=accumulate,
         )  # noqa
     return out
 
@@ -1087,16 +1187,18 @@ def topk(input, k, dim=-1, largest=True, sorted=True):
     return v, unravel_index(i, input.size())
 
 
-def retrieval_scores(tp: Union[torch.Tensor, np.ndarray],
-                     fp: Union[torch.Tensor, np.ndarray],
-                     fn: Union[torch.Tensor, np.ndarray]):
+def retrieval_scores(
+    tp: Union[torch.Tensor, np.ndarray],
+    fp: Union[torch.Tensor, np.ndarray],
+    fn: Union[torch.Tensor, np.ndarray],
+):
     """Compute precision, recall, F1."""
 
     def _stable_div(x, y):
         """Returns 0 if x == 0, else x / y."""
         if not isinstance(x, np.ndarray):
-            return 0. if x == 0. else (x / y)
-        return np.where(x == 0, 0., x / y)
+            return 0.0 if x == 0.0 else (x / y)
+        return np.where(x == 0, 0.0, x / y)
 
     tp, fp, fn = tuple(to_numpy(t) for t in (tp, fp, fn))
     precision = _stable_div(tp, tp + fp)
@@ -1106,25 +1208,31 @@ def retrieval_scores(tp: Union[torch.Tensor, np.ndarray],
 
 
 # EMA model averaging.
-def AverageModel(model: nn.Module, avg_fn: Union[str, Callable] = 'ema', **kwargs):
+def AverageModel(model: nn.Module, avg_fn: Union[str, Callable] = "ema", **kwargs):
     """Thin wrapper around `torch.optim.swa_utils.AveragedModel`."""
     if not callable(avg_fn):
-        if avg_fn == 'ema':
-            gamma = kwargs.pop('gamma', 0.999)
+        if avg_fn == "ema":
+            gamma = kwargs.pop("gamma", 0.999)
 
             def ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
-                return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
+                return (
+                    gamma * averaged_model_parameter + (1.0 - gamma) * model_parameter
+                )
 
             avg_fn = ema_avg_fn
-        elif avg_fn == 'warmup_ema':
+        elif avg_fn == "warmup_ema":
             # From
             #   Tan, Mingxing, and Quoc Le. "Efficientnet: Rethinking model scaling for convolutional neural networks."
             #   International conference on machine learning. PMLR, 2019.
-            decay_rate = kwargs.pop('decay_rate', 0.9999)
+            decay_rate = kwargs.pop("decay_rate", 0.9999)
 
-            def warmup_ema_avg_fn(averaged_model_parameter, model_parameter, num_averaged):
+            def warmup_ema_avg_fn(
+                averaged_model_parameter, model_parameter, num_averaged
+            ):
                 gamma = min(decay_rate, (1 + num_averaged) / (10 + num_averaged))
-                return gamma * averaged_model_parameter + (1. - gamma) * model_parameter
+                return (
+                    gamma * averaged_model_parameter + (1.0 - gamma) * model_parameter
+                )
 
             avg_fn = warmup_ema_avg_fn
         else:
@@ -1132,7 +1240,9 @@ def AverageModel(model: nn.Module, avg_fn: Union[str, Callable] = 'ema', **kwarg
     return torch.optim.swa_utils.AveragedModel(model, avg_fn=avg_fn, **kwargs)
 
 
-def denormalize(x: torch.Tensor, mean: Sequence[float], std: Sequence[float]) -> torch.Tensor:
+def denormalize(
+    x: torch.Tensor, mean: Sequence[float], std: Sequence[float]
+) -> torch.Tensor:
     """Unnormalize image for `torchvision.utils.save_image`."""
     # (bsz, n_channels, nh, hw) -> (n_channels, nh, nw, bsz).
     is_single_example = x.dim() == 3
@@ -1159,7 +1269,9 @@ def plot_wrapper(*args, suffixes: Optional[Sequence] = None, **kwargs):
         return plot(*args, **kwargs)  # Directly plot.
     else:
         if suffixes is None:
-            return plot(*args, img_path=img_path, **kwargs)  # Plot with img_path directly.
+            return plot(
+                *args, img_path=img_path, **kwargs
+            )  # Plot with img_path directly.
         else:
             # Append suffix to img_path.
             for suffix in suffixes:
@@ -1181,7 +1293,6 @@ def plot(
     annotates: Sequence = (),
     stems: Sequence = (),
     options: Optional[Dict] = None,
-
     plots2: Sequence = (),
     steps2: Sequence = (),
     vlines2: Sequence = (),
@@ -1194,10 +1305,8 @@ def plot(
     annotates2=(),
     stems2: Sequence = (),
     options2: Optional[Dict] = None,
-
     legend_options: Optional[Dict] = None,
     disable_legend: Optional[bool] = False,
-
     finalized: bool = True,
     dpi: Optional[int] = None,
 ):
@@ -1239,8 +1348,10 @@ def plot(
         Nothing.
     """
     import matplotlib.pyplot as plt
+
     try:
         import seaborn as sns
+
         sns.set_theme(style="darkgrid")
     except ModuleNotFoundError:
         logging.warning(f"Unable to find `seaborn`, reverting to solely matplotlib.")
@@ -1327,97 +1438,121 @@ def _feed_args(options, key, func):
             func(params)
 
 
-def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fill_betweens, options, annotates, stems):
+def _plot(
+    ax,
+    plots,
+    steps,
+    vlines,
+    hlines,
+    errorbars,
+    scatters,
+    hists,
+    bars,
+    fill_betweens,
+    options,
+    annotates,
+    stems,
+):
     if options is None:
         options = dict()
 
     possible_options = {
-        'xscale', 'yscale',
-        'xlabel', 'ylabel',
-        'xlabel_color', 'ylabel_color',
-        'title',
-        'xlim', 'ylim',
-        'xticks', 'yticks',
-        'xticklabels', 'yticklabels',
-        'tick_params'
+        "xscale",
+        "yscale",
+        "xlabel",
+        "ylabel",
+        "xlabel_color",
+        "ylabel_color",
+        "title",
+        "xlim",
+        "ylim",
+        "xticks",
+        "yticks",
+        "xticklabels",
+        "yticklabels",
+        "tick_params",
     }
     for key in options:
         if key not in possible_options:
             logging.warning(f"Unknown option fed to `_plot`: {key}")
 
     # Fix default font sizes for xylabels.
-    if 'xlabel' in options and not isinstance(options['xlabel'], dict):
-        options['xlabel'] = dict(xlabel=options['xlabel'], fontdict=dict(size=18))
-    if 'ylabel' in options and not isinstance(options['ylabel'], dict):
-        options['ylabel'] = dict(ylabel=options['ylabel'], fontdict=dict(size=18))
+    if "xlabel" in options and not isinstance(options["xlabel"], dict):
+        options["xlabel"] = dict(xlabel=options["xlabel"], fontdict=dict(size=18))
+    if "ylabel" in options and not isinstance(options["ylabel"], dict):
+        options["ylabel"] = dict(ylabel=options["ylabel"], fontdict=dict(size=18))
 
-    _feed_args(options, 'xscale', ax.set_xscale)
-    _feed_args(options, 'yscale', ax.set_yscale)
-    _feed_args(options, 'xlabel', ax.set_xlabel)
-    _feed_args(options, 'ylabel', ax.set_ylabel)
-    _feed_args(options, 'xlabel_color', ax.xaxis.label.set_color)
-    _feed_args(options, 'ylabel_color', ax.yaxis.label.set_color)
-    _feed_args(options, 'title', ax.set_title)
-    _feed_args(options, 'xlim', ax.set_xlim)
-    _feed_args(options, 'ylim', ax.set_ylim)
-    _feed_args(options, 'xticks', ax.set_xticks)
-    _feed_args(options, 'yticks', ax.set_yticks)
-    _feed_args(options, 'xticklabels', ax.set_xticklabels)
-    _feed_args(options, 'yticklabels', ax.set_yticklabels)
-    _feed_args(options, 'tick_params', ax.tick_params)
+    _feed_args(options, "xscale", ax.set_xscale)
+    _feed_args(options, "yscale", ax.set_yscale)
+    _feed_args(options, "xlabel", ax.set_xlabel)
+    _feed_args(options, "ylabel", ax.set_ylabel)
+    _feed_args(options, "xlabel_color", ax.xaxis.label.set_color)
+    _feed_args(options, "ylabel_color", ax.yaxis.label.set_color)
+    _feed_args(options, "title", ax.set_title)
+    _feed_args(options, "xlim", ax.set_xlim)
+    _feed_args(options, "ylim", ax.set_ylim)
+    _feed_args(options, "xticks", ax.set_xticks)
+    _feed_args(options, "yticks", ax.set_yticks)
+    _feed_args(options, "xticklabels", ax.set_xticklabels)
+    _feed_args(options, "yticklabels", ax.set_yticklabels)
+    _feed_args(options, "tick_params", ax.tick_params)
 
     for entry in plots:
-        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
-        kwargs.pop('aux', None)
-        ax.plot(entry['x'], entry['y'], **kwargs)
+        kwargs = {key: entry[key] for key in entry if key != "x" and key != "y"}
+        kwargs.pop("aux", None)
+        ax.plot(entry["x"], entry["y"], **kwargs)
 
     for entry in steps:
-        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
-        kwargs.pop('aux', None)
-        ax.step(entry['x'], entry['y'], **kwargs)
+        kwargs = {key: entry[key] for key in entry if key != "x" and key != "y"}
+        kwargs.pop("aux", None)
+        ax.step(entry["x"], entry["y"], **kwargs)
 
     for entry in vlines:
-        kwargs = {key: entry[key] for key in entry if key not in ('x', 'ymin', 'ymax')}
-        kwargs.pop('aux', None)
-        ax.vlines(entry['x'], entry['ymin'], entry['ymax'], **kwargs)
+        kwargs = {key: entry[key] for key in entry if key not in ("x", "ymin", "ymax")}
+        kwargs.pop("aux", None)
+        ax.vlines(entry["x"], entry["ymin"], entry["ymax"], **kwargs)
 
     for entry in hlines:
-        kwargs = {key: entry[key] for key in entry if key not in ('y', 'xmin', 'xmax')}
-        kwargs.pop('aux', None)
-        ax.hlines(entry['y'], entry['xmin'], entry['xmax'], **kwargs)
+        kwargs = {key: entry[key] for key in entry if key not in ("y", "xmin", "xmax")}
+        kwargs.pop("aux", None)
+        ax.hlines(entry["y"], entry["xmin"], entry["xmax"], **kwargs)
 
     for entry in errorbars:
-        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
-        kwargs.pop('aux', None)
+        kwargs = {key: entry[key] for key in entry if key != "x" and key != "y"}
+        kwargs.pop("aux", None)
         if "capsize" not in kwargs:
             kwargs["capsize"] = 5
-        ax.errorbar(entry['x'], entry['y'], **kwargs)
+        ax.errorbar(entry["x"], entry["y"], **kwargs)
 
     for entry in scatters:
-        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
-        kwargs.pop('aux', None)
-        ax.scatter(entry['x'], entry['y'], **kwargs)
+        kwargs = {key: entry[key] for key in entry if key != "x" and key != "y"}
+        kwargs.pop("aux", None)
+        ax.scatter(entry["x"], entry["y"], **kwargs)
 
     for entry in hists:
-        kwargs = {key: entry[key] for key in entry if key != 'x'}
-        kwargs.pop('aux', None)
-        ax.hist(entry['x'], **kwargs)
+        kwargs = {key: entry[key] for key in entry if key != "x"}
+        kwargs.pop("aux", None)
+        ax.hist(entry["x"], **kwargs)
 
     for entry in fill_betweens:
-        kwargs = {key: entry[key] for key in entry if key not in ('x', 'y1', 'y2')}
-        kwargs.pop('aux', None)
-        if 'alpha' not in kwargs:
-            kwargs['alpha'] = 0.4
-        ax.fill_between(entry['x'], entry['y1'], entry['y2'], **kwargs)
+        kwargs = {key: entry[key] for key in entry if key not in ("x", "y1", "y2")}
+        kwargs.pop("aux", None)
+        if "alpha" not in kwargs:
+            kwargs["alpha"] = 0.4
+        ax.fill_between(entry["x"], entry["y1"], entry["y2"], **kwargs)
 
     width = options.get("width", 0.2)
     for i, entry in enumerate(bars):
-        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'height'}
-        kwargs.pop('aux', None)
-        bar_label = kwargs.pop('bar_label', False)  # If True, give bars numbers at top (or right, if horizontal).
+        kwargs = {key: entry[key] for key in entry if key != "x" and key != "height"}
+        kwargs.pop("aux", None)
+        bar_label = kwargs.pop(
+            "bar_label", False
+        )  # If True, give bars numbers at top (or right, if horizontal).
         # Each bar has width, the starting position is - (l-1) / 2 * width.
-        x, height = [np.array(entry[key]) for key in ('x', 'height')]
-        bars = ax.bar(x - width * (len(bars) - 1) / 2 + width * i, height, width=width, **kwargs)
+        x, height = [np.array(entry[key]) for key in ("x", "height")]
+        bars = ax.bar(
+            x - width * (len(bars) - 1) / 2 + width * i, height, width=width, **kwargs
+        )
         if bar_label:
             ax.bar_label(bars)
 
@@ -1435,11 +1570,12 @@ def _plot(ax, plots, steps, vlines, hlines, errorbars, scatters, hists, bars, fi
 
 def get_sns_colors(color=None, palette=None):
     import seaborn as sns
+
     palette = sns.color_palette(palette=palette)
     if color is None:
         return palette
     else:
-        if color == 'blue':
+        if color == "blue":
             return palette[0]
         elif color == "orange":
             return palette[1]
@@ -1463,17 +1599,19 @@ def get_sns_colors(color=None, palette=None):
             raise ValueError(f"Unknown color: {color}")
 
 
-def plot_side_by_side(figs1,
-                      figs2,
-                      nrows=8,
-                      ncols=1,
-                      img_path=None,
-                      dpi=300,
-                      title=None,
-                      left_title=None,
-                      right_title=None,
-                      frameon=True,
-                      max_batch_size=64):
+def plot_side_by_side(
+    figs1,
+    figs2,
+    nrows=8,
+    ncols=1,
+    img_path=None,
+    dpi=300,
+    title=None,
+    left_title=None,
+    right_title=None,
+    frameon=True,
+    max_batch_size=64,
+):
     """Plot a dictionary of figures.
 
     Parameters
@@ -1506,14 +1644,16 @@ def plot_side_by_side(figs1,
     if left_title is not None:
         ax = plt.Subplot(fig, outer[0])
         ax.set_title(left_title)
-        ax.axis('off')
+        ax.axis("off")
         fig.add_subplot(ax)
 
-    left_block = gridspec.GridSpecFromSubplotSpec(nrows, ncols, subplot_spec=outer[0], wspace=0.0, hspace=0.0)
+    left_block = gridspec.GridSpecFromSubplotSpec(
+        nrows, ncols, subplot_spec=outer[0], wspace=0.0, hspace=0.0
+    )
     for ind, item in enumerate(figs1):
         ax = plt.Subplot(fig, left_block[ind])
         ax.set_axis_off()
-        ax.set_aspect('auto')
+        ax.set_aspect("auto")
 
         if isinstance(figs1, dict):
             # `item` is the key.
@@ -1531,14 +1671,16 @@ def plot_side_by_side(figs1,
     if right_title is not None:
         ax = plt.Subplot(fig, outer[1])
         ax.set_title(right_title)
-        ax.axis('off')
+        ax.axis("off")
         fig.add_subplot(ax)
 
-    right_block = gridspec.GridSpecFromSubplotSpec(nrows, ncols, subplot_spec=outer[1], wspace=0.0, hspace=0.0)
+    right_block = gridspec.GridSpecFromSubplotSpec(
+        nrows, ncols, subplot_spec=outer[1], wspace=0.0, hspace=0.0
+    )
     for ind, item in enumerate(figs2):
         ax = plt.Subplot(fig, right_block[ind])
         ax.set_axis_off()
-        ax.set_aspect('auto')
+        ax.set_aspect("auto")
 
         if isinstance(figs2, dict):
             # `item` is the key.
@@ -1554,7 +1696,7 @@ def plot_side_by_side(figs1,
         fig.add_subplot(ax)
 
     fig.suptitle(title)
-    plt.savefig(img_path, bbox_inches='tight')
+    plt.savefig(img_path, bbox_inches="tight")
     plt.clf()
     plt.close()
 
@@ -1562,8 +1704,7 @@ def plot_side_by_side(figs1,
 # Shameless copy from https://matplotlib.org/3.5.0/gallery/images_contours_and_fields/image_annotated_heatmap.html
 # TODO: These utils are inconvenient; need to modify in the future.
 #  Also, kwargs should not have dict as default value. Terrible style!
-def heatmap(data, row_labels, col_labels, ax=None,
-            cbar_kw={}, cbarlabel="", **kwargs):
+def heatmap(data, row_labels, col_labels, ax=None, cbar_kw={}, cbarlabel="", **kwargs):
     """
     Create a heatmap from a numpy array and two lists of labels.
 
@@ -1586,6 +1727,7 @@ def heatmap(data, row_labels, col_labels, ax=None,
         All other arguments are forwarded to `imshow`.
     """
     import matplotlib.pyplot as plt
+
     if not ax:
         ax = plt.gca()
 
@@ -1601,19 +1743,17 @@ def heatmap(data, row_labels, col_labels, ax=None,
     ax.set_yticks(np.arange(data.shape[0]), labels=row_labels)
 
     # Let the horizontal axes labeling appear on top.
-    ax.tick_params(top=True, bottom=False,
-                   labeltop=True, labelbottom=False)
+    ax.tick_params(top=True, bottom=False, labeltop=True, labelbottom=False)
 
     # Rotate the tick labels and set their alignment.
-    plt.setp(ax.get_xticklabels(), rotation=-30, ha="right",
-             rotation_mode="anchor")
+    plt.setp(ax.get_xticklabels(), rotation=-30, ha="right", rotation_mode="anchor")
 
     # Turn spines off and create white grid.
     ax.spines[:].set_visible(False)
 
-    ax.set_xticks(np.arange(data.shape[1] + 1) - .5, minor=True)
-    ax.set_yticks(np.arange(data.shape[0] + 1) - .5, minor=True)
-    ax.grid(which="minor", color="w", linestyle='-', linewidth=3)
+    ax.set_xticks(np.arange(data.shape[1] + 1) - 0.5, minor=True)
+    ax.set_yticks(np.arange(data.shape[0] + 1) - 0.5, minor=True)
+    ax.grid(which="minor", color="w", linestyle="-", linewidth=3)
     ax.tick_params(which="minor", bottom=False, left=False)
 
     return im, cbar
@@ -1643,8 +1783,7 @@ def annotate_heatmap(im, data=None, **textkw):
 
     # Set default alignment to center, but allow it to be
     # overwritten by textkw.
-    kw = dict(horizontalalignment="center",
-              verticalalignment="center")
+    kw = dict(horizontalalignment="center", verticalalignment="center")
     kw.update(textkw)
 
     # Loop over the data and create a `Text` for each "pixel".
@@ -1659,8 +1798,23 @@ def annotate_heatmap(im, data=None, **textkw):
 
 
 # Shameless copy from plottools https://pythonhosted.org/plottools/generated/plottools.zoom_axes.html
-def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', box_alpha=0.8, connect=True,
-              connect_color='k', connect_alpha=0.3, spacing=4, tick_width=20, tick_height=12):
+def zoom_axes(
+    fig,
+    ax,
+    zoom_x,
+    zoom_y,
+    axes_x,
+    axes_y,
+    box=True,
+    box_color="k",
+    box_alpha=0.8,
+    connect=True,
+    connect_color="k",
+    connect_alpha=0.3,
+    spacing=4,
+    tick_width=20,
+    tick_height=12,
+):
     """
     Creates a new axes which zooms in on a part of a given axes.
 
@@ -1756,9 +1910,14 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
     """
 
     import matplotlib.pyplot as plt
+
     plt.tight_layout()
-    ax1_p0 = (ax.transData + fig.transFigure.inverted()).transform_point((axes_x[0], axes_y[0]))
-    ax1_p1 = (ax.transData + fig.transFigure.inverted()).transform_point((axes_x[1], axes_y[1]))
+    ax1_p0 = (ax.transData + fig.transFigure.inverted()).transform_point(
+        (axes_x[0], axes_y[0])
+    )
+    ax1_p1 = (ax.transData + fig.transFigure.inverted()).transform_point(
+        (axes_x[1], axes_y[1])
+    )
 
     ax1 = plt.axes([ax1_p0[0], ax1_p0[1], ax1_p1[0] - ax1_p0[0], ax1_p1[1] - ax1_p0[1]])
 
@@ -1767,13 +1926,17 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
 
     plt.xticks(fontsize=4)
     plt.yticks(fontsize=4)
-    ax1.tick_params(axis='x', pad=3)
-    ax1.tick_params(axis='y', pad=2)
+    ax1.tick_params(axis="x", pad=3)
+    ax1.tick_params(axis="y", pad=2)
 
     if box:
-        ax.plot([zoom_x[0], zoom_x[1], zoom_x[1], zoom_x[0], zoom_x[0]],
-                [zoom_y[0], zoom_y[0], zoom_y[1], zoom_y[1], zoom_y[0]], color=box_color, alpha=box_alpha,
-                linewidth=0.4)
+        ax.plot(
+            [zoom_x[0], zoom_x[1], zoom_x[1], zoom_x[0], zoom_x[0]],
+            [zoom_y[0], zoom_y[0], zoom_y[1], zoom_y[1], zoom_y[0]],
+            color=box_color,
+            alpha=box_alpha,
+            linewidth=0.4,
+        )
 
     if connect:
 
@@ -1833,12 +1996,15 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
         line2 = ([zoom_xx[p2], axes_xx[p2]], [zoom_yy[p2], axes_yy[p2]])
 
         # estimate the width and height of the ticks
-        tick_width = (ax.transData.inverted()).transform_point((tick_width, 0))[0] - \
-                     (ax.transData.inverted()).transform_point((0, 0))[0]
-        tick_height = (ax.transData.inverted()).transform_point((0, tick_height))[1] - \
-                      (ax.transData.inverted()).transform_point((0, 0))[1]
-        spacing = (ax.transData.inverted()).transform_point((spacing, 0))[0] - \
-                  (ax.transData.inverted()).transform_point((0, 0))[0]
+        tick_width = (ax.transData.inverted()).transform_point((tick_width, 0))[0] - (
+            ax.transData.inverted()
+        ).transform_point((0, 0))[0]
+        tick_height = (ax.transData.inverted()).transform_point((0, tick_height))[1] - (
+            ax.transData.inverted()
+        ).transform_point((0, 0))[1]
+        spacing = (ax.transData.inverted()).transform_point((spacing, 0))[0] - (
+            ax.transData.inverted()
+        ).transform_point((0, 0))[0]
 
         # create fictional boxes around the axes where no lines should be
         box_axes_x = [axes_x[0] - tick_width, axes_x[1] + spacing]
@@ -1855,7 +2021,12 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
         for tt in t:
             x = line1[0][0] * (1 - tt) + line1[0][1] * tt
             y = line1[1][0] * (1 - tt) + line1[1][1] * tt
-            if x <= box_zoom_x[0] or x >= box_zoom_x[1] or y <= box_zoom_y[0] or y >= box_zoom_y[1]:
+            if (
+                x <= box_zoom_x[0]
+                or x >= box_zoom_x[1]
+                or y <= box_zoom_y[0]
+                or y >= box_zoom_y[1]
+            ):
                 line1_cut[0][0] = x
                 line1_cut[1][0] = y
                 break
@@ -1863,7 +2034,9 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
         for tt in t[::-1]:
             x = line1[0][0] * (1 - tt) + line1[0][1] * tt
             y = line1[1][0] * (1 - tt) + line1[1][1] * tt
-            if (x <= box_axes_x[0] or x >= box_axes_x[1]) or (y <= box_axes_y[0] or y >= box_axes_y[1]):
+            if (x <= box_axes_x[0] or x >= box_axes_x[1]) or (
+                y <= box_axes_y[0] or y >= box_axes_y[1]
+            ):
                 line1_cut[0][1] = x
                 line1_cut[1][1] = y
                 break
@@ -1871,7 +2044,9 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
         for tt in t:
             x = line2[0][0] * (1 - tt) + line2[0][1] * tt
             y = line2[1][0] * (1 - tt) + line2[1][1] * tt
-            if (x <= box_zoom_x[0] or x >= box_zoom_x[1]) or (y <= box_zoom_y[0] or y >= box_zoom_y[1]):
+            if (x <= box_zoom_x[0] or x >= box_zoom_x[1]) or (
+                y <= box_zoom_y[0] or y >= box_zoom_y[1]
+            ):
                 line2_cut[0][0] = x
                 line2_cut[1][0] = y
                 break
@@ -1879,14 +2054,28 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
         for tt in t[::-1]:
             x = line2[0][0] * (1 - tt) + line2[0][1] * tt
             y = line2[1][0] * (1 - tt) + line2[1][1] * tt
-            if (x <= box_axes_x[0] or x >= box_axes_x[1]) or (y <= box_axes_y[0] or y >= box_axes_y[1]):
+            if (x <= box_axes_x[0] or x >= box_axes_x[1]) or (
+                y <= box_axes_y[0] or y >= box_axes_y[1]
+            ):
                 line2_cut[0][1] = x
                 line2_cut[1][1] = y
                 break
 
         # draw the connecting lines
-        ax.plot(line1_cut[0], line1_cut[1], color=connect_color, alpha=connect_alpha, linewidth=0.4)
-        ax.plot(line2_cut[0], line2_cut[1], color=connect_color, alpha=connect_alpha, linewidth=0.4)
+        ax.plot(
+            line1_cut[0],
+            line1_cut[1],
+            color=connect_color,
+            alpha=connect_alpha,
+            linewidth=0.4,
+        )
+        ax.plot(
+            line2_cut[0],
+            line2_cut[1],
+            color=connect_color,
+            alpha=connect_alpha,
+            linewidth=0.4,
+        )
 
     return ax1
 
@@ -1894,19 +2083,21 @@ def zoom_axes(fig, ax, zoom_x, zoom_y, axes_x, axes_y, box=True, box_color='k', 
 def make_mp4(img_paths: Sequence[str], out_path: str, fps: int):
     """Make an mp4 video from a list of images with paths specified."""
     import cv2  # Don't import unless absolutely necessary!
-    if not out_path.endswith(".mp4"): raise ValueError(f"`out_path` must specify path to .mp4 file type")
+
+    if not out_path.endswith(".mp4"):
+        raise ValueError(f"`out_path` must specify path to .mp4 file type")
     frame = cv2.imread(img_paths[0])
-    cv2.imshow('video', frame)
+    cv2.imshow("video", frame)
     height, width, channels = frame.shape
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
 
     for img_path in img_paths:
         frame = cv2.imread(img_path)
         out.write(frame)
-        cv2.imshow('video', frame)
-        if (cv2.waitKey(1) & 0xFF) == ord('q'):  # Hit `q` to exit
+        cv2.imshow("video", frame)
+        if (cv2.waitKey(1) & 0xFF) == ord("q"):  # Hit `q` to exit
             break
 
     out.release()
@@ -1914,16 +2105,18 @@ def make_mp4(img_paths: Sequence[str], out_path: str, fps: int):
 
 
 # Gradient checking.
-def gradcheck(func: Callable,
-              inputs: Union[torch.Tensor, Sequence[torch.Tensor]],
-              modules: Optional[Union[nn.Module, Sequence[nn.Module]]] = (),
-              eps: float = 1e-6,
-              atol: float = 1e-5,
-              rtol: float = 1e-3,
-              grad_inputs=False,
-              gradgrad_inputs=False,
-              grad_params=False,
-              gradgrad_params=False):
+def gradcheck(
+    func: Callable,
+    inputs: Union[torch.Tensor, Sequence[torch.Tensor]],
+    modules: Optional[Union[nn.Module, Sequence[nn.Module]]] = (),
+    eps: float = 1e-6,
+    atol: float = 1e-5,
+    rtol: float = 1e-3,
+    grad_inputs=False,
+    gradgrad_inputs=False,
+    grad_params=False,
+    gradgrad_params=False,
+):
     """Check grad and grad of grad wrt inputs and parameters of Modules.
     When `func` is vector-valued, the checks compare autodiff vjp against
     finite-difference vjp, where v is a sampled standard normal vector.
@@ -1967,17 +2160,25 @@ def gradcheck(func: Callable,
 
     # Grad wrt inputs.
     if grad_inputs:
-        torch.autograd.gradcheck(func_only_inputs, inputs, eps=eps, atol=atol, rtol=rtol)
+        torch.autograd.gradcheck(
+            func_only_inputs, inputs, eps=eps, atol=atol, rtol=rtol
+        )
 
     # Grad of grad wrt inputs.
     if gradgrad_inputs:
-        torch.autograd.gradgradcheck(func_only_inputs, inputs, eps=eps, atol=atol, rtol=rtol)
+        torch.autograd.gradgradcheck(
+            func_only_inputs, inputs, eps=eps, atol=atol, rtol=rtol
+        )
 
     # Grad wrt params.
     if grad_params:
         params = [p for m in modules for p in m.parameters() if p.requires_grad]
         loss = func(inputs, modules)
-        framework_grad = flatten(convert_none_to_zeros(torch.autograd.grad(loss, params, create_graph=True), params))
+        framework_grad = flatten(
+            convert_none_to_zeros(
+                torch.autograd.grad(loss, params, create_graph=True), params
+            )
+        )
 
         numerical_grad = []
         for param in params:
@@ -1994,21 +2195,36 @@ def gradcheck(func: Callable,
                 numerical_grad.append((plus_eps - minus_eps) / (2 * eps))
                 del plus_eps, minus_eps
         numerical_grad = torch.stack(numerical_grad)
-        torch.testing.assert_allclose(numerical_grad, framework_grad, rtol=rtol, atol=atol)
+        torch.testing.assert_allclose(
+            numerical_grad, framework_grad, rtol=rtol, atol=atol
+        )
 
     # Grad of grad wrt params.
     if gradgrad_params:
+
         def func_high_order(inputs_, modules_):
             params_ = [p for m in modules for p in m.parameters() if p.requires_grad]
-            grads = torch.autograd.grad(func(inputs_, modules_), params_, create_graph=True, allow_unused=True)
+            grads = torch.autograd.grad(
+                func(inputs_, modules_), params_, create_graph=True, allow_unused=True
+            )
             return tuple(grad for grad in grads if grad is not None)
 
-        gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
+        gradcheck(
+            func_high_order,
+            inputs,
+            modules,
+            rtol=rtol,
+            atol=atol,
+            eps=eps,
+            grad_params=True,
+        )
 
 
 def _make_scalar_valued_func(func, inputs, modules):
     outputs = func(inputs, modules)
-    output_size = outputs.numel() if torch.is_tensor(outputs) else sum(o.numel() for o in outputs)
+    output_size = (
+        outputs.numel() if torch.is_tensor(outputs) else sum(o.numel() for o in outputs)
+    )
 
     if output_size > 1:
         # Define this outside `func_scalar_valued` so that random tensors are generated only once.
@@ -2016,7 +2232,10 @@ def _make_scalar_valued_func(func, inputs, modules):
 
         def func_scalar_valued(inputs_, modules_):
             outputs_ = func(inputs_, modules_)
-            return sum((output * grad_output).sum() for output, grad_output, in zip(outputs_, grad_outputs))
+            return sum(
+                (output * grad_output).sum()
+                for output, grad_output, in zip(outputs_, grad_outputs)
+            )
 
         return func_scalar_valued
 
@@ -2044,7 +2263,7 @@ class Meter(abc.ABC):
 class EMAMeter(Meter):
     """Standard exponential moving average."""
 
-    def __init__(self, gamma: Optional[float] = .99):
+    def __init__(self, gamma: Optional[float] = 0.99):
         super(EMAMeter, self).__init__()
         self._gamma = gamma
 
@@ -2069,7 +2288,9 @@ class AvgMeter(Meter):
         if self._val is None:
             self._val = x
         else:
-            self._val = self._val * self._count / (self._count + 1) + x / (self._count + 1)
+            self._val = self._val * self._count / (self._count + 1) + x / (
+                self._count + 1
+            )
         self._count += 1
         return self._val
 
@@ -2114,10 +2335,12 @@ class MinMeter(Meter):
 
 
 # Custom learning rate schedules.
-def get_warmup_exp_decay_scheduler(optimizer: optim.Optimizer,
-                                   num_warmup_steps: int,
-                                   lr_decay_rate: Optional[float] = .99997,
-                                   last_epoch: Optional[int] = -1):
+def get_warmup_exp_decay_scheduler(
+    optimizer: optim.Optimizer,
+    num_warmup_steps: int,
+    lr_decay_rate: Optional[float] = 0.99997,
+    last_epoch: Optional[int] = -1,
+):
     """Exponential decay schedule with linear warmup."""
 
     def _lr_lambda(current_step):
@@ -2128,11 +2351,13 @@ def get_warmup_exp_decay_scheduler(optimizer: optim.Optimizer,
     return optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, last_epoch=last_epoch)
 
 
-def get_warmup_inverse_sqrt_scheduler(optimizer: optim.Optimizer,
-                                      d_model: int,
-                                      num_warmup_steps: Optional[int] = 4000,
-                                      last_epoch: Optional[int] = -1,
-                                      factor: Optional[float] = 1.):
+def get_warmup_inverse_sqrt_scheduler(
+    optimizer: optim.Optimizer,
+    d_model: int,
+    num_warmup_steps: Optional[int] = 4000,
+    last_epoch: Optional[int] = -1,
+    factor: Optional[float] = 1.0,
+):
     """Inverse square root with linear warmup exactly as in transformers paper.
 
     Args:
@@ -2148,36 +2373,46 @@ def get_warmup_inverse_sqrt_scheduler(optimizer: optim.Optimizer,
     # Since LambdaLR multiplies the return value of the lambda_lr function with the lr,
     # we set lr to be 1.
     for param_group in optimizer.param_groups:
-        if 'lr' in param_group:
-            param_group['lr'] = 1
+        if "lr" in param_group:
+            param_group["lr"] = 1
 
-    num_warmup_steps = max(num_warmup_steps, 1)  # To prevent raising zero to a negative power.
+    num_warmup_steps = max(
+        num_warmup_steps, 1
+    )  # To prevent raising zero to a negative power.
 
     def _lr_lambda(current_step):
         current_step += 1  # To prevent raising zero to a negative power.
-        return d_model ** -0.5 * min(current_step ** -0.5, current_step * num_warmup_steps ** -1.5) * factor
+        return (
+            d_model**-0.5
+            * min(current_step**-0.5, current_step * num_warmup_steps**-1.5)
+            * factor
+        )
 
     return optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, last_epoch=last_epoch)
 
 
-def get_linear_lr_scheduler(optimizer: optim.Optimizer,
-                            start_lr: float,
-                            end_lr: float,
-                            num_steps: int,
-                            last_epoch: Optional[int] = -1):
+def get_linear_lr_scheduler(
+    optimizer: optim.Optimizer,
+    start_lr: float,
+    end_lr: float,
+    num_steps: int,
+    last_epoch: Optional[int] = -1,
+):
     """Simple linear scheduler from start_lr to end_lr.
 
     Becomes constant when current_step is larger than num_steps.
     """
 
     def _lr_lambda(current_step):
-        return start_lr + (end_lr - start_lr) * (min(current_step, num_steps) / num_steps)
+        return start_lr + (end_lr - start_lr) * (
+            min(current_step, num_steps) / num_steps
+        )
 
     return optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, last_epoch=last_epoch)
 
 
 def get_lr(optimizer: optim.Optimizer):
-    return optimizer.param_groups[0]['lr']
+    return optimizer.param_groups[0]["lr"]
 
 
 # Google cloud storage.
@@ -2187,13 +2422,14 @@ def gs_upload_from_path(local_path, remote_path=None, remove_local=True, timeout
     Catches the exception and returns `False` if upload failed.
     """
     from google.cloud import storage  # noqa
+
     success = True
 
     if remote_path is None:
         remote_path = local_path
-    remote_dir = remote_path.replace('gs://', '')
-    bucket_id = remote_dir.split('/')[0]
-    bucket_path = remote_dir[len('{}/'.format(bucket_id)):]
+    remote_dir = remote_path.replace("gs://", "")
+    bucket_id = remote_dir.split("/")[0]
+    bucket_path = remote_dir[len("{}/".format(bucket_id)) :]
 
     try:
         bucket = storage.Client().bucket(bucket_id)
@@ -2202,8 +2438,8 @@ def gs_upload_from_path(local_path, remote_path=None, remove_local=True, timeout
     except MemoryError as memory_error:
         raise memory_error  # You don't want to catch this!!!
     except Exception as e:
-        logging.warning(f'Failed uploading {local_path} to {remote_path}')
-        logging.warning(f'Caught exception:\n{e}')
+        logging.warning(f"Failed uploading {local_path} to {remote_path}")
+        logging.warning(f"Caught exception:\n{e}")
         success = False
 
     if remove_local:
@@ -2212,27 +2448,32 @@ def gs_upload_from_path(local_path, remote_path=None, remove_local=True, timeout
     return success
 
 
-def gs_upload_from_dir(local_directory, remote_directory=None, remove_local=True, timeout=480):
+def gs_upload_from_dir(
+    local_directory, remote_directory=None, remove_local=True, timeout=480
+):
     if remote_directory is None:
         remote_directory = local_directory
 
     for root, _, files in os.walk(local_directory):
         for file in files:
             local_path = os.path.join(root, file)
-            remote_path = remote_directory + local_path[len(local_directory):]
-            remote_path = str.lstrip(remote_path, '/')
-            gs_upload_from_path(local_path, remote_path, remove_local=remove_local, timeout=timeout)
+            remote_path = remote_directory + local_path[len(local_directory) :]
+            remote_path = str.lstrip(remote_path, "/")
+            gs_upload_from_path(
+                local_path, remote_path, remove_local=remove_local, timeout=timeout
+            )
 
 
 def gs_download_from_path(local_path, remote_path=None, timeout=480):
     from google.cloud import storage  # noqa
+
     success = True
 
     if remote_path is None:
         remote_path = local_path
-    remote_dir = remote_path.replace('gs://', '')
-    bucket_id = remote_dir.split('/')[0]
-    bucket_path = remote_dir[len('{}/'.format(bucket_id)):]
+    remote_dir = remote_path.replace("gs://", "")
+    bucket_id = remote_dir.split("/")[0]
+    bucket_path = remote_dir[len("{}/".format(bucket_id)) :]
     local_dir = os.path.dirname(local_path)
     os.makedirs(local_dir, exist_ok=True)
 
@@ -2243,8 +2484,8 @@ def gs_download_from_path(local_path, remote_path=None, timeout=480):
     except MemoryError as memory_error:
         raise memory_error  # You don't want to catch this!!!
     except Exception as e:
-        logging.warning(f'Failed downloading {remote_path} to {local_path}')
-        logging.warning(f'Caught exception:\n{e}')
+        logging.warning(f"Failed downloading {remote_path} to {local_path}")
+        logging.warning(f"Caught exception:\n{e}")
         success = False
 
     return success
@@ -2253,17 +2494,17 @@ def gs_download_from_path(local_path, remote_path=None, timeout=480):
 def gs_download_from_dir(remote_dir):
     from google.cloud import storage  # noqa
 
-    remote_dir = remote_dir.replace('gs://', '')
-    bucket_id = remote_dir.split('/')[0]
-    bucket_dir = remote_dir[len('{}/'.format(bucket_id)):]
+    remote_dir = remote_dir.replace("gs://", "")
+    bucket_id = remote_dir.split("/")[0]
+    bucket_dir = remote_dir[len("{}/".format(bucket_id)) :]
 
     bucket = storage.Client().bucket(bucket_id)
     blobs = bucket.list_blobs(prefix=bucket_dir)
     for blob in blobs:
-        if blob.name.endswith('/'):  # Skip folders.
+        if blob.name.endswith("/"):  # Skip folders.
             continue
         # blob.name: folder/subfolder/file.
-        tokens = blob.name.split('/')
+        tokens = blob.name.split("/")
         # Extract `local_dir` and `local_path`.
         local_dir_tokens = [bucket_id] + tokens[:-1]
         local_dir = os.path.join(*local_dir_tokens)
@@ -2277,9 +2518,9 @@ def gs_download_from_dir(remote_dir):
 def gs_file_exists(remote_path):
     from google.cloud import storage  # noqa
 
-    remote_dir = remote_path.replace('gs://', '')
-    bucket_id = remote_dir.split('/')[0]
-    bucket_path = remote_dir[len('{}/'.format(bucket_id)):]
+    remote_dir = remote_path.replace("gs://", "")
+    bucket_id = remote_dir.split("/")[0]
+    bucket_path = remote_dir[len("{}/".format(bucket_id)) :]
 
     bucket = storage.Client().bucket(bucket_id)
     blob = bucket.blob(bucket_path)
@@ -2289,9 +2530,9 @@ def gs_file_exists(remote_path):
 def gs_listdir(remote_dir, full_path: Optional[bool] = False):
     from google.cloud import storage  # noqa
 
-    remote_dir = remote_dir.replace('gs://', '')
-    bucket_id = remote_dir.split('/')[0]
-    bucket_dir = remote_dir[len('{}/'.format(bucket_id)):]
+    remote_dir = remote_dir.replace("gs://", "")
+    bucket_id = remote_dir.split("/")[0]
+    bucket_dir = remote_dir[len("{}/".format(bucket_id)) :]
 
     bucket = storage.Client().bucket(bucket_id)
     blobs = bucket.list_blobs(prefix=bucket_dir)
@@ -2303,17 +2544,22 @@ def gs_listdir(remote_dir, full_path: Optional[bool] = False):
 
 # Timer.
 class Timer(object):
-    def __init__(self, msg=None, stream: Optional[Union[str, io.IOBase]] = "stderr", logging=False, level=logging.WARN):
+    def __init__(
+        self,
+        msg=None,
+        stream: Optional[Union[str, io.IOBase]] = "stderr",
+        logging=False,
+        level=logging.WARN,
+    ):
         super(Timer, self).__init__()
         self.msg = msg
         if isinstance(stream, str):
-            stream = {
-                "stderr": sys.stderr,
-                "stdout": sys.stdout
-            }[stream]
+            stream = {"stderr": sys.stderr, "stdout": sys.stdout}[stream]
         else:
             if not isinstance(stream, io.IOBase):
-                raise ValueError(f"Expected stream of type `io.IOBase`, but found: {type(stream)}")
+                raise ValueError(
+                    f"Expected stream of type `io.IOBase`, but found: {type(stream)}"
+                )
         self.stream = stream  # Output stream.
         self.logging = logging
         self.level = level
@@ -2350,10 +2596,11 @@ class DisableGC(object):
 def all_ckpts(dir_, sort=True):
     # Returns all checkpoint paths in the form of a used-once generator.
     file_names = os.listdir(dir_)
-    file_names = filter(lambda f: f.startswith('global_step_'), file_names)
-    file_names = filter(lambda f: f.endswith('.ckpt'), file_names)
+    file_names = filter(lambda f: f.startswith("global_step_"), file_names)
+    file_names = filter(lambda f: f.endswith(".ckpt"), file_names)
     file_names = map(lambda f: os.path.join(dir_, f), file_names)
-    if sort: return sort_ckpts(file_names)
+    if sort:
+        return sort_ckpts(file_names)
     return file_names
 
 
@@ -2365,7 +2612,7 @@ def sort_ckpts(file_names: Union[map, filter, list]):
         file_names = list(file_names)
     # Avoid in-place ops that have side-effects.
     file_names_copy = file_names.copy()
-    file_names_copy.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    file_names_copy.sort(key=lambda f: int("".join(filter(str.isdigit, f))))
     return file_names_copy
 
 
@@ -2376,8 +2623,8 @@ def latest_ckpt(dir_, prefix="global_step_", suffix=".ckpt", num_digits=6):
     def extract_id(name):
         assert isinstance(name, str)
         assert name.startswith(prefix) and name.endswith(suffix)
-        name = name[len(prefix):]
-        name = name[:-len(suffix)]
+        name = name[len(prefix) :]
+        name = name[: -len(suffix)]
         return int(name)
 
     file_names = os.listdir(dir_)
@@ -2386,10 +2633,10 @@ def latest_ckpt(dir_, prefix="global_step_", suffix=".ckpt", num_digits=6):
     idx = map(extract_id, file_names)
     idx = list(idx)
     if len(idx) == 0:
-        print(f'Did not find any checkpoints in: {dir_}')
+        print(f"Did not find any checkpoints in: {dir_}")
         return None
 
-    latest_path = os.path.join(dir_, f'{prefix}{max(idx):0{num_digits}d}{suffix}')
+    latest_path = os.path.join(dir_, f"{prefix}{max(idx):0{num_digits}d}{suffix}")
     return latest_path
 
 
@@ -2398,7 +2645,9 @@ def save_ckpt(
     model: nn.Module,
     optimizer: Optional[optim.Optimizer] = None,
     scheduler: Optional[optim.lr_scheduler._LRScheduler] = None,
-    additional_state_dicts: Optional[Dict] = None,  # Other state_dicts you might want to include.
+    additional_state_dicts: Optional[
+        Dict
+    ] = None,  # Other state_dicts you might want to include.
     cloud_storage=False,  # cloud_storage is the legacy argument.
     to_gcs=False,
 ):
@@ -2428,15 +2677,15 @@ def load_ckpt(
     verbose=True,
 ):
     if verbose:
-        logging.warning(f'Loading checkpoint from {path}')
+        logging.warning(f"Loading checkpoint from {path}")
 
     state_dicts = torch.load(path)
 
-    model.load_state_dict(state_dicts['model'])
+    model.load_state_dict(state_dicts["model"])
     if optimizer is not None:
-        optimizer.load_state_dict(state_dicts['optimizer'])
+        optimizer.load_state_dict(state_dicts["optimizer"])
     if scheduler is not None:
-        scheduler.load_state_dict(state_dicts['scheduler'])
+        scheduler.load_state_dict(state_dicts["scheduler"])
     if additional_state_objects is not None:
         for key, value in additional_state_objects:
             value.load_state_dict(state_dicts["key"])
@@ -2472,34 +2721,38 @@ def dequantize(x, nvals=256):
     return x
 
 
-def get_loader(data_name,
-               root=None,
-               train_batch_size=128,
-               test_batch_size=1024,
-               pin_memory=True,
-               num_workers=8,
-               train_transform=None,
-               test_transform=None,
-               train_target_transform=None,
-               test_target_transform=None,
-               drop_last=True,
-               shuffle=True,
-               data_aug=True,
-               padding_mode="constant",
-               task="density",
-               **kwargs):
+def get_loader(
+    data_name,
+    root=None,
+    train_batch_size=128,
+    test_batch_size=1024,
+    pin_memory=True,
+    num_workers=8,
+    train_transform=None,
+    test_transform=None,
+    train_target_transform=None,
+    test_target_transform=None,
+    drop_last=True,
+    shuffle=True,
+    data_aug=True,
+    padding_mode="constant",
+    task="density",
+    **kwargs,
+):
     import torchvision as tv
 
     if task not in ("density", "classification", "hybrid"):
-        raise ValueError(f"Unknown task: {task}. Expected one of `density`, `classification`, `hybrid`.")
+        raise ValueError(
+            f"Unknown task: {task}. Expected one of `density`, `classification`, `hybrid`."
+        )
     logging.warning(f"Creating loaders for data: {data_name}, task: {task}")
 
     if root is None:
-        root = os.path.join(os.path.expanduser("~"), 'data')
+        root = os.path.join(os.path.expanduser("~"), "data")
         os.makedirs(root, exist_ok=True)
 
-    if data_name in ('cifar10', 'cifar100'):
-        if data_name == 'cifar10':
+    if data_name in ("cifar10", "cifar100"):
+        if data_name == "cifar10":
             mean, std = (0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)
         else:
             mean, std = (0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)
@@ -2507,200 +2760,283 @@ def get_loader(data_name,
         if train_transform is None:
             if task in ("classification", "hybrid"):
                 if data_aug:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.RandomCrop(32, padding=4, padding_mode=padding_mode),
-                        tv.transforms.RandomHorizontalFlip(),
-                        tv.transforms.ToTensor(),
-                        tv.transforms.Normalize(mean, std)
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.RandomCrop(
+                                32, padding=4, padding_mode=padding_mode
+                            ),
+                            tv.transforms.RandomHorizontalFlip(),
+                            tv.transforms.ToTensor(),
+                            tv.transforms.Normalize(mean, std),
+                        ]
+                    )
                 else:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.ToTensor(),
-                        tv.transforms.Normalize(mean, std)
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [tv.transforms.ToTensor(), tv.transforms.Normalize(mean, std)]
+                    )
             else:  # `density`.
                 if data_aug:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.RandomCrop(32, padding=4, padding_mode=padding_mode),
-                        tv.transforms.RandomHorizontalFlip(),
-                        tv.transforms.ToTensor(),
-                        dequantize,
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.RandomCrop(
+                                32, padding=4, padding_mode=padding_mode
+                            ),
+                            tv.transforms.RandomHorizontalFlip(),
+                            tv.transforms.ToTensor(),
+                            dequantize,
+                        ]
+                    )
                 else:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.ToTensor(),
-                        dequantize,
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.ToTensor(),
+                            dequantize,
+                        ]
+                    )
         if test_transform is None:
             if task in ("classification", "hybrid"):
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                    tv.transforms.Normalize(mean, std)
-                ])
+                test_transform = tv.transforms.Compose(
+                    [tv.transforms.ToTensor(), tv.transforms.Normalize(mean, std)]
+                )
             else:  # `density`.
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                    dequantize
-                ])
+                test_transform = tv.transforms.Compose(
+                    [tv.transforms.ToTensor(), dequantize]
+                )
 
-        if data_name == 'cifar10':
+        if data_name == "cifar10":
             train_data = tv.datasets.CIFAR10(
-                root, transform=train_transform, target_transform=train_target_transform, train=True, download=True
+                root,
+                transform=train_transform,
+                target_transform=train_target_transform,
+                train=True,
+                download=True,
             )
             test_data = tv.datasets.CIFAR10(
-                root, transform=test_transform, target_transform=test_target_transform, train=False, download=True
+                root,
+                transform=test_transform,
+                target_transform=test_target_transform,
+                train=False,
+                download=True,
             )
         else:
             train_data = tv.datasets.CIFAR100(
-                root, transform=train_transform, target_transform=train_target_transform, train=True, download=True
+                root,
+                transform=train_transform,
+                target_transform=train_target_transform,
+                train=True,
+                download=True,
             )
             test_data = tv.datasets.CIFAR100(
-                root, transform=test_transform, target_transform=test_target_transform, train=False, download=True
+                root,
+                transform=test_transform,
+                target_transform=test_target_transform,
+                train=False,
+                download=True,
             )
 
     elif data_name == "svhn":
         if train_transform is None:
             if task in ("classification", "hybrid"):
                 if data_aug:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.RandomCrop(32, padding=4, padding_mode=padding_mode),
-                        tv.transforms.ToTensor(),
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.RandomCrop(
+                                32, padding=4, padding_mode=padding_mode
+                            ),
+                            tv.transforms.ToTensor(),
+                        ]
+                    )
                 else:
                     train_transform = tv.transforms.Compose([tv.transforms.ToTensor()])
             else:  # `density`.
                 if data_aug:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.RandomCrop(32, padding=4, padding_mode=padding_mode),
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.RandomCrop(
+                                32, padding=4, padding_mode=padding_mode
+                            ),
+                            tv.transforms.ToTensor(),
+                            dequantize,
+                        ]
+                    )
+                else:
+                    train_transform = tv.transforms.Compose(
+                        [tv.transforms.ToTensor(), dequantize]
+                    )
+        if test_transform is None:
+            if task in ("classification", "hybrid"):
+                test_transform = tv.transforms.Compose(
+                    [
+                        tv.transforms.ToTensor(),
+                    ]
+                )
+            else:  # `density`.
+                test_transform = tv.transforms.Compose(
+                    [
                         tv.transforms.ToTensor(),
                         dequantize,
-                    ])
-                else:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.ToTensor(),
-                        dequantize
-                    ])
-        if test_transform is None:
-            if task in ("classification", "hybrid"):
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                ])
-            else:  # `density`.
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                    dequantize,
-                ])
+                    ]
+                )
         train_data = tv.datasets.SVHN(
-            root, transform=train_transform, target_transform=train_target_transform, split='train', download=True
+            root,
+            transform=train_transform,
+            target_transform=train_target_transform,
+            split="train",
+            download=True,
         )
         test_data = tv.datasets.SVHN(
-            root, transform=test_transform, target_transform=test_target_transform, split='test', download=True
+            root,
+            transform=test_transform,
+            target_transform=test_target_transform,
+            split="test",
+            download=True,
         )
 
-    elif data_name in ('mnist', 'kmnist', 'fmnist'):
+    elif data_name in ("mnist", "kmnist", "fmnist"):
         if train_transform is None:
             if task in ("classification", "hybrid"):
-                train_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                ])
+                train_transform = tv.transforms.Compose(
+                    [
+                        tv.transforms.ToTensor(),
+                    ]
+                )
             else:  # `density`.
-                train_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                    dequantize
-                ])
+                train_transform = tv.transforms.Compose(
+                    [tv.transforms.ToTensor(), dequantize]
+                )
         if test_transform is None:
             if task in ("classification", "hybrid"):
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                ])
+                test_transform = tv.transforms.Compose(
+                    [
+                        tv.transforms.ToTensor(),
+                    ]
+                )
             else:  # `density`.
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                    dequantize
-                ])
+                test_transform = tv.transforms.Compose(
+                    [tv.transforms.ToTensor(), dequantize]
+                )
 
         if data_name == "mnist":
             train_data = tv.datasets.MNIST(
-                root, train=True, transform=train_transform, target_transform=train_target_transform, download=True
+                root,
+                train=True,
+                transform=train_transform,
+                target_transform=train_target_transform,
+                download=True,
             )
             test_data = tv.datasets.MNIST(
-                root, train=False, transform=test_transform, target_transform=test_target_transform, download=True
+                root,
+                train=False,
+                transform=test_transform,
+                target_transform=test_target_transform,
+                download=True,
             )
         elif data_name == "kmnist":  # `kmnist`
             train_data = tv.datasets.KMNIST(
-                root, train=True, transform=train_transform, target_transform=train_target_transform, download=True
+                root,
+                train=True,
+                transform=train_transform,
+                target_transform=train_target_transform,
+                download=True,
             )
             test_data = tv.datasets.KMNIST(
-                root, train=False, transform=test_transform, target_transform=test_target_transform, download=True
+                root,
+                train=False,
+                transform=test_transform,
+                target_transform=test_target_transform,
+                download=True,
             )
         else:  # `fmnist`
             train_data = tv.datasets.FashionMNIST(
-                root, train=True, transform=train_transform, target_transform=train_target_transform, download=True
+                root,
+                train=True,
+                transform=train_transform,
+                target_transform=train_target_transform,
+                download=True,
             )
             test_data = tv.datasets.FashionMNIST(
-                root, train=False, transform=test_transform, target_transform=test_target_transform, download=True
+                root,
+                train=False,
+                transform=test_transform,
+                target_transform=test_target_transform,
+                download=True,
             )
     elif data_name in ("cinic10", "cinic"):
         # Statistics from https://github.com/BayesWatch/cinic-10#data-loading
-        mean, std = (0.47889522, 0.47227842, 0.43047404), (0.24205776, 0.23828046, 0.25874835)
+        mean, std = (0.47889522, 0.47227842, 0.43047404), (
+            0.24205776,
+            0.23828046,
+            0.25874835,
+        )
         if train_transform is None:
             if task in ("classification", "hybrid"):
                 if data_aug:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.RandomCrop(32, padding=4, padding_mode=padding_mode),
-                        tv.transforms.RandomHorizontalFlip(),
-                        tv.transforms.ToTensor(),
-                        tv.transforms.Normalize(mean, std)
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.RandomCrop(
+                                32, padding=4, padding_mode=padding_mode
+                            ),
+                            tv.transforms.RandomHorizontalFlip(),
+                            tv.transforms.ToTensor(),
+                            tv.transforms.Normalize(mean, std),
+                        ]
+                    )
                 else:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.ToTensor(),
-                        tv.transforms.Normalize(mean, std)
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [tv.transforms.ToTensor(), tv.transforms.Normalize(mean, std)]
+                    )
             else:  # `density`.
                 if data_aug:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.RandomCrop(32, padding=4, padding_mode=padding_mode),
-                        tv.transforms.RandomHorizontalFlip(),
-                        tv.transforms.ToTensor(),
-                        dequantize,
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.RandomCrop(
+                                32, padding=4, padding_mode=padding_mode
+                            ),
+                            tv.transforms.RandomHorizontalFlip(),
+                            tv.transforms.ToTensor(),
+                            dequantize,
+                        ]
+                    )
                 else:
-                    train_transform = tv.transforms.Compose([
-                        tv.transforms.ToTensor(),
-                        dequantize,
-                    ])
+                    train_transform = tv.transforms.Compose(
+                        [
+                            tv.transforms.ToTensor(),
+                            dequantize,
+                        ]
+                    )
         if test_transform is None:
             if task in ("classification", "hybrid"):
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                    tv.transforms.Normalize(mean, std)
-                ])
+                test_transform = tv.transforms.Compose(
+                    [tv.transforms.ToTensor(), tv.transforms.Normalize(mean, std)]
+                )
             else:  # `density`.
-                test_transform = tv.transforms.Compose([
-                    tv.transforms.ToTensor(),
-                    dequantize
-                ])
+                test_transform = tv.transforms.Compose(
+                    [tv.transforms.ToTensor(), dequantize]
+                )
 
         # A bunch of hard-coded stuff that doesn't work if no access to bucket.
-        cinic_path = os.path.join(root, 'cinic-10')
+        cinic_path = os.path.join(root, "cinic-10")
         if not os.path.exists(cinic_path):
             cinic_link = "https://datashare.is.ed.ac.uk/bitstream/handle/10283/3192/CINIC-10.tar.gz"
-            os.system(f'wget -P {root} {cinic_link} --no-check-certificate')
-            os.system(f'tar -xf {root}/CINIC-10.tar.gz')
+            os.system(f"wget -P {root} {cinic_link} --no-check-certificate")
+            os.system(f"tar -xf {root}/CINIC-10.tar.gz")
 
         # Exclude the CIFAR-10 part in CINIC-10, since it's a hybrid of the original CIFAR-10 and Imagenet!
-        if kwargs.get('exclude_cifar', False):
-            is_valid_file = lambda _path: 'cifar10' not in _path
+        if kwargs.get("exclude_cifar", False):
+            is_valid_file = lambda _path: "cifar10" not in _path
         else:
             is_valid_file = None
         train_data = tv.datasets.ImageFolder(
-            os.path.join(cinic_path, 'train'),
-            transform=train_transform, target_transform=train_target_transform, is_valid_file=is_valid_file
+            os.path.join(cinic_path, "train"),
+            transform=train_transform,
+            target_transform=train_target_transform,
+            is_valid_file=is_valid_file,
         )
         test_data = tv.datasets.ImageFolder(
-            os.path.join(cinic_path, 'test'),
-            transform=test_transform, target_transform=test_target_transform, is_valid_file=is_valid_file
+            os.path.join(cinic_path, "test"),
+            transform=test_transform,
+            target_transform=test_target_transform,
+            is_valid_file=is_valid_file,
         )
     else:
         raise NotImplementedError(f"Unknown dataset: {data_name}.")
@@ -2711,7 +3047,7 @@ def get_loader(data_name,
         drop_last=drop_last,
         shuffle=shuffle,
         pin_memory=pin_memory,
-        num_workers=num_workers
+        num_workers=num_workers,
     )
     test_loader = data.DataLoader(
         test_data,
@@ -2719,7 +3055,7 @@ def get_loader(data_name,
         drop_last=False,
         shuffle=False,
         pin_memory=pin_memory,
-        num_workers=num_workers
+        num_workers=num_workers,
     )
     return train_loader, test_loader
 
@@ -2833,18 +3169,18 @@ def early_stopping(global_steps: list, metrics: list, tolerance: int, ascending:
     Returns:
         An integer index for the best position.
     """
-    assert all(i > j for i, j in zip_(global_steps[1:], global_steps[:-1])), "`global_steps` is not increasing."
+    assert all(
+        i > j for i, j in zip_(global_steps[1:], global_steps[:-1])
+    ), "`global_steps` is not increasing."
 
     counts = 0  # The number of impatient steps.
     best = metrics[0]
     global_step_prev = global_steps[0]
 
-    for i, (global_step, metric) in enumerate(
-        zip_(global_steps[1:], metrics[1:])
-    ):
+    for i, (global_step, metric) in enumerate(zip_(global_steps[1:], metrics[1:])):
         if ascending:
             if metric <= best:
-                counts += (global_step - global_step_prev)
+                counts += global_step - global_step_prev
                 if counts >= tolerance:
                     break
             else:
@@ -2852,7 +3188,7 @@ def early_stopping(global_steps: list, metrics: list, tolerance: int, ascending:
                 counts = 0
         else:
             if metric >= best:
-                counts += (global_step - global_step_prev)
+                counts += global_step - global_step_prev
                 if counts >= tolerance:
                     break
             else:
@@ -2875,7 +3211,7 @@ def exp_(x):
     try:
         ans = math.exp(x)
     except OverflowError:
-        ans = float('inf')
+        ans = float("inf")
     return ans
 
 
@@ -2885,7 +3221,7 @@ def extract_argument(cmd: str, arg="--train_dir"):
     start = lo + len(arg)
     end = None  # Until the last.
     for index in range(start, len(cmd) - 1):
-        if cmd[index:index + 2] == '--':
+        if cmd[index : index + 2] == "--":
             end = index
             break
     return cmd[start:end].strip()
@@ -2912,7 +3248,7 @@ def gpu_scheduler(
             It's always good to wait for a bit, since a job might not immediately start running a GPU.
         log: Write all logs to `train_dir/log.out` if True. So assumes command has `--train_dir` argument.
     """
-    print(f'Scheduling {len(commands)} jobs...')
+    print(f"Scheduling {len(commands)} jobs...")
     import GPUtil
     import subprocess
 
@@ -2922,11 +3258,16 @@ def gpu_scheduler(
         num_times_failed_to_make_progress = -1
         while len(empty_gpus) == 0:
             num_times_failed_to_make_progress += 1
-            if num_times_failed_to_make_progress > 0 and num_times_failed_to_make_progress % 240 == 0:
-                print(f"Failed to fetch a GPU for {num_times_failed_to_make_progress} seconds.")
+            if (
+                num_times_failed_to_make_progress > 0
+                and num_times_failed_to_make_progress % 240 == 0
+            ):
+                print(
+                    f"Failed to fetch a GPU for {num_times_failed_to_make_progress} seconds."
+                )
             # Don't use `getFirstAvailable`; it is very bad since it throws RuntimeError when no GPU is found.
             empty_gpus = GPUtil.getAvailable(
-                order='first',
+                order="first",
                 maxLoad=maxLoad,
                 maxMemory=maxMemory,
                 limit=1,
@@ -2934,27 +3275,26 @@ def gpu_scheduler(
                 excludeUUID=excludeUUID,
             )
             time.sleep(1)
-        print(f'empty gpus: {empty_gpus}')
+        print(f"empty gpus: {empty_gpus}")
         gpu_id = empty_gpus[0]
 
         command = f"export CUDA_VISIBLE_DEVICES={gpu_id}; {command}"
         command = command.strip()  # Need this strip to remove new line char.
-        if log and '--train_dir' in command:
+        if log and "--train_dir" in command:
             # Get argument for `train_dir`.
             train_dir = extract_argument(command)
-            log_path = os.path.join(train_dir, 'log.out')
+            log_path = os.path.join(train_dir, "log.out")
             command += f" > {log_path} 2>&1 "
             command = f"mkdir -p {train_dir}; \n{command}"
 
         # This doesn't wait.
         proc = subprocess.Popen(
-            [command],
-            shell=True, stdin=None, stdout=None, stderr=None, close_fds=True
+            [command], shell=True, stdin=None, stdout=None, stderr=None, close_fds=True
         )
         procs.append(proc)
-        print('command: ')
+        print("command: ")
         print(command)
-        print(f'scheduled job: {job_id} on gpu: {gpu_id}')
+        print(f"scheduled job: {job_id} on gpu: {gpu_id}")
 
         # Give the program some time to be located on the GPU, before scheduling the next.
         time.sleep(wait_time_in_secs)
@@ -2965,6 +3305,7 @@ def gpu_scheduler(
 def is_wandb_available():
     try:
         import wandb
+
         return True
     except ImportError:
         return False
@@ -2984,14 +3325,19 @@ def smart_tokenizer_and_embedding_resize(
     num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
     model.resize_token_embeddings(len(tokenizer))
 
-    input_embeddings = model.get_input_embeddings().weight.data
-    output_embeddings = model.get_output_embeddings().weight.data
+    if num_new_tokens > 0:
+        input_embeddings = model.get_input_embeddings().weight.data
+        output_embeddings = model.get_output_embeddings().weight.data
 
-    input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
-    output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+        input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(
+            dim=0, keepdim=True
+        )
+        output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(
+            dim=0, keepdim=True
+        )
 
-    input_embeddings[-num_new_tokens:] = input_embeddings_avg
-    output_embeddings[-num_new_tokens:] = output_embeddings_avg
+        input_embeddings[-num_new_tokens:] = input_embeddings_avg
+        output_embeddings[-num_new_tokens:] = output_embeddings_avg
 
 
 def e2e_metrics(
@@ -3019,13 +3365,15 @@ def e2e_metrics(
             If not given, defaults to cloning the repo to ${HOME}/evaluation/e2e-metrics.
     """
     if e2e_metrics_dir is None:
-        e2e_metrics_dir = join(home, 'evaluation', 'e2e-metrics')
+        e2e_metrics_dir = join(home, "evaluation", "e2e-metrics")
 
     if not pathexists(e2e_metrics_dir):
         e2e_metrics_dir_dirname = os.path.dirname(e2e_metrics_dir)
         os.makedirs(e2e_metrics_dir_dirname, exist_ok=True)
         # Be sure to use my fork; I fixed various annoying issues.
-        os.system(f'cd {e2e_metrics_dir_dirname}; git clone https://github.com/lxuechen/e2e-metrics;')
+        os.system(
+            f"cd {e2e_metrics_dir_dirname}; git clone https://github.com/lxuechen/e2e-metrics;"
+        )
 
     # Check if env exists. If not, then create new environment with given name.
     conda_env_exists = os.system(
@@ -3036,30 +3384,34 @@ def e2e_metrics(
         os.system(f"bash -c 'source {conda_sh_path} && {create_conda_env_cmd}'")
 
     # Install the requirements into conda env.
-    cmd = f'cd {e2e_metrics_dir}; pip install -r requirements.txt'
-    cmd = f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+    cmd = f"cd {e2e_metrics_dir}; pip install -r requirements.txt"
+    cmd = (
+        f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+    )
     os.system(cmd)
 
     # Run evaluation from within the repo.
     cmd = (
-        f'cd {e2e_metrics_dir}; '
-        f'./measure_scores.py {reference_path} {generation_path} '
-        f'    --skip_coco {skip_coco} '
-        f'    --skip_mteval {skip_mteval} '
-        f'    --python True '
+        f"cd {e2e_metrics_dir}; "
+        f"./measure_scores.py {reference_path} {generation_path} "
+        f"    --skip_coco {skip_coco} "
+        f"    --skip_mteval {skip_mteval} "
+        f"    --python True "
     )
     if out_path is not None:
         makedirs(dirname(out_path), exist_ok=True)
-        cmd += f'    --out_path {out_path} '
-    cmd = f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+        cmd += f"    --out_path {out_path} "
+    cmd = (
+        f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+    )
 
     os.system(cmd)
 
     if out_path is not None:
         numbers = jload(out_path)
         if use_standard_format_for_bleu_and_rouge_l:
-            numbers["BLEU"] = numbers["BLEU"] * 100.
-            numbers["ROUGE_L"] = numbers["ROUGE_L"] * 100.
+            numbers["BLEU"] = numbers["BLEU"] * 100.0
+            numbers["ROUGE_L"] = numbers["ROUGE_L"] * 100.0
             jdump(numbers, out_path)
         return jload(out_path)
 
@@ -3069,20 +3421,25 @@ def gem_metrics(
     generation_path: str,
     out_path: Optional[str] = None,
     gem_metrics_dir: Optional[str] = None,
-    metric_list=('bleu', 'rouge', "nist", "bertscore",),
+    metric_list=(
+        "bleu",
+        "rouge",
+        "nist",
+        "bertscore",
+    ),
     heavy_metrics=False,
     conda_env_name="gem_metrics",  # All evaluation is run a separate env so default env is not polluted.
     conda_sh_path="~/miniconda3/etc/profile.d/conda.sh",
 ):
     if gem_metrics_dir is None:
-        gem_metrics_dir = join(home, 'evaluation', 'GEM-metrics')
+        gem_metrics_dir = join(home, "evaluation", "GEM-metrics")
 
     if not pathexists(gem_metrics_dir):
         gem_metrics_dir_dirname = os.path.dirname(gem_metrics_dir)
         os.makedirs(gem_metrics_dir_dirname, exist_ok=True)
         os.system(
-            f'cd {gem_metrics_dir_dirname}; '
-            f'git clone https://github.com/GEM-benchmark/GEM-metrics; '
+            f"cd {gem_metrics_dir_dirname}; "
+            f"git clone https://github.com/GEM-benchmark/GEM-metrics; "
         )
 
     # Check if env exists. If not, then create new environment with given name.
@@ -3091,33 +3448,35 @@ def gem_metrics(
     )
     if conda_env_exists != 0:
         cmd = f"conda create -n {conda_env_name} python=3.7 -y"
-        os.system(
-            f"bash -c 'source {conda_sh_path} && {cmd}'"
-        )
+        os.system(f"bash -c 'source {conda_sh_path} && {cmd}'")
 
     # Install the requirements into conda env.
     cmd = (
-        f'cd {gem_metrics_dir}; '
-        f'pip install -r requirements.txt -r requirements-heavy.txt; '
-        f'pip uninstall -y torch torchvision torchaudio; '
-        # TODO: This is only a temp sol'n. 
+        f"cd {gem_metrics_dir}; "
+        f"pip install -r requirements.txt -r requirements-heavy.txt; "
+        f"pip uninstall -y torch torchvision torchaudio; "
+        # TODO: This is only a temp sol'n.
         #  The annoying issue of can't get torch+cuda installed correctly through requirements.txt...
-        f'pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113; '
+        f"pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113; "
     )
-    cmd = f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+    cmd = (
+        f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+    )
     os.system(cmd)
 
-    metric_list = ' '.join(metric_list)
+    metric_list = " ".join(metric_list)
     cmd = (
         f"cd {gem_metrics_dir}; "
         f"./run_metrics.py {generation_path} -r {reference_path} --metric-list {metric_list} "
     )
     if out_path is not None:
         makedirs(dirname(out_path), exist_ok=True)
-        cmd += f'-o {out_path} '
+        cmd += f"-o {out_path} "
     if heavy_metrics:
-        cmd += '--heavy-metrics '
-    cmd = f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+        cmd += "--heavy-metrics "
+    cmd = (
+        f"bash -c 'source {conda_sh_path} && conda activate {conda_env_name} && {cmd}'"
+    )
 
     os.system(cmd)
 
@@ -3139,11 +3498,15 @@ def get_seq_len_dist_enc_dec(
 
     hf_datadict takes form {split: [{enc_key: str, dec_key: str}, ...]}
     """
-    _increment_key_for_dict = lambda d, k: d.update({k: d[k] + 1}) if k in d else d.update({k: 1})
+    _increment_key_for_dict = (
+        lambda d, k: d.update({k: d[k] + 1}) if k in d else d.update({k: 1})
+    )
 
     result = dict()
     for split in splits:
-        enc_counts_map, dec_counts_map, cat_counts_map = tuple(dict() for _ in range(3))  # seq_len -> count
+        enc_counts_map, dec_counts_map, cat_counts_map = tuple(
+            dict() for _ in range(3)
+        )  # seq_len -> count
         enc_counts_list, dec_counts_list, cat_counts_list = tuple([] for _ in range(3))
         for idx, instance in tqdm.tqdm(
             enumerate(hf_datadict[split]),
@@ -3169,7 +3532,6 @@ def get_seq_len_dist_enc_dec(
             enc_counts_map=enc_counts_map,
             dec_counts_map=dec_counts_map,
             cat_counts_map=cat_counts_map,
-
             enc_counts_list=enc_counts_list,
             dec_counts_list=dec_counts_list,
             cat_counts_list=cat_counts_list,
@@ -3178,9 +3540,9 @@ def get_seq_len_dist_enc_dec(
             print(jdumps(result, indent=4))
             plot(
                 hists=[
-                    dict(x=enc_counts_list, label='enc'),
-                    dict(x=dec_counts_list, label='dec'),
-                    dict(x=cat_counts_list, label='cat'),
+                    dict(x=enc_counts_list, label="enc"),
+                    dict(x=dec_counts_list, label="dec"),
+                    dict(x=cat_counts_list, label="cat"),
                 ],
                 options=dict(title=split),
             )
