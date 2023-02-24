@@ -9,6 +9,7 @@ from helm.common.authentication import Authentication
 from helm.common.request import Request, RequestResult
 from helm.proxy.models import MODEL_NAME_TO_MODEL
 from helm.proxy.services.remote_service import RemoteService
+from helm.proxy.accounts import Account
 
 from . import openai_utils
 
@@ -23,6 +24,14 @@ def normalize_model_name(model_name):
     index = suffixes.index(model_name)
     model_name = crfm_model_names[index]
     return model_name
+
+
+def crfm_quota(crfm_api_key: Optional[str] = None):
+    crfm_api_key = os.getenv("CRFM_API_KEY") if crfm_api_key is None else crfm_api_key
+    auth = Authentication(api_key=crfm_api_key)
+    service = RemoteService("https://crfm-models.stanford.edu")
+    account: Account = service.get_account(auth)
+    return account.usages
 
 
 def crfm_completion(
