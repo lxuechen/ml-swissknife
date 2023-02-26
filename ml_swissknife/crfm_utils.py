@@ -5,15 +5,46 @@ import time
 from typing import Optional, Sequence, Union
 
 import fire
+import helm.common.request
 from helm.common.authentication import Authentication
 from helm.common.request import Request, RequestResult
+from helm.proxy.accounts import Account
 from helm.proxy.models import MODEL_NAME_TO_MODEL
 from helm.proxy.services.remote_service import RemoteService
-from helm.proxy.accounts import Account
+from openai import openai_object
 
 from . import openai_utils
+from .types import StrOrCompletionObject
 
 crfm_model_names = tuple(MODEL_NAME_TO_MODEL.keys())
+
+
+def convert_dict_to_openai_object(data: dict) -> openai_object.OpenAIObject:
+    return_data = openai_object.OpenAIObject()
+    return_data.update(data)
+    return return_data
+
+
+def convert_crfm_object_to_openai_object(
+    data: helm.common.request.Sequence,
+) -> openai_object.OpenAIObject:
+    """Convert helm.common.request.Sequence object to openai_object.OpenAIObject object."""
+    return_data = convert_dict_to_openai_object(
+        dict(
+            text=data.text,
+            logprobs=convert_dict_to_openai_object(
+                dict(
+                    tokens=[token.text for token in data.tokens],
+                    top_logprobs=[
+                        convert_dict_to_openai_object(token.top_logprobs)
+                        for token in data.tokens
+                    ],
+                    token_logprobs=[token.logprob for token in data.tokens],
+                )
+            ),
+        )
+    )
+    return return_data
 
 
 def normalize_model_name(model_name):
@@ -41,11 +72,31 @@ def crfm_completion(
     sleep_time=2,
     max_instances=sys.maxsize,
     return_text=False,  # Return text instead of full completion object (which contains things like logprob).
+    return_openai_object=False,  # Return objects in the OpenAI format.
     crfm_api_key: Optional[str] = None,
     random: Optional[str] = None,
     **unused_kwargs,
-):
-    """Mirrors `openai_utils._openai_completion`."""
+) -> Union[StrOrCompletionObject, Sequence[StrOrCompletionObject]]:
+    """Mirrors `openai_utils._openai_completion`.
+
+    Args:
+        prompts: A string or a list of strings to complete.
+        decoding_args: Decoding arguments.
+        model_name: Model name. Can be either in the format of "org/model" or just "model".
+        sleep_time: Time to sleep once the rate-limit is hit.
+        max_instances: Maximum number of prompts to decode.
+        return_text: If True, return text instead of full completion object (which contains things like logprob).
+        return_openai_object: If True and not return_text, return objects in the OpenAI (opposed to CRFM) format.
+        crfm_api_key: CRFM API key.
+        random: Random seed.
+
+    Returns:
+        A completion or a list of completions.
+        Depending on return_text and return_openai_object, the completion type can be one of
+            - a string (if return_text is True)
+            - a helm.common.request.Sequence object (if return_text is False and return_openai_object is False)
+            - an openai_object.OpenAIObject object (if return_text is False and return_openai_object is True)
+    """
     crfm_api_key = os.getenv("CRFM_API_KEY") if crfm_api_key is None else crfm_api_key
     auth = Authentication(api_key=crfm_api_key)
     service = RemoteService("https://crfm-models.stanford.edu")
@@ -73,6 +124,7 @@ def crfm_completion(
                     top_p=decoding_args.top_p,
                     presence_penalty=decoding_args.presence_penalty,
                     frequency_penalty=decoding_args.frequency_penalty,
+                    top_k_per_token=decoding_args.logprobs,
                     random=random,
                 )
                 request_result: RequestResult = service.make_request(auth, request)
@@ -82,6 +134,11 @@ def crfm_completion(
                 logging.warning(f"Original exception: {e}.")
                 logging.warning(f"Retrying request after {sleep_time} seconds.")
                 time.sleep(sleep_time)  # Annoying rate limit on requests.
+    if return_openai_object:
+        completions = [
+            convert_crfm_object_to_openai_object(completion)
+            for completion in completions
+        ]
     if return_text:
         completions = [completion.text for completion in completions]
     if decoding_args.n > 1:
@@ -97,9 +154,10 @@ def crfm_completion(
 
 
 def main(**kwargs):
+    # python -m ml_swissknife.crfm_utils
     out = crfm_completion(
         prompts=["Life is"],
-        decoding_args=openai_utils.OpenAIDecodingArguments(n=2),
+        decoding_args=openai_utils.OpenAIDecodingArguments(n=2, logprobs=1),
         return_text=True,
         random="1000",
     )
