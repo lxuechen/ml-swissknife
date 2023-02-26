@@ -13,12 +13,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import io
+import pathlib
 from typing import Union
 
+import helm.common.request
 from openai import openai_object
-import pathlib
-import io
 
 StrOrOpenAIObject = Union[str, openai_object.OpenAIObject]
+StrOrCompletionObject = Union[str, openai_object.OpenAIObject, helm.common.request.Sequence]
 Numeric = Union[int, float]
 PathOrIOBase = Union[str, pathlib.Path, io.IOBase]

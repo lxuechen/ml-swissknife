@@ -140,3 +140,6 @@ dmypy.json
 
 # Latex
 *.bib
+
+# API keys
+.crfm_api_key
