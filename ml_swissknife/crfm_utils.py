@@ -91,9 +91,8 @@ def crfm_completion(
             for i in range(0, len(completions), decoding_args.n)
         ]
     if is_single_prompt:
-        (
-            completions,
-        ) = completions  # Return non-tuple if only 1 input and 1 generation.
+        # Return non-tuple if only 1 input and 1 generation.
+        (completions,) = completions
     return completions
 
 
