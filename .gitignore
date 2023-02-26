@@ -143,3 +143,6 @@ dmypy.json
 
 # API keys
 .crfm_api_key
+
+# playground
+znote.py
