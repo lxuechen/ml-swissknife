@@ -16,6 +16,8 @@ from typing import Optional, Sequence, Union
 import openai
 import tqdm
 
+from .types import StrOrOpenAIObject
+
 openai_org = os.getenv("OPENAI_ORG")
 if openai_org is not None:
     openai.organization = openai_org
@@ -51,7 +53,7 @@ def _openai_completion(
     max_batches=sys.maxsize,
     return_text=False,  # Return text instead of full completion object (which contains things like logprob).
     **decoding_kwargs,
-):
+) -> Union[StrOrOpenAIObject, Sequence[StrOrOpenAIObject]]:
     """Decode with OpenAI API.
 
     If prompts is a string, returns a single completion object (which may contain things like logprob).
