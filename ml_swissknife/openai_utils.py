@@ -15,8 +15,10 @@ from typing import Optional, Sequence, Union
 
 import openai
 import tqdm
+from openai import openai_object
+import copy
 
-from .types import StrOrOpenAIObject
+StrOrOpenAIObject = Union[str, openai_object.OpenAIObject]
 
 openai_org = os.getenv("OPENAI_ORG")
 if openai_org is not None:
@@ -35,12 +37,13 @@ class OpenAIDecodingArguments(object):
     logprobs: Optional[int] = None
     echo: bool = False
     stop: Optional[Sequence[str]] = None
-    presence_penalty: float = 0.0
-    frequency_penalty: float = 0.0
-    best_of: int = 1
-    # logit_bias: dict = None
     # Heuristic stop when about to generate next function.
     # stop: Optional[Tuple[str, ...]] = ("}\n\nstatic", "}\n\n/*")
+    presence_penalty: float = 0.0
+    frequency_penalty: float = 0.0
+    # If you need these, pass them in as decoding_kwargs.
+    # best_of: int = 1
+    # logit_bias: dict = None
 
 
 def _openai_completion(
@@ -53,7 +56,11 @@ def _openai_completion(
     max_batches=sys.maxsize,
     return_text=False,  # Return text instead of full completion object (which contains things like logprob).
     **decoding_kwargs,
-) -> Union[StrOrOpenAIObject, Sequence[StrOrOpenAIObject]]:
+) -> Union[
+    Union[StrOrOpenAIObject],
+    Sequence[StrOrOpenAIObject],
+    Sequence[Sequence[StrOrOpenAIObject]],
+]:
     """Decode with OpenAI API.
 
     If prompts is a string, returns a single completion object (which may contain things like logprob).
@@ -85,9 +92,7 @@ def _openai_completion(
         desc="prompt_batches",
         total=len(prompt_batches),
     ):
-        batch_decoding_args = dataclasses.replace(
-            decoding_args
-        )  # cloning the decoding_args
+        batch_decoding_args = copy.deepcopy(decoding_args)  # cloning the decoding_args
         while True:
             try:
                 completion_batch = openai.Completion.create(

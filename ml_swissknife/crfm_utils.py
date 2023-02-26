@@ -6,6 +6,7 @@ from typing import Optional, Sequence, Union
 
 import fire
 import helm.common.request
+import tqdm
 from helm.common.authentication import Authentication
 from helm.common.request import Request, RequestResult
 from helm.proxy.accounts import Account
@@ -13,8 +14,12 @@ from helm.proxy.models import MODEL_NAME_TO_MODEL
 from helm.proxy.services.remote_service import RemoteService
 from openai import openai_object
 
+from ml_swissknife import utils
 from . import openai_utils
-from .types import StrOrCompletionObject
+
+StrOrCompletionObject = Union[
+    str, openai_object.OpenAIObject, helm.common.request.Sequence
+]
 
 crfm_model_names = tuple(MODEL_NAME_TO_MODEL.keys())
 
@@ -72,11 +77,15 @@ def crfm_completion(
     sleep_time=2,
     max_instances=sys.maxsize,
     return_text=False,  # Return text instead of full completion object (which contains things like logprob).
-    return_openai_object=False,  # Return objects in the OpenAI format.
+    return_openai_object=True,  # Return objects in the OpenAI format.
     crfm_api_key: Optional[str] = None,
     random: Optional[str] = None,
     **unused_kwargs,
-) -> Union[StrOrCompletionObject, Sequence[StrOrCompletionObject]]:
+) -> Union[
+    StrOrCompletionObject,
+    Sequence[StrOrCompletionObject],
+    Sequence[Sequence[StrOrCompletionObject]],
+]:
     """Mirrors `openai_utils._openai_completion`.
 
     Args:
@@ -97,6 +106,8 @@ def crfm_completion(
             - a helm.common.request.Sequence object (if return_text is False and return_openai_object is False)
             - an openai_object.OpenAIObject object (if return_text is False and return_openai_object is True)
     """
+    utils.handle_unused_kwargs(unused_kwargs, msg="crfm_completion")
+
     crfm_api_key = os.getenv("CRFM_API_KEY") if crfm_api_key is None else crfm_api_key
     auth = Authentication(api_key=crfm_api_key)
     service = RemoteService("https://crfm-models.stanford.edu")
@@ -110,7 +121,7 @@ def crfm_completion(
     stop_sequences = [] if decoding_args.stop is None else list(decoding_args.stop)
 
     completions = []
-    for prompt in prompts:
+    for prompt in tqdm.tqdm(prompts, desc="prompts", total=len(prompts)):
         while True:
             try:
                 request = Request(
@@ -124,7 +135,9 @@ def crfm_completion(
                     top_p=decoding_args.top_p,
                     presence_penalty=decoding_args.presence_penalty,
                     frequency_penalty=decoding_args.frequency_penalty,
-                    top_k_per_token=decoding_args.logprobs,
+                    top_k_per_token=1
+                    if decoding_args.logprobs is None
+                    else decoding_args.logprobs,
                     random=random,
                 )
                 request_result: RequestResult = service.make_request(auth, request)
@@ -157,11 +170,15 @@ def main(**kwargs):
     # python -m ml_swissknife.crfm_utils
     out = crfm_completion(
         prompts=["Life is"],
-        decoding_args=openai_utils.OpenAIDecodingArguments(n=2, logprobs=1),
-        return_text=True,
-        random="1000",
+        decoding_args=openai_utils.OpenAIDecodingArguments(n=1, logprobs=3),
+        return_text=False,
+        return_openai_object=True,
+        random="2000",
     )
-    print(out)
+    print(out[0].logprobs.top_logprobs)
+    print(out[0].logprobs.tokens)
+    print(out[0].logprobs.token_logprobs)
+    breakpoint()
     out = crfm_completion(
         prompts="Life is",
         decoding_args=openai_utils.OpenAIDecodingArguments(n=2),

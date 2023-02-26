@@ -20,7 +20,5 @@ from typing import Union
 import helm.common.request
 from openai import openai_object
 
-StrOrOpenAIObject = Union[str, openai_object.OpenAIObject]
-StrOrCompletionObject = Union[str, openai_object.OpenAIObject, helm.common.request.Sequence]
 Numeric = Union[int, float]
 PathOrIOBase = Union[str, pathlib.Path, io.IOBase]
