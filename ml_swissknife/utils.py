@@ -45,6 +45,8 @@ from scipy import stats
 from torch import nn, optim
 from torch.utils import data
 
+from .types import Numeric, PathOrIOBase
+
 # Misc.
 home = os.path.expanduser("~")
 home_data = os.path.join(home, "data")
@@ -53,8 +55,6 @@ pathexists = os.path.exists
 makedirs = functools.partial(os.makedirs, exist_ok=True)
 dirname = os.path.dirname
 basename = os.path.basename
-Numeric = Union[int, float]
-PathOrIOBase = Union[str, pathlib.Path, io.IOBase]
 
 
 def float2str(x, precision=8):
