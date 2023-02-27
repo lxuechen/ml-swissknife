@@ -47,7 +47,21 @@ def get_delta_df(df_all, df_subset):
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
-def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=".", is_prepare_to_add_to_db=True):
+def sql_to_df(database, sql):
+    """Return a dataframe from a SQL query."""
+    with create_connection(database) as conn:
+        df = pd.read_sql(sql, conn)
+    return df
+
+
+def append_df_to_db(
+    df_to_add,
+    database,
+    table_name,
+    index=False,
+    recovery_path=".",
+    is_prepare_to_add_to_db=True,
+):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
     Parameters
@@ -92,7 +106,7 @@ def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=
 
             # saves the error rows to a csv file to avoid losing the data
             df_errors = df_delta.iloc[rows_errors]
-            random_idx = random.randint(10 ** 5, 10 ** 6)
+            random_idx = random.randint(10**5, 10**6)
             recovery_error_path = Path(recovery_path) / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
             recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
 
@@ -104,11 +118,11 @@ def append_df_to_db(df_to_add, database, table_name, index=False, recovery_path=
 
 
 @contextmanager
-def create_connection(db_file):
-    """Create a database connection to a SQLite database """
+def create_connection(db_file, timeout=5.0, **kwargs):
+    """Create a database connection to a SQLite database"""
     conn = None
     try:
-        conn = sqlite3.connect(db_file)
+        conn = sqlite3.connect(db_file, timeout=timeout, **kwargs)
         print(f"Connected to {db_file} SQLite")
         yield conn
     except sqlite3.Error as e:
