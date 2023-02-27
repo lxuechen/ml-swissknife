@@ -63,10 +63,23 @@ def _openai_completion(
 ]:
     """Decode with OpenAI API.
 
-    If prompts is a string, returns a single completion object (which may contain things like logprob).
-    If prompts is a sequence, returns a list of completions objects.
-    If return_text is True, the completion objects are all strings.
-    If decoding_args.n > 1, returns a nested list, where each entry is a list of completion objects for the same prompt.
+    Args:
+        prompts: A string or a list of strings to complete.
+        decoding_args: Decoding arguments.
+        model_name: Model name. Can be either in the format of "org/model" or just "model".
+        sleep_time: Time to sleep once the rate-limit is hit.
+        batch_size: Number of prompts to send in a single request.
+        max_instances: Maximum number of prompts to decode.
+        max_batches: Maximum number of batches to decode. This argument will be deprecated in the future.
+        return_text: If True, return text instead of full completion object (which contains things like logprob).
+        decoding_kwargs: Additional decoding arguments. Pass in `best_of` and `logit_bias` if you need them.
+
+    Returns:
+        A completion or a list of completions.
+        Depending on return_text, return_openai_object, and decoding_args.n, the completion type can be one of
+            - a string (if return_text is True)
+            - an openai_object.OpenAIObject object (if return_text is False)
+            - a list of objects of the above types (if decoding_args.n > 1)
     """
     is_single_prompt = isinstance(prompts, str)
     if is_single_prompt:
@@ -77,8 +90,8 @@ def _openai_completion(
             "`max_batches` will be deprecated in the future, please use `max_instances` instead."
             "Setting `max_instances` to `max_batches * batch_size` for now."
         )
+        max_instances = max_batches * batch_size
 
-    max_instances = min(max_instances, max_batches * batch_size)
     prompts = prompts[:max_instances]
     num_prompts = len(prompts)
     prompt_batches = [

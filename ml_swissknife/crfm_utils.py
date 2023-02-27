@@ -101,10 +101,11 @@ def crfm_completion(
 
     Returns:
         A completion or a list of completions.
-        Depending on return_text and return_openai_object, the completion type can be one of
+        Depending on return_text, return_openai_object, and decoding_args.n, the completion type can be one of
             - a string (if return_text is True)
             - a helm.common.request.Sequence object (if return_text is False and return_openai_object is False)
             - an openai_object.OpenAIObject object (if return_text is False and return_openai_object is True)
+            - a list of objects of the above types (if decoding_args.n > 1)
     """
     utils.handle_unused_kwargs(unused_kwargs, msg="crfm_completion")
 
