@@ -140,3 +140,9 @@ dmypy.json
 
 # Latex
 *.bib
+
+# API keys
+.crfm_api_key
+
+# playground
+znote.py

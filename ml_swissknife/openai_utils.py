@@ -15,6 +15,10 @@ from typing import Optional, Sequence, Union
 
 import openai
 import tqdm
+from openai import openai_object
+import copy
+
+StrOrOpenAIObject = Union[str, openai_object.OpenAIObject]
 
 openai_org = os.getenv("OPENAI_ORG")
 if openai_org is not None:
@@ -33,12 +37,13 @@ class OpenAIDecodingArguments(object):
     logprobs: Optional[int] = None
     echo: bool = False
     stop: Optional[Sequence[str]] = None
-    presence_penalty: float = 0.0
-    frequency_penalty: float = 0.0
-    best_of: int = 1
-    # logit_bias: dict = None
     # Heuristic stop when about to generate next function.
     # stop: Optional[Tuple[str, ...]] = ("}\n\nstatic", "}\n\n/*")
+    presence_penalty: float = 0.0
+    frequency_penalty: float = 0.0
+    # If you need these, pass them in as decoding_kwargs.
+    # best_of: int = 1
+    # logit_bias: dict = None
 
 
 def _openai_completion(
@@ -49,15 +54,32 @@ def _openai_completion(
     batch_size=1,
     max_instances=sys.maxsize,
     max_batches=sys.maxsize,
-    return_text=False,  # Return text instead of full completion object (which contains things like logprob).
+    return_text=False,
     **decoding_kwargs,
-):
+) -> Union[
+    Union[StrOrOpenAIObject],
+    Sequence[StrOrOpenAIObject],
+    Sequence[Sequence[StrOrOpenAIObject]],
+]:
     """Decode with OpenAI API.
 
-    If prompts is a string, returns a single completion object (which may contain things like logprob).
-    If prompts is a sequence, returns a list of completions objects.
-    If return_text is True, the completion objects are all strings.
-    If decoding_args.n > 1, returns a nested list, where each entry is a list of completion objects for the same prompt.
+    Args:
+        prompts: A string or a list of strings to complete.
+        decoding_args: Decoding arguments.
+        model_name: Model name. Can be either in the format of "org/model" or just "model".
+        sleep_time: Time to sleep once the rate-limit is hit.
+        batch_size: Number of prompts to send in a single request.
+        max_instances: Maximum number of prompts to decode.
+        max_batches: Maximum number of batches to decode. This argument will be deprecated in the future.
+        return_text: If True, return text instead of full completion object (which contains things like logprob).
+        decoding_kwargs: Additional decoding arguments. Pass in `best_of` and `logit_bias` if you need them.
+
+    Returns:
+        A completion or a list of completions.
+        Depending on return_text, return_openai_object, and decoding_args.n, the completion type can be one of
+            - a string (if return_text is True)
+            - an openai_object.OpenAIObject object (if return_text is False)
+            - a list of objects of the above types (if decoding_args.n > 1)
     """
     is_single_prompt = isinstance(prompts, str)
     if is_single_prompt:
@@ -68,8 +90,8 @@ def _openai_completion(
             "`max_batches` will be deprecated in the future, please use `max_instances` instead."
             "Setting `max_instances` to `max_batches * batch_size` for now."
         )
+        max_instances = max_batches * batch_size
 
-    max_instances = min(max_instances, max_batches * batch_size)
     prompts = prompts[:max_instances]
     num_prompts = len(prompts)
     prompt_batches = [
@@ -83,9 +105,7 @@ def _openai_completion(
         desc="prompt_batches",
         total=len(prompt_batches),
     ):
-        batch_decoding_args = dataclasses.replace(
-            decoding_args
-        )  # cloning the decoding_args
+        batch_decoding_args = copy.deepcopy(decoding_args)  # cloning the decoding_args
         while True:
             try:
                 completion_batch = openai.Completion.create(
@@ -118,9 +138,8 @@ def _openai_completion(
             for i in range(0, len(completions), decoding_args.n)
         ]
     if is_single_prompt:
-        (
-            completions,
-        ) = completions  # Return non-tuple if only 1 input and 1 generation.
+        # Return non-tuple if only 1 input and 1 generation.
+        (completions,) = completions
     return completions
 
 
