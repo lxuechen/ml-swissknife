@@ -54,7 +54,7 @@ def _openai_completion(
     batch_size=1,
     max_instances=sys.maxsize,
     max_batches=sys.maxsize,
-    return_text=False,  # Return text instead of full completion object (which contains things like logprob).
+    return_text=False,
     **decoding_kwargs,
 ) -> Union[
     Union[StrOrOpenAIObject],

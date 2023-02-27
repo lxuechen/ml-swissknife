@@ -76,8 +76,8 @@ def crfm_completion(
     model_name="text-davinci-003",
     sleep_time=2,
     max_instances=sys.maxsize,
-    return_text=False,  # Return text instead of full completion object (which contains things like logprob).
-    return_openai_object=True,  # Return objects in the OpenAI format.
+    return_text=False,
+    return_openai_object=True,
     crfm_api_key: Optional[str] = None,
     random: Optional[str] = None,
     **unused_kwargs,
@@ -120,6 +120,7 @@ def crfm_completion(
     prompts = prompts[:max_instances]
     model_name = normalize_model_name(model_name)
     stop_sequences = [] if decoding_args.stop is None else list(decoding_args.stop)
+    top_k_per_token = 1 if decoding_args.logprobs is None else decoding_args.logprobs
 
     completions = []
     for prompt in tqdm.tqdm(prompts, desc="prompts", total=len(prompts)):
@@ -136,9 +137,7 @@ def crfm_completion(
                     top_p=decoding_args.top_p,
                     presence_penalty=decoding_args.presence_penalty,
                     frequency_penalty=decoding_args.frequency_penalty,
-                    top_k_per_token=1
-                    if decoding_args.logprobs is None
-                    else decoding_args.logprobs,
+                    top_k_per_token=top_k_per_token,
                     random=random,
                 )
                 request_result: RequestResult = service.make_request(auth, request)
