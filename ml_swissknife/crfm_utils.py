@@ -168,6 +168,9 @@ def crfm_completion(
 
 def main(**kwargs):
     # python -m ml_swissknife.crfm_utils
+    quota = crfm_quota()
+    print(quota)
+    breakpoint()
     out = crfm_completion(
         prompts=["Life is"],
         decoding_args=openai_utils.OpenAIDecodingArguments(n=1, logprobs=3),
