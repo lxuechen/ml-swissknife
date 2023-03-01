@@ -26,6 +26,32 @@ from contextlib import contextmanager
 from pathlib import Path
 import pandas as pd
 
+try:
+    import sqlalchemy as sa
+except ImportError:
+    # we only use SQLalchemy for deleting and updating rows (not adding)
+    pass
+
+
+def delete_rows_from_db(database, table_name, columns_to_select_on, df):
+    """Delete rows from a table in a SQLite database based on the values of a dataframe."""
+    engine = sa.create_engine(f"sqlite:///{database}")
+    table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+
+    # Build the WHERE clause of your DELETE statement from rows in the dataframe.
+    # Equivalence in SQL:
+    #   WHERE (Year = <Year from row 1 of df> AND Month = <Month from row 1 of df>)
+    #      OR (Year = <Year from row 2 of df> AND Month = <Month from row 2 of df>)
+    #      ...
+    cond = df.apply(lambda row: sa.and_(*[table.c[k] == row[k] for k in columns_to_select_on]), axis=1)
+    cond = sa.or_(*cond)
+
+    # Define and execute the DELETE
+    delete = table.delete().where(cond)
+    with engine.connect() as conn:
+        conn.execute(delete)
+        conn.commit()
+
 
 def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=False):
     """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
