@@ -27,15 +27,12 @@ if openai_org is not None:
 
 
 @dataclasses.dataclass
-class OpenAIDecodingArguments(object):
-    suffix: Optional[str] = None
+class OpenAIDecodingArgumentsBase(object):
     max_tokens: int = 1800
     temperature: float = 0.2
     top_p: float = 1.0
     n: int = 1
     stream: bool = False
-    logprobs: Optional[int] = None
-    echo: bool = False
     stop: Optional[Sequence[str]] = None
     # Heuristic stop when about to generate next function.
     # stop: Optional[Tuple[str, ...]] = ("}\n\nstatic", "}\n\n/*")
@@ -46,8 +43,26 @@ class OpenAIDecodingArguments(object):
     # logit_bias: dict = None
 
 
+@dataclasses.dataclass
+class OpenAIDecodingArguments(OpenAIDecodingArgumentsBase):
+    suffix: Optional[str] = None
+    logprobs: Optional[int] = None
+    echo: bool = False
+
+
+@dataclasses.dataclass
+class OpenAIDecodingArgumentsChat(OpenAIDecodingArgumentsBase):
+    # currently there are no arguments that are different than not chat version
+    pass
+
+
+def requires_chatml(model: str) -> bool:
+    """Whether a model requires the ChatML format."""
+    return "turbo" in model
+
+
 def _openai_completion(
-    prompts: Union[str, Sequence[str]],
+    prompts: Union[str, Sequence[str], Sequence[dict[str, str]], dict[str, str]],
     decoding_args: OpenAIDecodingArguments,
     model_name="text-davinci-003",
     sleep_time=2,
@@ -56,11 +71,7 @@ def _openai_completion(
     max_batches=sys.maxsize,
     return_text=False,
     **decoding_kwargs,
-) -> Union[
-    Union[StrOrOpenAIObject],
-    Sequence[StrOrOpenAIObject],
-    Sequence[Sequence[StrOrOpenAIObject]],
-]:
+) -> Union[Union[StrOrOpenAIObject], Sequence[StrOrOpenAIObject], Sequence[Sequence[StrOrOpenAIObject]],]:
     """Decode with OpenAI API.
 
     Args:
@@ -81,9 +92,17 @@ def _openai_completion(
             - an openai_object.OpenAIObject object (if return_text is False)
             - a list of objects of the above types (if decoding_args.n > 1)
     """
-    is_single_prompt = isinstance(prompts, str)
+    is_single_prompt = isinstance(prompts, (str, dict))
     if is_single_prompt:
         prompts = [prompts]
+
+    # convert prompts to chat format
+    is_chat = requires_chatml(model_name)
+    is_chat_format = isinstance(prompts[0], dict)
+    if is_chat:
+        assert batch_size == 1, "batch_size > 1 is not supported yet."
+        if not is_chat_format:
+            prompts = [prompt_to_chatml(prompt) for prompt in prompts]
 
     if max_batches < sys.maxsize:
         logging.warning(
@@ -106,25 +125,35 @@ def _openai_completion(
         total=len(prompt_batches),
     ):
         batch_decoding_args = copy.deepcopy(decoding_args)  # cloning the decoding_args
+
         while True:
             try:
-                completion_batch = openai.Completion.create(
+                shared_kwargs = dict(
                     model=model_name,
-                    prompt=prompt_batch,
                     **batch_decoding_args.__dict__,
                     **decoding_kwargs,
                 )
-                completions.extend(completion_batch.choices)
+                if is_chat:
+                    completion_batch = openai.ChatCompletion.create(messages=prompt_batch[0], **shared_kwargs)
+
+                    choices = completion_batch.choices
+                    for choice in choices:
+                        assert choice.message.role == "assistant"
+                        choice["text"] = choice.message.content
+
+                else:
+                    completion_batch = openai.Completion.create(prompt=prompt_batch, **shared_kwargs)
+                    choices = completion_batch.choices
+
+                for choice in choices:
+                    choice["total_tokens"] = completion_batch.usage.total_tokens
+                completions.extend(choices)
                 break
             except openai.error.OpenAIError as e:
                 logging.warning(f"OpenAIError: {e}.")
                 if "Please reduce your prompt" in str(e):
-                    batch_decoding_args.max_tokens = int(
-                        batch_decoding_args.max_tokens * 0.8
-                    )
-                    logging.warning(
-                        f"Reducing target length to {batch_decoding_args.max_tokens}, Retrying..."
-                    )
+                    batch_decoding_args.max_tokens = int(batch_decoding_args.max_tokens * 0.8)
+                    logging.warning(f"Reducing target length to {batch_decoding_args.max_tokens}, Retrying...")
                 else:
                     logging.warning("Hit request rate limit; retrying...")
                     time.sleep(sleep_time)  # Annoying rate limit on requests.
@@ -133,14 +162,46 @@ def _openai_completion(
         completions = [completion.text for completion in completions]
     if decoding_args.n > 1:
         # make completions a nested list, where each entry is a consecutive decoding_args.n of original entries.
-        completions = [
-            completions[i : i + decoding_args.n]
-            for i in range(0, len(completions), decoding_args.n)
-        ]
+        completions = [completions[i : i + decoding_args.n] for i in range(0, len(completions), decoding_args.n)]
     if is_single_prompt:
         # Return non-tuple if only 1 input and 1 generation.
         (completions,) = completions
     return completions
+
+
+def prompt_to_chatml(prompt: str, start_token: str = "<|im_start|>", end_token: str = "<|im_end|>"):
+    """Convert a text prompt to ChatML formal
+
+    Examples
+    --------
+    >>> prompt = "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\nKnock knock.\n<|im_end|>\n<|im_start|>assistant\nWho's there?\n<|im_end|>\n<|im_start|>user\nOrange.\n<|im_end|>"
+    >>> print(prompt)
+    <|im_start|>system
+    You are a helpful assistant.
+    <|im_end|>
+    <|im_start|>user
+    Knock knock.
+    <|im_end|>
+    <|im_start|>assistant
+    Who's there?
+    <|im_end|>
+    <|im_start|>user
+    Orange.
+    <|im_end|>
+    >>> prompt_to_chatml(prompt)
+    [{'role': 'system', 'content': 'You are a helpful assistant.'},
+     {'role': 'user', 'content': 'Knock knock.'},
+     {'role': 'assistant', 'content': "Who's there?"},
+     {'role': 'user', 'content': 'Orange.'}]
+    """
+    prompt = prompt.strip()
+    assert prompt.startswith(start_token)
+    assert prompt.endswith(end_token)
+    message = [
+        dict(role=p.split("\n", 1)[0].strip(), content=p.split("\n", 1)[1].split(end_token, 1)[0].strip())
+        for p in prompt.split("<|im_start|>")[1:]
+    ]
+    return message
 
 
 # Keep the private function for backwards compat.
