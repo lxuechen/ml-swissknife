@@ -72,7 +72,7 @@ def crfm_quota(crfm_api_key: Optional[str] = None):
 
 def crfm_completion(
     prompts: Union[str, Sequence[str]],
-    decoding_args: openai_utils.OpenAIDecodingArguments,
+    decoding_args: openai_utils.OpenAIDecodingArgumentsBase,
     model_name="text-davinci-003",
     sleep_time=2,
     max_instances=sys.maxsize,
