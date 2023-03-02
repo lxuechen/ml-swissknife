@@ -75,11 +75,14 @@ def _openai_completion(
     """Decode with OpenAI API.
 
     Args:
-        prompts: A string or a list of strings to complete.
+        prompts: A string or a list of strings to complete. If it is a chat model the strings should be formatted
+            as explained here: https://github.com/openai/openai-python/blob/main/chatml.md. If it is a chat model
+            it can also be a dictionary (or list thereof) as explained here:
+            https://github.com/openai/openai-cookbook/blob/main/examples/How_to_format_inputs_to_ChatGPT_models.ipynb
         decoding_args: Decoding arguments.
         model_name: Model name. Can be either in the format of "org/model" or just "model".
         sleep_time: Time to sleep once the rate-limit is hit.
-        batch_size: Number of prompts to send in a single request.
+        batch_size: Number of prompts to send in a single request. Only for non chat model.
         max_instances: Maximum number of prompts to decode.
         max_batches: Maximum number of batches to decode. This argument will be deprecated in the future.
         return_text: If True, return text instead of full completion object (which contains things like logprob).
