@@ -103,7 +103,9 @@ def _openai_completion(
     is_chat = requires_chatml(model_name)
     is_chat_format = isinstance(prompts[0], dict)
     if is_chat:
-        assert batch_size == 1, "batch_size > 1 is not supported yet."
+        if batch_size > 1:
+            logging.warning("batch_size > 1 is not supported yet for chat models. Setting to 1")
+            batch_size = 1
         if not is_chat_format:
             prompts = [prompt_to_chatml(prompt) for prompt in prompts]
 
