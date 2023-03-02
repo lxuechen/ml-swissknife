@@ -17,7 +17,9 @@ from openai import openai_object
 from ml_swissknife import utils
 from . import openai_utils
 
-StrOrCompletionObject = Union[str, openai_object.OpenAIObject, helm.common.request.Sequence]
+StrOrCompletionObject = Union[
+    str, openai_object.OpenAIObject, helm.common.request.Sequence
+]
 
 crfm_model_names = tuple(MODEL_NAME_TO_MODEL.keys())
 
@@ -38,7 +40,10 @@ def convert_crfm_object_to_openai_object(
             logprobs=convert_dict_to_openai_object(
                 dict(
                     tokens=[token.text for token in data.tokens],
-                    top_logprobs=[convert_dict_to_openai_object(token.top_logprobs) for token in data.tokens],
+                    top_logprobs=[
+                        convert_dict_to_openai_object(token.top_logprobs)
+                        for token in data.tokens
+                    ],
                     token_logprobs=[token.logprob for token in data.tokens],
                 )
             ),
@@ -76,7 +81,11 @@ def crfm_completion(
     crfm_api_key: Optional[str] = None,
     random: Optional[str] = None,
     **unused_kwargs,
-) -> Union[StrOrCompletionObject, Sequence[StrOrCompletionObject], Sequence[Sequence[StrOrCompletionObject]],]:
+) -> Union[
+    StrOrCompletionObject,
+    Sequence[StrOrCompletionObject],
+    Sequence[Sequence[StrOrCompletionObject]],
+]:
     """Mirrors `openai_utils._openai_completion`.
 
     Args:
@@ -139,12 +148,18 @@ def crfm_completion(
                 logging.warning(f"Retrying request after {sleep_time} seconds.")
                 time.sleep(sleep_time)  # Annoying rate limit on requests.
     if return_openai_object:
-        completions = [convert_crfm_object_to_openai_object(completion) for completion in completions]
+        completions = [
+            convert_crfm_object_to_openai_object(completion)
+            for completion in completions
+        ]
     if return_text:
         completions = [completion.text for completion in completions]
     if decoding_args.n > 1:
         # make completions a nested list, where each entry is a consecutive decoding_args.n of original entries.
-        completions = [completions[i : i + decoding_args.n] for i in range(0, len(completions), decoding_args.n)]
+        completions = [
+            completions[i : i + decoding_args.n]
+            for i in range(0, len(completions), decoding_args.n)
+        ]
     if is_single_prompt:
         # Return non-tuple if only 1 input and 1 generation.
         (completions,) = completions
