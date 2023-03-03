@@ -17,8 +17,5 @@ import io
 import pathlib
 from typing import Union
 
-import helm.common.request
-from openai import openai_object
-
 Numeric = Union[int, float]
 PathOrIOBase = Union[str, pathlib.Path, io.IOBase]
