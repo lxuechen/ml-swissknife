@@ -43,7 +43,10 @@ def delete_rows_from_db(database, table_name, columns_to_select_on, df):
     #   WHERE (Year = <Year from row 1 of df> AND Month = <Month from row 1 of df>)
     #      OR (Year = <Year from row 2 of df> AND Month = <Month from row 2 of df>)
     #      ...
-    cond = df.apply(lambda row: sa.and_(*[table.c[k] == row[k] for k in columns_to_select_on]), axis=1)
+    cond = df.apply(
+        lambda row: sa.and_(*[table.c[k] == row[k] for k in columns_to_select_on]),
+        axis=1,
+    )
     cond = sa.or_(*cond)
 
     # Define and execute the DELETE
@@ -53,7 +56,9 @@ def delete_rows_from_db(database, table_name, columns_to_select_on, df):
         conn.commit()
 
 
-def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=False):
+def prepare_to_add_to_db(
+    df_to_add, database, table_name, is_subset_columns=False
+) -> pd.DataFrame:
     """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
     and columns not in the database."""
     with create_connection(database) as conn:
@@ -66,14 +71,16 @@ def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=Fals
     return df_delta
 
 
-def get_delta_df(df_all, df_subset):
+def get_delta_df(df_all, df_subset) -> pd.DataFrame:
     """return the complement of df_subset"""
     columns = list(df_all.columns)
-    df_ind = df_all.merge(df_subset.drop_duplicates(), on=columns, how="left", indicator=True)
+    df_ind = df_all.merge(
+        df_subset.drop_duplicates(), on=columns, how="left", indicator=True
+    )
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
-def sql_to_df(database, sql):
+def sql_to_df(database, sql) -> pd.DataFrame:
     """Return a dataframe from a SQL query."""
     with create_connection(database) as conn:
         df = pd.read_sql(sql, conn)
@@ -125,22 +132,33 @@ def append_df_to_db(
             rows_errors = []
             for i in range(len(df_delta)):
                 try:
-                    df_delta.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
+                    df_delta.iloc[i : i + 1].to_sql(
+                        table_name, conn, if_exists="append", index=index
+                    )
                 except:
                     rows_errors.append(i)
-            print(f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name} with error: {e}")
+            print(
+                f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name} with error: {e}"
+            )
 
             # saves the error rows to a csv file to avoid losing the data
             df_errors = df_delta.iloc[rows_errors]
             random_idx = random.randint(10**5, 10**6)
-            recovery_error_path = Path(recovery_path) / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
-            recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+            recovery_error_path = (
+                Path(recovery_path)
+                / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
+            )
+            recovery_all_path = (
+                Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+            )
 
             # save json as a list of dict if you don't want to keep index, else dict of dict
             orient = "index" if index else "records"
             df_errors.to_json(recovery_error_path, orient=orient, indent=2)
             df_to_add.to_json(recovery_all_path, orient=orient, indent=2)
-            print(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
+            print(
+                f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}"
+            )
 
 
 @contextmanager
