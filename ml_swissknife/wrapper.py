@@ -92,6 +92,7 @@ def high_end_gpu_job_wrapper(
     # If True, submit the job held and rely on background fetcher to run: /afs/cs.stanford.edu/u/lxuechen/scripts/job_manager.sh.
     hold_job=True,
     log_path=None,
+    binary="nlprun",
 ):
     """Schedule jobs on machines with A100 80G."""
     exclusion = "john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15,sphinx1,sphinx2,sphinx3"
@@ -112,6 +113,7 @@ def high_end_gpu_job_wrapper(
         hold_job=hold_job,
         log_path=log_path,
         exclusion=exclusion,
+        binary=binary,
     )
 
 
