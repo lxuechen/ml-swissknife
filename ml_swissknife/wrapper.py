@@ -26,6 +26,7 @@ def gpu_job_wrapper(
     hold_job=True,
     log_path=None,
     exclusion="john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15",
+    binary="nlprun",
 ):
     """Create a string version of the command to be run that can be written to file.
 
@@ -45,7 +46,7 @@ def gpu_job_wrapper(
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
     # Don't need to exclude jagupard[4-8] per https://stanfordnlp.slack.com/archives/C0FSH01PY/p1621469284003100
     wrapped_command = (
-        f"nlprun -x={exclusion} "
+        f"{binary} -x={exclusion} "
         f"-a {conda_env} "
         f"-o {log_path} "
         f"-p {priority} "
