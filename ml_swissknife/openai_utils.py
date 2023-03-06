@@ -11,6 +11,8 @@ import math
 import os
 import sys
 import time
+import multiprocessing
+from functools import partial
 from typing import Optional, Sequence, Union
 
 import openai
@@ -106,6 +108,7 @@ def _openai_completion(
     max_instances=sys.maxsize,
     max_batches=sys.maxsize,
     return_text=False,
+    num_procs=1,
     **decoding_kwargs,
 ) -> Union[Union[StrOrOpenAIObject], Sequence[StrOrOpenAIObject], Sequence[Sequence[StrOrOpenAIObject]],]:
     """Decode with OpenAI API.
@@ -159,22 +162,24 @@ def _openai_completion(
         for batch_id in range(int(math.ceil(num_prompts / batch_size)))
     ]
 
-    completions = []
-    for batch_id, prompt_batch in tqdm.tqdm(
-        enumerate(prompt_batches),
-        desc="prompt_batches",
-        total=len(prompt_batches),
-    ):
-        batch_decoding_args = copy.deepcopy(decoding_args)  # cloning the decoding_args
-        shared_kwargs = dict(
-            model=model_name,
-            **batch_decoding_args.__dict__,
-            **decoding_kwargs,
+    shared_kwargs = dict(
+        model=model_name,
+        **decoding_args.__dict__,
+        **decoding_kwargs,
+    )
+    with multiprocessing.Pool(num_procs) as p:
+        partial_completion_helper = partial(
+            _openai_completion_helper,
+            sleep_time=sleep_time,
+            is_chat=is_chat,
+            shared_kwargs=shared_kwargs,
         )
-
-        completions.extend(_openai_completion_helper(prompt_batch, sleep_time, is_chat, shared_kwargs))
-        breakpoint()
-        print(1)
+        completions = list(tqdm.tqdm(
+            p.imap(partial_completion_helper, prompt_batches), desc="prompt_batches", total=len(
+            prompt_batches)
+        ))
+    # flatten the list
+    completions = [completion for completion_batch in completions for completion in completion_batch]
 
     if return_text:
         completions = [completion.text for completion in completions]
