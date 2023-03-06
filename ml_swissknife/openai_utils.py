@@ -60,6 +60,42 @@ def requires_chatml(model: str) -> bool:
     """Whether a model requires the ChatML format."""
     return "turbo" in model
 
+def _openai_completion_helper(
+    prompt_batch: Sequence[StrOrOpenAIObject],
+    is_chat: bool,
+    sleep_time: int,
+    shared_kwargs: dict,
+):
+    # copy shared_kwargs to avoid modifying it
+    shared_kwargs = copy.deepcopy(shared_kwargs)
+
+    while True:
+        try:
+            if is_chat:
+                completion_batch = openai.ChatCompletion.create(messages=prompt_batch[0], **shared_kwargs)
+
+                choices = completion_batch.choices
+                for choice in choices:
+                    assert choice.message.role == "assistant"
+                    choice["text"] = choice.message.content
+
+            else:
+                completion_batch = openai.Completion.create(prompt=prompt_batch, **shared_kwargs)
+                choices = completion_batch.choices
+
+            for choice in choices:
+                choice["total_tokens"] = completion_batch.usage.total_tokens
+            break
+        except openai.error.OpenAIError as e:
+            logging.warning(f"OpenAIError: {e}.")
+            if "Please reduce your prompt" in str(e):
+                shared_kwargs["max_tokens"] = int(shared_kwargs["max_tokens"] * 0.8)
+                logging.warning(f"Reducing target length to {shared_kwargs['max_tokens']}, Retrying...")
+            else:
+                logging.warning("Hit request rate limit; retrying...")
+                time.sleep(sleep_time)  # Annoying rate limit on requests.
+    return choices
+
 
 def _openai_completion(
     prompts: Union[str, Sequence[str], Sequence[dict[str, str]], dict[str, str]],
@@ -130,38 +166,15 @@ def _openai_completion(
         total=len(prompt_batches),
     ):
         batch_decoding_args = copy.deepcopy(decoding_args)  # cloning the decoding_args
+        shared_kwargs = dict(
+            model=model_name,
+            **batch_decoding_args.__dict__,
+            **decoding_kwargs,
+        )
 
-        while True:
-            try:
-                shared_kwargs = dict(
-                    model=model_name,
-                    **batch_decoding_args.__dict__,
-                    **decoding_kwargs,
-                )
-                if is_chat:
-                    completion_batch = openai.ChatCompletion.create(messages=prompt_batch[0], **shared_kwargs)
-
-                    choices = completion_batch.choices
-                    for choice in choices:
-                        assert choice.message.role == "assistant"
-                        choice["text"] = choice.message.content
-
-                else:
-                    completion_batch = openai.Completion.create(prompt=prompt_batch, **shared_kwargs)
-                    choices = completion_batch.choices
-
-                for choice in choices:
-                    choice["total_tokens"] = completion_batch.usage.total_tokens
-                completions.extend(choices)
-                break
-            except openai.error.OpenAIError as e:
-                logging.warning(f"OpenAIError: {e}.")
-                if "Please reduce your prompt" in str(e):
-                    batch_decoding_args.max_tokens = int(batch_decoding_args.max_tokens * 0.8)
-                    logging.warning(f"Reducing target length to {batch_decoding_args.max_tokens}, Retrying...")
-                else:
-                    logging.warning("Hit request rate limit; retrying...")
-                    time.sleep(sleep_time)  # Annoying rate limit on requests.
+        completions.extend(_openai_completion_helper(prompt_batch, sleep_time, is_chat, shared_kwargs))
+        breakpoint()
+        print(1)
 
     if return_text:
         completions = [completion.text for completion in completions]
