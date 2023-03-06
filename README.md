@@ -12,7 +12,7 @@ To install the stable release, run
 pip install ml-swissknife
 ```
 
-To install from the main brain, run
+To install from the main branch, run
 
 ```bash
 pip install git+https://github.com/lxuechen/ml-swissknife.git
