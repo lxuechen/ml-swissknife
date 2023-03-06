@@ -2,6 +2,8 @@ import logging
 import os
 import sys
 import time
+import multiprocessing
+import functools
 from typing import Optional, Sequence, Union
 
 import fire
@@ -69,6 +71,41 @@ def crfm_quota(crfm_api_key: Optional[str] = None):
     account: Account = service.get_account(auth)
     return account.usages
 
+def crfm_completion_helper(
+    prompt,
+    service,
+    model_name,
+    top_k_per_token,
+    random,
+    sleep_time,
+    auth,
+    decoding_args: openai_utils.OpenAIDecodingArgumentsBase,
+    stop_sequences,
+):
+    while True:
+        try:
+            request = Request(
+                model=model_name,
+                prompt=prompt,
+                echo_prompt=decoding_args.echo,
+                temperature=decoding_args.temperature,
+                num_completions=decoding_args.n,
+                max_tokens=decoding_args.max_tokens,
+                stop_sequences=stop_sequences,
+                top_p=decoding_args.top_p,
+                presence_penalty=decoding_args.presence_penalty,
+                frequency_penalty=decoding_args.frequency_penalty,
+                top_k_per_token=top_k_per_token,
+                random=random,
+            )
+            request_result: RequestResult = service.make_request(auth, request)
+            break
+        except Exception as e:
+            logging.warning(f"Original exception: {e}.")
+            logging.warning(f"Retrying request after {sleep_time} seconds.")
+            time.sleep(sleep_time)  # Annoying rate limit on requests.
+    return request_result.completions
+
 
 def crfm_completion(
     prompts: Union[str, Sequence[str]],
@@ -80,6 +117,7 @@ def crfm_completion(
     return_openai_object=True,
     crfm_api_key: Optional[str] = None,
     random: Optional[str] = None,
+    num_procs: int = 10,
     **unused_kwargs,
 ) -> Union[
     StrOrCompletionObject,
@@ -122,31 +160,25 @@ def crfm_completion(
     stop_sequences = [] if decoding_args.stop is None else list(decoding_args.stop)
     top_k_per_token = 1 if decoding_args.logprobs is None else decoding_args.logprobs
 
-    completions = []
-    for prompt in tqdm.tqdm(prompts, desc="prompts", total=len(prompts)):
-        while True:
-            try:
-                request = Request(
-                    model=model_name,
-                    prompt=prompt,
-                    echo_prompt=decoding_args.echo,
-                    temperature=decoding_args.temperature,
-                    num_completions=decoding_args.n,
-                    max_tokens=decoding_args.max_tokens,
-                    stop_sequences=stop_sequences,
-                    top_p=decoding_args.top_p,
-                    presence_penalty=decoding_args.presence_penalty,
-                    frequency_penalty=decoding_args.frequency_penalty,
-                    top_k_per_token=top_k_per_token,
-                    random=random,
-                )
-                request_result: RequestResult = service.make_request(auth, request)
-                completions.extend(request_result.completions)
-                break
-            except Exception as e:
-                logging.warning(f"Original exception: {e}.")
-                logging.warning(f"Retrying request after {sleep_time} seconds.")
-                time.sleep(sleep_time)  # Annoying rate limit on requests.
+    with multiprocessing.Pool(num_procs) as p:
+        partial_crfm_completion_helper = functools.partial(
+            crfm_completion_helper,
+            service=service,
+            model_name=model_name,
+            top_k_per_token=top_k_per_token,
+            random=random,
+            sleep_time=sleep_time,
+            auth=auth,
+            decoding_args=decoding_args,
+            stop_sequences=stop_sequences,
+        )
+        completions = list(tqdm.tqdm(
+            p.imap(partial_crfm_completion_helper, prompts), desc="prompt_batches", total=len(
+                prompts)
+        ))
+        # flatten completions
+        completions = [item for sublist in completions for item in sublist]
+
     if return_openai_object:
         completions = [
             convert_crfm_object_to_openai_object(completion)
