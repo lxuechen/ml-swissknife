@@ -117,7 +117,7 @@ def crfm_completion(
     return_openai_object=True,
     crfm_api_key: Optional[str] = None,
     random: Optional[str] = None,
-    num_procs: int = 10,
+    num_procs: int = 1,
     **unused_kwargs,
 ) -> Union[
     StrOrCompletionObject,
