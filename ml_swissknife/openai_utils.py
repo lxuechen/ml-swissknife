@@ -11,6 +11,8 @@ import math
 import os
 import sys
 import time
+import multiprocessing
+import functools
 from typing import Optional, Sequence, Union
 
 import openai
@@ -61,6 +63,49 @@ def requires_chatml(model: str) -> bool:
     return "turbo" in model
 
 
+def _openai_completion_helper(
+    prompt_batch: Sequence[StrOrOpenAIObject],
+    is_chat: bool,
+    sleep_time: int,
+    shared_kwargs: dict,
+):
+    # copy shared_kwargs to avoid modifying it
+    shared_kwargs = copy.deepcopy(shared_kwargs)
+
+    while True:
+        try:
+            if is_chat:
+                completion_batch = openai.ChatCompletion.create(
+                    messages=prompt_batch[0], **shared_kwargs
+                )
+
+                choices = completion_batch.choices
+                for choice in choices:
+                    assert choice.message.role == "assistant"
+                    choice["text"] = choice.message.content
+
+            else:
+                completion_batch = openai.Completion.create(
+                    prompt=prompt_batch, **shared_kwargs
+                )
+                choices = completion_batch.choices
+
+            for choice in choices:
+                choice["total_tokens"] = completion_batch.usage.total_tokens
+            break
+        except openai.error.OpenAIError as e:
+            logging.warning(f"OpenAIError: {e}.")
+            if "Please reduce your prompt" in str(e):
+                shared_kwargs["max_tokens"] = int(shared_kwargs["max_tokens"] * 0.8)
+                logging.warning(
+                    f"Reducing target length to {shared_kwargs['max_tokens']}, Retrying..."
+                )
+            else:
+                logging.warning("Hit request rate limit; retrying...")
+                time.sleep(sleep_time)  # Annoying rate limit on requests.
+    return choices
+
+
 def _openai_completion(
     prompts: Union[str, Sequence[str], Sequence[dict[str, str]], dict[str, str]],
     decoding_args: OpenAIDecodingArguments,
@@ -70,8 +115,13 @@ def _openai_completion(
     max_instances=sys.maxsize,
     max_batches=sys.maxsize,
     return_text=False,
+    num_procs=1,
     **decoding_kwargs,
-) -> Union[Union[StrOrOpenAIObject], Sequence[StrOrOpenAIObject], Sequence[Sequence[StrOrOpenAIObject]],]:
+) -> Union[
+    Union[StrOrOpenAIObject],
+    Sequence[StrOrOpenAIObject],
+    Sequence[Sequence[StrOrOpenAIObject]],
+]:
     """Decode with OpenAI API.
 
     Args:
@@ -104,7 +154,9 @@ def _openai_completion(
     is_chat_format = isinstance(prompts[0], dict)
     if is_chat:
         if batch_size > 1:
-            logging.warning("batch_size > 1 is not supported yet for chat models. Setting to 1")
+            logging.warning(
+                "batch_size > 1 is not supported yet for chat models. Setting to 1"
+            )
             batch_size = 1
         if not is_chat_format:
             prompts = [prompt_to_chatml(prompt) for prompt in prompts]
@@ -123,51 +175,40 @@ def _openai_completion(
         for batch_id in range(int(math.ceil(num_prompts / batch_size)))
     ]
 
-    completions = []
-    for batch_id, prompt_batch in tqdm.tqdm(
-        enumerate(prompt_batches),
-        desc="prompt_batches",
-        total=len(prompt_batches),
-    ):
-        batch_decoding_args = copy.deepcopy(decoding_args)  # cloning the decoding_args
-
-        while True:
-            try:
-                shared_kwargs = dict(
-                    model=model_name,
-                    **batch_decoding_args.__dict__,
-                    **decoding_kwargs,
-                )
-                if is_chat:
-                    completion_batch = openai.ChatCompletion.create(messages=prompt_batch[0], **shared_kwargs)
-
-                    choices = completion_batch.choices
-                    for choice in choices:
-                        assert choice.message.role == "assistant"
-                        choice["text"] = choice.message.content
-
-                else:
-                    completion_batch = openai.Completion.create(prompt=prompt_batch, **shared_kwargs)
-                    choices = completion_batch.choices
-
-                for choice in choices:
-                    choice["total_tokens"] = completion_batch.usage.total_tokens
-                completions.extend(choices)
-                break
-            except openai.error.OpenAIError as e:
-                logging.warning(f"OpenAIError: {e}.")
-                if "Please reduce your prompt" in str(e):
-                    batch_decoding_args.max_tokens = int(batch_decoding_args.max_tokens * 0.8)
-                    logging.warning(f"Reducing target length to {batch_decoding_args.max_tokens}, Retrying...")
-                else:
-                    logging.warning("Hit request rate limit; retrying...")
-                    time.sleep(sleep_time)  # Annoying rate limit on requests.
+    shared_kwargs = dict(
+        model=model_name,
+        **decoding_args.__dict__,
+        **decoding_kwargs,
+    )
+    with multiprocessing.Pool(num_procs) as p:
+        partial_completion_helper = functools.partial(
+            _openai_completion_helper,
+            sleep_time=sleep_time,
+            is_chat=is_chat,
+            shared_kwargs=shared_kwargs,
+        )
+        completions = list(
+            tqdm.tqdm(
+                p.imap(partial_completion_helper, prompt_batches),
+                desc="prompt_batches",
+                total=len(prompt_batches),
+            )
+        )
+    # flatten the list
+    completions = [
+        completion
+        for completion_batch in completions
+        for completion in completion_batch
+    ]
 
     if return_text:
         completions = [completion.text for completion in completions]
     if decoding_args.n > 1:
         # make completions a nested list, where each entry is a consecutive decoding_args.n of original entries.
-        completions = [completions[i : i + decoding_args.n] for i in range(0, len(completions), decoding_args.n)]
+        completions = [
+            completions[i : i + decoding_args.n]
+            for i in range(0, len(completions), decoding_args.n)
+        ]
     if is_single_prompt:
         # Return non-tuple if only 1 input and 1 generation.
         (completions,) = completions
@@ -179,10 +220,16 @@ def string_to_dict(to_convert):
     >>> string_to_dict(" name=user university=stanford")
     {'name': 'user', 'university': 'stanford'}
     """
-    return {s.split("=", 1)[0]: s.split("=", 1)[1] for s in to_convert.split(" ") if len(s) > 0}
+    return {
+        s.split("=", 1)[0]: s.split("=", 1)[1]
+        for s in to_convert.split(" ")
+        if len(s) > 0
+    }
 
 
-def prompt_to_chatml(prompt: str, start_token: str = "<|im_start|>", end_token: str = "<|im_end|>"):
+def prompt_to_chatml(
+    prompt: str, start_token: str = "<|im_start|>", end_token: str = "<|im_end|>"
+):
     """Convert a text prompt to ChatML formal
 
     Examples
