@@ -93,9 +93,9 @@ def high_end_gpu_job_wrapper(
     hold_job=True,
     log_path=None,
     binary="nlprun",
+    exclusion="sphinx1,sphinx2,sphinx3"
 ):
     """Schedule jobs on machines with A100 80G."""
-    exclusion = "john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15,sphinx1,sphinx2,sphinx3"
     return gpu_job_wrapper(
         command=command,
         logs_prefix=logs_prefix,
