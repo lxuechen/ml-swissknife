@@ -60,7 +60,8 @@ class OpenAIDecodingArgumentsChat(OpenAIDecodingArgumentsBase):
 
 def requires_chatml(model: str) -> bool:
     """Whether a model requires the ChatML format."""
-    return "turbo" in model
+    # TODO: this should ideally be an OpenAI function... Maybe it already exists?
+    return "turbo" in model or "gpt-4" in model
 
 
 def _openai_completion_helper(
@@ -138,6 +139,7 @@ def _openai_completion(
             - an openai_object.OpenAIObject object (if return_text is False)
             - a list of objects of the above types (if decoding_args.n > 1)
     """
+    logging.info(f"Decoding with OpenAI API model {model_name} and numproc == {num_procs}.")
     is_single_prompt = isinstance(prompts, (str, dict))
     if is_single_prompt:
         prompts = [prompts]
