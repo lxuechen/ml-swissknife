@@ -114,11 +114,22 @@ def get_delta_df(df_all, df_subset) -> pd.DataFrame:
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
-def sql_to_df(database, sql) -> pd.DataFrame:
+def sql_to_df(database, sql, **kwargs) -> pd.DataFrame:
     """Return a dataframe from a SQL query."""
     with create_connection(database) as conn:
-        df = pd.read_sql(sql, conn)
+        df = pd.read_sql(sql, conn, **kwargs)
     return df
+
+
+def get_values_from_keys(database, table, df, is_rm_duplicates=False):
+    """Given a dataframe containing the primary keys of a table, will return the corresponding rows"""
+    keys = ", ".join(df.columns)
+    list_of_tuples = list(zip(*[df[c] for c in df.columns]))
+    values = str(list_of_tuples)[1:-1]
+    out = db_utils.sql_to_df(database=database, sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {values})")
+    if not is_rm_duplicates:
+        out = df.merge(out, on=list(df.columns), how="left")
+    return out
 
 
 def append_df_to_db(
