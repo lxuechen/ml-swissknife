@@ -126,7 +126,7 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
     keys = ", ".join(df.columns)
     list_of_tuples = list(zip(*[df[c] for c in df.columns]))
     values = str(list_of_tuples)[1:-1]
-    out = db_utils.sql_to_df(database=database, sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {values})")
+    out = sql_to_df(database=database, sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {values})")
     if not is_rm_duplicates:
         out = df.merge(out, on=list(df.columns), how="left")
     return out
