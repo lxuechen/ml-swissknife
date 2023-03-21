@@ -34,6 +34,8 @@ except ImportError:
     # we only use SQLalchemy for deleting and updating rows (not adding)
     pass
 
+logging.basicConfig(level=logging.INFO)
+
 
 def delete_rows_from_db(database, table_name, columns_to_select_on, df):
     """Delete rows from a table in a SQLite database based on the values of a dataframe."""
