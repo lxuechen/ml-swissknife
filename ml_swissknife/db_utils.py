@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import logging
 import random
 import sqlite3
 from contextlib import contextmanager
@@ -139,8 +140,20 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
     """Given a dataframe containing the primary keys of a table, will return the corresponding rows"""
     keys = ", ".join(df.columns)
     list_of_tuples = list(zip(*[df[c] for c in df.columns]))
-    values = str(list_of_tuples)[1:-1]
-    out = sql_to_df(database=database, sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {values})")
+
+    list_of_placeholders = [tuple("?" for _ in range(len(df.columns)))] * len(list_of_tuples)
+    placeholders = str(list_of_placeholders)[1:-1].replace("'?'", "?")
+
+    flattened_values = [item for sublist in list_of_tuples for item in sublist]
+
+    # Example sql query is built as follows:
+    #   SELECT * FROM likert_annotations WHERE (input_id, output) IN (VALUES (?, ?), (?, ?), (?, ?))
+    out = sql_to_df(
+        database=database,
+        sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})",
+        params=flattened_values,
+    )
+
     if not is_rm_duplicates:
         out = df.merge(out, on=list(df.columns), how="left")
     return out
@@ -189,7 +202,7 @@ def append_df_to_db(
     with create_connection(database) as conn:
         try:
             df_delta.to_sql(table_name, conn, if_exists="append", index=index)
-            print(f"Added {len(df_delta)} rows to {table_name}")
+            logging.info(f"Added {len(df_delta)} rows to {table_name}")
         except sqlite3.Error as e:
             # if there is an error, it tries to add the rows one by one
             rows_errors = []
@@ -198,7 +211,9 @@ def append_df_to_db(
                     df_delta.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
                 except:
                     rows_errors.append(i)
-            print(f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name} with error: {e}")
+            logging.error(
+                f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name} with error: {e}"
+            )
 
             # saves the error rows to a csv file to avoid losing the data
             df_errors = df_delta.iloc[rows_errors]
@@ -210,7 +225,7 @@ def append_df_to_db(
             orient = "index" if index else "records"
             df_errors.to_json(recovery_error_path, orient=orient, indent=2)
             df_to_add.to_json(recovery_all_path, orient=orient, indent=2)
-            print(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
+            logging.error(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
 
 
 @contextmanager
@@ -220,10 +235,10 @@ def create_connection(db_file, timeout=5.0, is_print=True, **kwargs):
     try:
         conn = sqlite3.connect(db_file, timeout=timeout, **kwargs)
         if is_print:
-            print(f"Connected to {db_file} SQLite")
+            logging.info(f"Connected to {db_file} SQLite")
         yield conn
-    except sqlite3.Error as e:
-        print("Failed to connect with sqlite3 database", e)
+    except sqlite3.Error:
+        logging.exception("Failed to connect with sqlite3 database:")
     finally:
         if conn:
             conn.close()
@@ -238,5 +253,5 @@ def create_table(conn, create_table_sql):
     try:
         c = conn.cursor()
         c.execute(create_table_sql)
-    except sqlite3.Error as e:
-        print(e)
+    except sqlite3.Error:
+        logging.exception("Failed to connect with sqlite3 database:")
