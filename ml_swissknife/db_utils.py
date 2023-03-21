@@ -100,8 +100,7 @@ def prepare_to_add_to_db_sql(
 def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=False) -> pd.DataFrame:
     """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
     and columns not in the database."""
-    with create_connection(database) as conn:
-        df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+    df_db = sql_to_df(sql=f"SELECT * FROM {table_name}", database=database)
     columns = [c for c in df_db.columns if c in df_to_add.columns]
     if is_subset_columns:
         df_db = df_db[columns]
@@ -154,7 +153,7 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
         #   SELECT * FROM likert_annotations WHERE (input_id, output) IN (VALUES (?, ?), (?, ?), (?, ?))
         out = sql_to_df(
             database=database,
-            sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})",
+            sql=f"""SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})""",
             params=flattened_values,
         )
     except:
@@ -214,17 +213,36 @@ def append_df_to_db(
         try:
             df_delta.to_sql(table_name, conn, if_exists="append", index=index)
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
-        except sqlite3.Error as e:
+
+        except Exception as e:
             # if there is an error, it tries to add the rows one by one
             rows_errors = []
-            for i in range(len(df_delta)):
+
+            cur = conn.cursor()
+
+            # when using a for loop you should avoid using to_sql if your DB
+            # has synchronous=normal/OFF, otherwise you will get a "database is locked"
+            # this also allows you to rollback in case of error
+            for i, row in df_delta.iterrows():
                 try:
-                    df_delta.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
+                    question_marks = ", ".join(["?"] * len(row.index))
+                    cur.execute(
+                        f"""INSERT INTO {table_name} ({', '.join(row.index)}) VALUES ({question_marks})""",
+                        tuple(row),
+                    )
+                    conn.commit()
                 except:
+                    if i == 0:
+                        logging.error(
+                            f"First failed to add row to {table_name} with error: {e}"
+                            f"We are trying one row by one now => this might take a while..."
+                        )
+
+                    # rollback to avoid possible corruption of the database
+                    conn.rollback()
                     rows_errors.append(i)
-            logging.error(
-                f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name} with error: {e}"
-            )
+
+            logging.error(f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name}")
 
             # saves the error rows to a csv file to avoid losing the data
             df_errors = df_delta.iloc[rows_errors]
