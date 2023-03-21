@@ -156,6 +156,7 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
             params=flattened_values,
         )
     except:
+        # this reads everything in memory which is less efficient but more robust
         out = sql_to_df(
             database=database,
             sql=f"SELECT * FROM {table}",
