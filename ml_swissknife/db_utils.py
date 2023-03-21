@@ -114,10 +114,24 @@ def get_delta_df(df_all, df_subset) -> pd.DataFrame:
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
-def sql_to_df(database, sql, **kwargs) -> pd.DataFrame:
-    """Return a dataframe from a SQL query."""
+def sql_to_df(database, sql, table=None, is_enforce_numeric=False, **kwargs) -> pd.DataFrame:
+    """
+    Return a dataframe from a SQL query.
+    If `is_enforce_numeric` will ensure that the dataframe's columns are numeric when the table columns are also.
+    """
     with create_connection(database) as conn:
         df = pd.read_sql(sql, conn, **kwargs)
+
+        if is_enforce_numeric:
+            assert table is not None, "If `is_type_enforce` is True, `table` must be specified."
+            table_info = pd.read_sql(sql=f"PRAGMA table_info({table})", con=conn)
+
+    if is_enforce_numeric:
+        cols_to_numeric = [r["name"] for _, r in table_info.iterrows() if r["type"] in ["INTEGER", "FLOAT"]]
+        for c in cols_to_numeric:
+            if c in df.columns:
+                df[c] = df[c].apply(pd.to_numeric, errors="coerce")
+
     return df
 
 
