@@ -223,7 +223,8 @@ def append_df_to_db(
             # when using a for loop you should avoid using to_sql if your DB
             # has synchronous=normal/OFF, otherwise you will get a "database is locked"
             # this also allows you to rollback in case of error
-            for i, row in df_delta.iterrows():
+            is_first_error = True
+            for _, row in df_delta.iterrows():
                 try:
                     question_marks = ", ".join(["?"] * len(row.index))
                     cur.execute(
@@ -232,11 +233,12 @@ def append_df_to_db(
                     )
                     conn.commit()
                 except:
-                    if i == 0:
+                    if is_first_error == 0:
                         logging.error(
                             f"First failed to add row to {table_name} with error: {e}"
                             f"We are trying one row by one now => this might take a while..."
                         )
+                        is_first_error = False
 
                     # rollback to avoid possible corruption of the database
                     conn.rollback()
