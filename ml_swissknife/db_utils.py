@@ -224,7 +224,7 @@ def append_df_to_db(
             # has synchronous=normal/OFF, otherwise you will get a "database is locked"
             # this also allows you to rollback in case of error
             is_first_error = True
-            for _, row in df_delta.iterrows():
+            for i, row in df_delta.iterrows():
                 try:
                     question_marks = ", ".join(["?"] * len(row.index))
                     cur.execute(
