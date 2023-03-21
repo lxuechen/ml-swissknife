@@ -146,16 +146,24 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
 
     flattened_values = [item for sublist in list_of_tuples for item in sublist]
 
-    # Example sql query is built as follows:
-    #   SELECT * FROM likert_annotations WHERE (input_id, output) IN (VALUES (?, ?), (?, ?), (?, ?))
-    out = sql_to_df(
-        database=database,
-        sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})",
-        params=flattened_values,
-    )
+    try:
+        # this is much faster an memory efficient but sometimes has some formatting issues
+        # Example sql query is built as follows:
+        #   SELECT * FROM likert_annotations WHERE (input_id, output) IN (VALUES (?, ?), (?, ?), (?, ?))
+        out = sql_to_df(
+            database=database,
+            sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})",
+            params=flattened_values,
+        )
+    except:
+        out = sql_to_df(
+            database=database,
+            sql=f"SELECT * FROM {table}",
+        )
 
     if not is_rm_duplicates:
         out = df.merge(out, on=list(df.columns), how="left")
+
     return out
 
 
