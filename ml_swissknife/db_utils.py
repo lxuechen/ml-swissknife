@@ -233,7 +233,7 @@ def append_df_to_db(
                     )
                     conn.commit()
                 except:
-                    if is_first_error == 0:
+                    if is_first_error:
                         logging.error(
                             f"First failed to add row to {table_name} with error: {e}"
                             f"We are trying one row by one now => this might take a while..."
