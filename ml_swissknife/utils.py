@@ -33,7 +33,7 @@ import signal
 import sys
 import time
 import warnings
-from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union, Any
 
 import numpy as np
 import requests
@@ -726,6 +726,31 @@ def ravel_pytree(
         ]
 
     return torch.cat(flats) if len(flats) > 0 else torch.tensor([]), unravel
+
+
+def unnest_pytree(possibly_nested: Union[Sequence, Any]) -> Tuple[List, Callable]:
+    if not isinstance(possibly_nested, (tuple, list)):
+        return [possibly_nested], lambda x: x[0]
+
+    flats: List[List] = []
+    nests: List[Callable] = []
+    numels: List[int] = []
+    for entry in possibly_nested:
+        flat_i, nest_i = unnest_pytree(entry)
+        flats.append(flat_i)
+        nests.append(nest_i)
+        numels.append(len(flat_i))
+    flat = [elem for flat_i in flats for elem in flat_i]
+
+    def nest(flat):
+        original = []
+        cumsum = np.cumsum([0] + numels)
+        for start, end, nest in zip_(cumsum[:-1], cumsum[1:], nests):
+            flat_i = flat[start:end]
+            original.append(nest(flat_i))
+        return original
+
+    return flat, nest
 
 
 def cat(args: Union[Tuple, List], dim=0, out=None):
@@ -1939,7 +1964,6 @@ def zoom_axes(
         )
 
     if connect:
-
         # define a box of points of the axes and the zoom
         zoom_xx = [zoom_x[0], zoom_x[0], zoom_x[1], zoom_x[1]]
         zoom_yy = [zoom_y[0], zoom_y[1], zoom_y[1], zoom_y[0]]
