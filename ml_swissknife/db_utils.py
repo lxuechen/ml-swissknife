@@ -117,7 +117,7 @@ def prepare_to_add_to_db_sql(
         if is_primary_key_duplicates.any():
             n_duplicates = is_primary_key_duplicates.sum()
             grouped = df_all[is_primary_key_duplicates].groupby(primary_keys)
-            example_primary_key_duplicates = grouped.get_group(list(grouped.groups.keys())[0])
+            example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(list(grouped.groups.keys())[0])
             raise ValueError(
                 f"Trying to add {n_duplicates} rows with primary keys {primary_keys} that already exist in the database "
                 f"but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
