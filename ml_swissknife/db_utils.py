@@ -201,6 +201,22 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
     return out
 
 
+def save_recovery(df_delta, table_name, index=False, recovery_path="."):
+    """Save the rows that failed to be added to the database"""
+
+    # saves the error rows to a csv file to avoid losing the data
+    random_idx = random.randint(10**5, 10**6)
+    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+
+    # save json as a list of dict if you don't want to keep index, else dict of dict
+    orient = "index" if index else "records"
+    df_delta.to_json(recovery_all_path, orient=orient, indent=2)
+    logging.error(
+        f"Failed to add {len(df_delta)} rows to {table_name}."
+        f"Dumping all the df that you couldn't save to {recovery_all_path}"
+    )
+
+
 def append_df_to_db(
     df_to_add,
     database,
@@ -233,14 +249,18 @@ def append_df_to_db(
         remove columns that are not in the database.
     """
     if is_prepare_to_add_to_db:
-        # this removes exact duplicates and columns not in the database
-        df_delta = prepare_to_add_to_db_sql(
-            df_to_add=df_to_add,
-            database=database,
-            sql_already_annotated=f"SELECT * FROM {table_name}",
-            is_check_unique_primary_key=True,  # raise if primary key is not unique
-            table_name=table_name,
-        )
+        try:
+            # this removes exact duplicates and columns not in the database
+            df_delta = prepare_to_add_to_db_sql(
+                df_to_add=df_to_add,
+                database=database,
+                sql_already_annotated=f"SELECT * FROM {table_name}",
+                is_check_unique_primary_key=True,  # raise if primary key is not unique
+                table_name=table_name,
+            )
+        except Exception as e:
+            save_recovery(df_to_add, table_name, index=index, recovery_path=recovery_path)
+            raise e
     else:
         df_delta = df_to_add
 
@@ -250,18 +270,7 @@ def append_df_to_db(
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
 
         except Exception as e:
-            # saves the error rows to a csv file to avoid losing the data
-            random_idx = random.randint(10**5, 10**6)
-            recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
-
-            # save json as a list of dict if you don't want to keep index, else dict of dict
-            orient = "index" if index else "records"
-            df_to_add.to_json(recovery_all_path, orient=orient, indent=2)
-            logging.error(
-                f"Failed to add {len(df_delta)} rows to {table_name}."
-                f"Dumping all the df that you couldn't save to {recovery_all_path}"
-            )
-
+            save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
             raise e
 
 
