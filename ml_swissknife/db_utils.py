@@ -28,6 +28,7 @@ from pathlib import Path
 import pandas as pd
 from ml_swissknife.types import PathOrIOBase
 from typing import Optional
+import numpy as np
 
 try:
     import sqlalchemy as sa
@@ -224,6 +225,7 @@ def append_df_to_db(
     index=False,
     recovery_path=".",
     is_prepare_to_add_to_db=True,
+    is_avoid_infinity=True,
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
@@ -247,7 +249,14 @@ def append_df_to_db(
     is_prepare_to_add_to_db : bool, optional
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
+
+    is_avoid_infinity : bool, optional
+        Whether to replace infinity values with NaNs before adding the dataframe to the database. THis is useful because
+        sqlite seems to have issues with infinity values.
     """
+    if is_avoid_infinity:
+        df_to_add = df_to_add.replace([np.inf, -np.inf], np.nan)
+
     if is_prepare_to_add_to_db:
         try:
             # this removes exact duplicates and columns not in the database
