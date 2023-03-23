@@ -27,6 +27,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import pandas as pd
 from ml_swissknife.types import PathOrIOBase
+from typing import Optional
 
 try:
     import sqlalchemy as sa
@@ -65,8 +66,10 @@ def prepare_to_add_to_db_sql(
     database: PathOrIOBase,
     sql_already_annotated: str,
     is_keep_all_columns_from_db: bool = True,
+    is_check_unique_primary_key: bool = False,
+    table_name: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
+    """Prepare a dataframe to be added to a table in a SQLite database by removing rows already in the database.
 
     Parameters
     ----------
@@ -82,16 +85,45 @@ def prepare_to_add_to_db_sql(
     is_keep_all_columns_from_db : bool, optional
         Whether to return all columns in DB (or only the columns in the dataframe to add).
 
+    is_check_unique_primary_key : bool, optional
+        Raise an error if you are trying to add rows with primary keys that already exist in the database but have
+        different values for non-primary keys. If True needs `table_name`
+
+    table_name : str, optional
+        The name of the table in the database. Only needed if `is_check_unique_primary_key` is True.
     """
     df_db = sql_to_df(
         database=database,
         sql=sql_already_annotated,
     )
     columns = [c for c in df_db.columns if c in df_to_add.columns]
+
     if not is_keep_all_columns_from_db:
         df_db = df_db[columns]
 
     df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+
+    if is_check_unique_primary_key:
+        assert table_name is not None
+        primary_keys = (
+            sql_to_df(database=database, sql=f"PRAGMA table_info('{table_name}')").query("pk > 0").name.to_list()
+        )
+        assert len(primary_keys) > 0, f"Table {table_name} has no primary key"
+
+        # you previously removed exact duplicates => if there are duplicates based on primary keys it means that there
+        # are rows that you are trying to add which have the same primary key as a row already in the database but
+        # different non-primary keys => raise an error
+        is_primary_key_duplicates = df_all.duplicated(subset=primary_keys)
+        if is_primary_key_duplicates.any():
+            n_duplicates = is_primary_key_duplicates.sum()
+            grouped = df_all[is_primary_key_duplicates].groupby(primary_keys)
+            example_primary_key_duplicates = grouped.get_group(list(grouped.groups.keys())[0])
+            raise ValueError(
+                f"Trying to add {n_duplicates} rows with primary keys {primary_keys} that already exist in the database "
+                f"but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
+            )
+
+    # remove columns that are already in DB
     df_delta = get_delta_df(df_all, df_db)
     return df_delta
 
@@ -201,10 +233,13 @@ def append_df_to_db(
         remove columns that are not in the database.
     """
     if is_prepare_to_add_to_db:
+        # this removes exact duplicates and columns not in the database
         df_delta = prepare_to_add_to_db_sql(
             df_to_add=df_to_add,
             database=database,
             sql_already_annotated=f"SELECT * FROM {table_name}",
+            is_check_unique_primary_key=True,  # raise if primary key is not unique
+            table_name=table_name,
         )
     else:
         df_delta = df_to_add
@@ -215,49 +250,19 @@ def append_df_to_db(
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
 
         except Exception as e:
-            # if there is an error, it tries to add the rows one by one
-            rows_errors = []
-
-            cur = conn.cursor()
-
-            # when using a for loop you should avoid using to_sql if your DB
-            # has synchronous=normal/OFF, otherwise you will get a "database is locked"
-            # this also allows you to rollback in case of error
-            is_first_error = True
-            for i in range(len(df_delta)):
-                try:
-                    row = df_delta.iloc[i]
-                    question_marks = ", ".join(["?"] * len(row.index))
-                    cur.execute(
-                        f"""INSERT INTO {table_name} ({', '.join(row.index)}) VALUES ({question_marks})""",
-                        tuple(row),
-                    )
-                    conn.commit()
-                except:
-                    if is_first_error:
-                        logging.error(
-                            f"First failed to add row to {table_name} with error: {e}"
-                            f"We are trying one row by one now => this might take a while..."
-                        )
-                        is_first_error = False
-
-                    # rollback to avoid possible corruption of the database
-                    conn.rollback()
-                    rows_errors.append(i)
-
-            logging.error(f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name}")
-
             # saves the error rows to a csv file to avoid losing the data
-            df_errors = df_delta.iloc[rows_errors]
             random_idx = random.randint(10**5, 10**6)
-            recovery_error_path = Path(recovery_path) / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
             recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
 
             # save json as a list of dict if you don't want to keep index, else dict of dict
             orient = "index" if index else "records"
-            df_errors.to_json(recovery_error_path, orient=orient, indent=2)
             df_to_add.to_json(recovery_all_path, orient=orient, indent=2)
-            logging.error(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
+            logging.error(
+                f"Failed to add {len(df_delta)} rows to {table_name}."
+                f"Dumping all the df that you couldn't save to {recovery_all_path}"
+            )
+
+            raise e
 
 
 @contextmanager
