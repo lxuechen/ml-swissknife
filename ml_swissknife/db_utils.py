@@ -226,7 +226,6 @@ def append_df_to_db(
     recovery_path=".",
     is_prepare_to_add_to_db=True,
     is_avoid_infinity=True,
-    if_exists="append",
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
@@ -254,9 +253,6 @@ def append_df_to_db(
     is_avoid_infinity : bool, optional
         Whether to replace infinity values with NaNs before adding the dataframe to the database. THis is useful because
         sqlite seems to have issues with infinity values.
-
-    if_exists : str, optional
-        How to handle the dataframe if table already exists in the database. Can be "append", "replace" or "fail".
     """
     if is_avoid_infinity:
         df_to_add = df_to_add.replace([np.inf, -np.inf], np.nan)
@@ -279,7 +275,7 @@ def append_df_to_db(
 
     with create_connection(database) as conn:
         try:
-            df_delta.to_sql(table_name, conn, if_exists=if_exists, index=index)
+            df_delta.to_sql(table_name, conn, if_exists="append", index=index)
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
 
         except Exception as e:
