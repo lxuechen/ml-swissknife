@@ -284,13 +284,13 @@ def append_df_to_db(
 
 
 @contextmanager
-def create_connection(db_file, timeout=5.0, is_print=True, **kwargs):
+def create_connection(database, timeout=5.0, is_print=True, **kwargs):
     """Create a database connection to a SQLite database"""
     conn = None
     try:
-        conn = sqlite3.connect(db_file, timeout=timeout, **kwargs)
+        conn = sqlite3.connect(database, timeout=timeout, **kwargs)
         if is_print:
-            logging.info(f"Connected to {db_file} SQLite")
+            logging.info(f"Connected to {database} SQLite")
         yield conn
     except sqlite3.Error:
         logging.exception("Failed to connect with sqlite3 database:")
@@ -299,14 +299,29 @@ def create_connection(db_file, timeout=5.0, is_print=True, **kwargs):
             conn.close()
 
 
-def create_table(conn, create_table_sql):
-    """Create a table from the create_table_sql statement
-    :param conn: Connection object
-    :param create_table_sql: a CREATE TABLE statement
-    :return:
-    """
-    try:
+def execute_sql(database, sql):
+    """Execute a sql command on a database"""
+    with create_connection(database) as conn:
         c = conn.cursor()
-        c.execute(create_table_sql)
-    except sqlite3.Error:
-        logging.exception("Failed to connect with sqlite3 database:")
+        c.executescript(sql)
+        conn.commit()
+
+
+def get_all_tables(database):
+    """Get all the tables in a database"""
+    with create_connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = cursor.fetchall()
+        cursor.close()
+    return [t[0] for t in tables]
+
+
+def get_all_views(database):
+    """Get all the tables in a database"""
+    with create_connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name")
+        tables = cursor.fetchall()
+        cursor.close()
+    return [t[0] for t in tables]
