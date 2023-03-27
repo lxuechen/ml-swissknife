@@ -908,15 +908,17 @@ def manual_seed(
             logging.warning("Tensorflow not installed; ignoring set seed for tf.")
 
 
-def get_dtype(dtype_str: str):
-    if dtype_str in ("single", "float32", "float"):
+def convert_str_dtype_to_torch_dtype(str_dtype: str):
+    if str_dtype in ("single", "float32", "float", "fp32"):
         return torch.float
-    elif dtype_str in ("half", "float16"):
+    elif str_dtype in ("half", "float16", "fp16"):
         return torch.float16
-    elif dtype_str in ("double", "float64"):
+    elif str_dtype in ("bfloat16", "bf16"):
+        return torch.bfloat16
+    elif str_dtype in ("double", "float64"):
         return torch.float64
     else:
-        raise ValueError(f"Unknown dtype: {dtype_str}")
+        raise ValueError(f"Unknown dtype: {str_dtype}")
 
 
 def manual_dtype(args_or_dtype: Union[str, argparse.Namespace]):
