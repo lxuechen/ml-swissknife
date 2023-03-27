@@ -27,6 +27,8 @@ from contextlib import contextmanager
 from pathlib import Path
 import pandas as pd
 from ml_swissknife.types import PathOrIOBase
+from typing import Optional
+import numpy as np
 
 try:
     import sqlalchemy as sa
@@ -65,8 +67,10 @@ def prepare_to_add_to_db_sql(
     database: PathOrIOBase,
     sql_already_annotated: str,
     is_keep_all_columns_from_db: bool = True,
+    is_check_unique_primary_key: bool = False,
+    table_name: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
+    """Prepare a dataframe to be added to a table in a SQLite database by removing rows already in the database.
 
     Parameters
     ----------
@@ -82,16 +86,45 @@ def prepare_to_add_to_db_sql(
     is_keep_all_columns_from_db : bool, optional
         Whether to return all columns in DB (or only the columns in the dataframe to add).
 
+    is_check_unique_primary_key : bool, optional
+        Raise an error if you are trying to add rows with primary keys that already exist in the database but have
+        different values for non-primary keys. If True needs `table_name`
+
+    table_name : str, optional
+        The name of the table in the database. Only needed if `is_check_unique_primary_key` is True.
     """
     df_db = sql_to_df(
         database=database,
         sql=sql_already_annotated,
     )
     columns = [c for c in df_db.columns if c in df_to_add.columns]
+
     if not is_keep_all_columns_from_db:
         df_db = df_db[columns]
 
     df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+
+    if is_check_unique_primary_key:
+        assert table_name is not None
+        primary_keys = (
+            sql_to_df(database=database, sql=f"PRAGMA table_info('{table_name}')").query("pk > 0").name.to_list()
+        )
+        assert len(primary_keys) > 0, f"Table {table_name} has no primary key"
+
+        # you previously removed exact duplicates => if there are duplicates based on primary keys it means that there
+        # are rows that you are trying to add which have the same primary key as a row already in the database but
+        # different non-primary keys => raise an error
+        is_primary_key_duplicates = df_all.duplicated(subset=primary_keys)
+        if is_primary_key_duplicates.any():
+            n_duplicates = is_primary_key_duplicates.sum()
+            grouped = df_all[is_primary_key_duplicates].groupby(primary_keys)
+            example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(list(grouped.groups.keys())[0])
+            raise ValueError(
+                f"Trying to add {n_duplicates} rows with primary keys {primary_keys} that already exist in the database "
+                f"but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
+            )
+
+    # remove columns that are already in DB
     df_delta = get_delta_df(df_all, df_db)
     return df_delta
 
@@ -100,8 +133,7 @@ def prepare_to_add_to_db_sql(
 def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=False) -> pd.DataFrame:
     """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
     and columns not in the database."""
-    with create_connection(database) as conn:
-        df_db = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+    df_db = sql_to_df(sql=f"SELECT * FROM {table_name}", database=database)
     columns = [c for c in df_db.columns if c in df_to_add.columns]
     if is_subset_columns:
         df_db = df_db[columns]
@@ -154,7 +186,7 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
         #   SELECT * FROM likert_annotations WHERE (input_id, output) IN (VALUES (?, ?), (?, ?), (?, ?))
         out = sql_to_df(
             database=database,
-            sql=f"SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})",
+            sql=f"""SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})""",
             params=flattened_values,
         )
     except:
@@ -170,6 +202,22 @@ def get_values_from_keys(database, table, df, is_rm_duplicates=False):
     return out
 
 
+def save_recovery(df_delta, table_name, index=False, recovery_path="."):
+    """Save the rows that failed to be added to the database"""
+
+    # saves the error rows to a csv file to avoid losing the data
+    random_idx = random.randint(10**5, 10**6)
+    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+
+    # save json as a list of dict if you don't want to keep index, else dict of dict
+    orient = "index" if index else "records"
+    df_delta.to_json(recovery_all_path, orient=orient, indent=2)
+    logging.error(
+        f"Failed to add {len(df_delta)} rows to {table_name}."
+        f"Dumping all the df that you couldn't save to {recovery_all_path}"
+    )
+
+
 def append_df_to_db(
     df_to_add,
     database,
@@ -177,6 +225,7 @@ def append_df_to_db(
     index=False,
     recovery_path=".",
     is_prepare_to_add_to_db=True,
+    is_avoid_infinity=True,
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
@@ -200,13 +249,27 @@ def append_df_to_db(
     is_prepare_to_add_to_db : bool, optional
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
+
+    is_avoid_infinity : bool, optional
+        Whether to replace infinity values with NaNs before adding the dataframe to the database. THis is useful because
+        sqlite seems to have issues with infinity values.
     """
+    if is_avoid_infinity:
+        df_to_add = df_to_add.replace([np.inf, -np.inf], np.nan)
+
     if is_prepare_to_add_to_db:
-        df_delta = prepare_to_add_to_db_sql(
-            df_to_add=df_to_add,
-            database=database,
-            sql_already_annotated=f"SELECT * FROM {table_name}",
-        )
+        try:
+            # this removes exact duplicates and columns not in the database
+            df_delta = prepare_to_add_to_db_sql(
+                df_to_add=df_to_add,
+                database=database,
+                sql_already_annotated=f"SELECT * FROM {table_name}",
+                is_check_unique_primary_key=True,  # raise if primary key is not unique
+                table_name=table_name,
+            )
+        except Exception as e:
+            save_recovery(df_to_add, table_name, index=index, recovery_path=recovery_path)
+            raise e
     else:
         df_delta = df_to_add
 
@@ -214,39 +277,20 @@ def append_df_to_db(
         try:
             df_delta.to_sql(table_name, conn, if_exists="append", index=index)
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
-        except sqlite3.Error as e:
-            # if there is an error, it tries to add the rows one by one
-            rows_errors = []
-            for i in range(len(df_delta)):
-                try:
-                    df_delta.iloc[i : i + 1].to_sql(table_name, conn, if_exists="append", index=index)
-                except:
-                    rows_errors.append(i)
-            logging.error(
-                f"Failed to add {len(rows_errors)} rows out of {len(df_delta)} to {table_name} with error: {e}"
-            )
 
-            # saves the error rows to a csv file to avoid losing the data
-            df_errors = df_delta.iloc[rows_errors]
-            random_idx = random.randint(10**5, 10**6)
-            recovery_error_path = Path(recovery_path) / f"failed_add_to_{table_name}_errors_{random_idx}.csv"
-            recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
-
-            # save json as a list of dict if you don't want to keep index, else dict of dict
-            orient = "index" if index else "records"
-            df_errors.to_json(recovery_error_path, orient=orient, indent=2)
-            df_to_add.to_json(recovery_all_path, orient=orient, indent=2)
-            logging.error(f"Saved errors to {recovery_error_path} and all df to {recovery_all_path}")
+        except Exception as e:
+            save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
+            raise e
 
 
 @contextmanager
-def create_connection(db_file, timeout=5.0, is_print=True, **kwargs):
+def create_connection(database, timeout=5.0, is_print=True, **kwargs):
     """Create a database connection to a SQLite database"""
     conn = None
     try:
-        conn = sqlite3.connect(db_file, timeout=timeout, **kwargs)
+        conn = sqlite3.connect(database, timeout=timeout, **kwargs)
         if is_print:
-            logging.info(f"Connected to {db_file} SQLite")
+            logging.info(f"Connected to {database} SQLite")
         yield conn
     except sqlite3.Error:
         logging.exception("Failed to connect with sqlite3 database:")
@@ -255,14 +299,29 @@ def create_connection(db_file, timeout=5.0, is_print=True, **kwargs):
             conn.close()
 
 
-def create_table(conn, create_table_sql):
-    """Create a table from the create_table_sql statement
-    :param conn: Connection object
-    :param create_table_sql: a CREATE TABLE statement
-    :return:
-    """
-    try:
+def execute_sql(database, sql):
+    """Execute a sql command on a database"""
+    with create_connection(database) as conn:
         c = conn.cursor()
-        c.execute(create_table_sql)
-    except sqlite3.Error:
-        logging.exception("Failed to connect with sqlite3 database:")
+        c.executescript(sql)
+        conn.commit()
+
+
+def get_all_tables(database):
+    """Get all the tables in a database"""
+    with create_connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = cursor.fetchall()
+        cursor.close()
+    return [t[0] for t in tables]
+
+
+def get_all_views(database):
+    """Get all the tables in a database"""
+    with create_connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name")
+        tables = cursor.fetchall()
+        cursor.close()
+    return [t[0] for t in tables]
