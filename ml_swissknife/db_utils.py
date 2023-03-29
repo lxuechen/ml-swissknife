@@ -37,17 +37,17 @@ def create_engine(
     is_new_engine = not isinstance(database, sa.engine.base.Engine)
     if not is_new_engine:
         yield database
+    else:
+        try:
+            engine = get_engine(database, **engine_kwargs)
 
-    try:
-        engine = get_engine(database, **engine_kwargs)
+            if is_print:
+                logging.info(f"Connected to {database} which is a {engine.dialect.name} DB.")
 
-        if is_print:
-            logging.info(f"Connected to {database} which is a {engine.dialect.name} DB.")
-
-        yield engine
-    finally:
-        # only dispose if we created the engine
-        engine.dispose()
+            yield engine
+        finally:
+            # only dispose if we created the engine
+            engine.dispose()
 
 
 @contextmanager
