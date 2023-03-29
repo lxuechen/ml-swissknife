@@ -155,10 +155,7 @@ def delete_rows_from_db(database: Union[str, sa.engine.base.Engine], table_name:
 
     sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
     delete = db_table.delete().where(sql_where)
-
-    with create_connection(engine) as conn:
-        conn.execute(delete)
-        conn.commit()
+    execute_sql(database=engine, sql=delete)
 
 
 def get_values_from_keys(
@@ -485,10 +482,15 @@ def save_recovery(df_delta: pd.DataFrame, table_name: str, index: bool = False, 
     )
 
 
-def execute_sql(database: Union[str, sa.engine.base.Engine], sql: str):
+def execute_sql(
+    database: Union[str, sa.engine.base.Engine],
+    sql: Union[str, sa.sql.expression.Executable],
+    parameters=None,
+    execution_options=None,
+):
     """Execute a sql command on a database"""
     with create_connection(database) as conn:
-        conn.execute(sql)
+        conn.execute(sql, parameters=parameters, execution_options=execution_options)
         conn.commit()
 
 
