@@ -16,12 +16,11 @@ from typing import Union, Optional, Sequence, Tuple
 
 logging.basicConfig(level=logging.INFO)
 
-
 @contextmanager
-def create_connection(
+def create_engine(
     database: Union[str, sa.engine.base.Engine], is_print: bool = True, **engine_kwargs
-) -> sa.engine.base.Connection:
-    """Return the database engine to a database.
+) -> sa.engine.base.Engine:
+    """Return the engine to a database.
 
     Parameters
     ----------
@@ -35,27 +34,46 @@ def create_connection(
     **engine_kwargs :
         Additional arguments to pass to `sqlalchemy.create_engine`.
     """
-    if isinstance(database, sa.engine.base.Engine):
-        is_new_engine = False
-    else:
-        is_new_engine = True
+    is_new_engine = not isinstance(database, sa.engine.base.Engine)
+    if not is_new_engine:
+        yield database
 
-    engine = get_engine(database, **engine_kwargs)
-
-    if is_print:
-        logging.info(f"Connected to {database} which is a {engine.dialect.name} DB.")
-
-    connection = None
     try:
-        connection = engine.connect()
-        yield connection
-    finally:
-        if connection is not None:
-            connection.close()
+        engine = get_engine(database, **engine_kwargs)
 
-        if is_new_engine:
-            # let's only dispose of the engine if we created it => allows pooling of connections
-            engine.dispose()
+        if is_print:
+            logging.info(f"Connected to {database} which is a {engine.dialect.name} DB.")
+
+        yield engine
+    finally:
+        # only dispose if we created the engine
+        engine.dispose()
+
+
+@contextmanager
+def create_connection(
+    database: Union[str, sa.engine.base.Engine], is_print: bool = True, **engine_kwargs
+) -> sa.engine.base.Connection:
+    """Return the connection to a database.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine, or the path if it's sqlite. If you want to use
+        in memory database, you can use ":memory:".
+
+    is_print : bool, optional
+        Whether to print the database.
+
+    **engine_kwargs :
+        Additional arguments to pass to `sqlalchemy.create_engine`.
+    """
+    with create_engine(database, is_print=is_print, **engine_kwargs) as engine:
+        try:
+            connection = engine.connect()
+            yield connection
+        finally:
+            connection.close()
 
 
 def sql_to_df(
@@ -82,9 +100,7 @@ def sql_to_df(
     1     2      I...   t...         4           NaN                     NaN                     NaN                     NaN                    None            None              NaN
     2     2      I...   chen         2           NaN                     NaN                     NaN                     NaN                    None            None              NaN
     """
-    with create_connection(database) as conn:
-        engine = conn.engine
-
+    with create_engine(database) as engine:
         if engine.dialect.name == "postgresql":
             # `method="multi"` means combines multiple rows into a single INSERT statement => faster
             # `chunksize` divides the DataFrame into smaller chunks and then insert each chunk separately. This can help
@@ -93,36 +109,37 @@ def sql_to_df(
             read_sql_kwargs["chunksize"] = 10000
             read_sql_kwargs["method"] = "multi"
 
-        df = pd.read_sql(sql=sql, con=conn, **read_sql_kwargs)
+        with create_connection(engine) as conn:
+            df = pd.read_sql(sql=sql, con=conn, **read_sql_kwargs)
 
-    # in the following we enforce the types of the columns in the dataframe to be the same as the types in the database
-    # this is useful for example if a column is float but the rows you read are all None. In this case, the dataframe
-    # will by default be of type Object and not float (because it sees all None). In reality those None should be NaN
-    # and the column should be float. If you don't do that this can cause problems later on
+        # in the following we enforce the types of the columns in the dataframe to be the same as the types in the
+        # database this is useful for example if a column is float but the rows you read are all None. In this case, the
+        # dataframe will by default be of type Object and not float (because it sees all None). In reality those None
+        # should be NaN and the column should be float. If you don't do that this can cause problems later on
 
-    # parse sql to get the table name from which we read the query
-    all_table_and_views = get_all_tables(engine) + get_all_views(engine)
-    all_tables_refered_in_sql = [t for t in sql.split() if t in all_table_and_views]
+        # parse sql to get the table name from which we read the query
+        all_table_and_views = get_all_tables(engine) + get_all_views(engine)
+        all_tables_refered_in_sql = [t for t in sql.split() if t in all_table_and_views]
 
-    if len(all_tables_refered_in_sql) == 1:
-        table_name_to_enforce_types = all_tables_refered_in_sql[0]
+        if len(all_tables_refered_in_sql) == 1:
+            table_name_to_enforce_types = all_tables_refered_in_sql[0]
 
-    elif len(all_tables_refered_in_sql) > 1:
-        table_name_to_enforce_types = all_tables_refered_in_sql[0]
-        logging.warning(
-            f"There are multiple tables you referred to, we think {table_name_to_enforce_types} "
-            f"is the right one for enforcing column types in dataframe."
-        )
+        elif len(all_tables_refered_in_sql) > 1:
+            table_name_to_enforce_types = all_tables_refered_in_sql[0]
+            logging.warning(
+                f"There are multiple tables you referred to, we think {table_name_to_enforce_types} "
+                f"is the right one for enforcing column types in dataframe."
+            )
 
-    else:
-        table_name_to_enforce_types = None
-        logging.warning(
-            f"There are no tables you referred to in your SQL query, we cannot enforce column types in dataframe."
-        )
+        else:
+            table_name_to_enforce_types = None
+            logging.warning(
+                f"There are no tables you referred to in your SQL query, we cannot enforce column types in dataframe."
+            )
 
-    if table_name_to_enforce_types is not None:
-        db_table = sa.Table(table_name_to_enforce_types, sa.MetaData(), autoload_with=engine)
-        enforce_type_cols_df_(df, db_table)
+        if table_name_to_enforce_types is not None:
+            db_table = sa.Table(table_name_to_enforce_types, sa.MetaData(), autoload_with=engine)
+            enforce_type_cols_df_(df, db_table)
 
     return df
 
@@ -150,12 +167,13 @@ def delete_rows_from_db(database: Union[str, sa.engine.base.Engine], table_name:
     >>> len(get_values_from_keys(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations"))
     0
     """
-    engine = get_engine(database)
-    db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+    with create_engine(database) as engine:
+        db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
 
-    sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
-    delete = db_table.delete().where(sql_where)
-    execute_sql(database=engine, sql=delete)
+        sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
+        delete = db_table.delete().where(sql_where)
+
+        execute_sql(database=engine, sql=delete)
 
 
 def get_values_from_keys(
@@ -183,15 +201,15 @@ def get_values_from_keys(
     >>> len(get_values_from_keys(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations"))
     0
     """
-    engine = get_engine(database)
-    db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+    with create_engine(database) as engine:
+        db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
 
-    sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
-    select = sa.select(db_table).where(sql_where)
+        sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
+        select = sa.select(db_table).where(sql_where)
 
-    with create_connection(engine) as connection:
-        result = connection.execute(select)
-        out = pd.DataFrame(result.fetchall(), columns=result.keys())
+        with create_connection(engine) as connection:
+            result = connection.execute(select)
+            out = pd.DataFrame(result.fetchall(), columns=result.keys())
 
     enforce_type_cols_df_(out, db_table)
 
@@ -205,7 +223,7 @@ def append_df_to_db(
     index: bool = False,
     recovery_path: PathOrIOBase = ".",
     is_prepare_to_add_to_db: bool = True,
-**to_sql_kwargs
+    **to_sql_kwargs
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
@@ -252,17 +270,17 @@ def append_df_to_db(
     else:
         df_delta = df_to_add
 
-    with create_connection(database) as conn:
-        try:
-            if engine.dialect.name == "postgres":
+    try:
+        with create_connection(database) as conn:
+            if conn.engine.dialect.name == "postgres":
                 to_sql_kwargs["chunksize"] = 10000
                 to_sql_kwargs["method"] = "multi"
             df_delta.to_sql(table_name, conn, if_exists="append", index=index, **to_sql_kwargs)
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
 
-        except Exception as e:
-            save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
-            raise e
+    except Exception as e:
+        save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
+        raise e
 
 
 def get_primary_keys(database: Union[str, sa.engine.base.Engine], table_name: str) -> list[str]:
@@ -276,15 +294,16 @@ def get_primary_keys(database: Union[str, sa.engine.base.Engine], table_name: st
     table_name : str
         The name of the table to get the primary keys from.
     """
-    engine = get_engine(database)
-    inspector = sa.inspect(engine)
-    return inspector.get_pk_constraint(table_name)["constrained_columns"]
+    with create_engine(database) as engine:
+        inspector = sa.inspect(engine)
+        return inspector.get_pk_constraint(table_name)["constrained_columns"]
 
 
 ### Secondary helpers ###
 def get_table_info(database: Union[str, sa.engine.base.Engine], table_name: str) -> pd.DataFrame:
     """Return a dataframe with the table information of table_name in a database."""
-    table = sa.Table(table_name, sa.MetaData(), autoload_with=db_utils.get_engine(database))
+    with create_engine(database) as engine:
+        table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
 
     data = {
         "name": [],
@@ -321,9 +340,12 @@ def get_engine(database: Union[str, sa.engine.base.Engine], **engine_kwargs) -> 
     else:
         try:
             engine = sa.create_engine(database, **engine_kwargs)
-        except sa.exc.ArgumentError:
-            # if error it's likely because the database is a path to a sqlite database
-            engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
+        except sa.exc.ArgumentError as e:
+            if Path(database).is_file():
+                # converts path to sqlite url
+                engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
+            else:
+                raise e
 
     return engine
 
@@ -380,17 +402,17 @@ def prepare_to_add_to_db(
     table_name : str, optional
         The name of the table in the database to check for existing rows.
     """
-    engine = get_engine(database)
-    db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
-    primary_keys = get_primary_keys(engine, table_name)
+    with create_engine(database) as engine:
+        db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+        primary_keys = get_primary_keys(engine, table_name)
 
-    # select all rows from the database that have the same primary keys as the rows to add
-    sql_where = get_sql_where_from_df(engine, table=db_table, df=df_to_add[primary_keys])
-    select = db_table.select().where(sql_where)
+        # select all rows from the database that have the same primary keys as the rows to add
+        sql_where = get_sql_where_from_df(engine, table=db_table, df=df_to_add[primary_keys])
+        select = db_table.select().where(sql_where)
 
-    with create_connection(engine) as conn:
-        result = conn.execute(select)
-        df_db = pd.DataFrame(result.fetchall(), columns=result.keys())
+        with create_connection(engine) as conn:
+            result = conn.execute(select)
+            df_db = pd.DataFrame(result.fetchall(), columns=result.keys())
 
     enforce_type_cols_df_(df_db, db_table)
 
@@ -456,21 +478,21 @@ def get_sql_where_from_df(
     is_str : bool, optional
         Whether to return the string of the SQL statement or the sqlalchemy select statement.
     """
-    engine = get_engine(database)
+    with create_engine(database) as engine:
 
-    # Reflect the table
-    if isinstance(table, str):
-        db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
-    else:
-        db_table = table
+        # Reflect the table
+        if isinstance(table, str):
+            db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+        else:
+            db_table = table
 
-    # Create a SELECT statement using and_ and or_
-    conditions = [sa.and_(*[db_table.c[key] == value for key, value in row.items()]) for _, row in df.iterrows()]
-    where_clause = sa.or_(*conditions)
+        # Create a SELECT statement using and_ and or_
+        conditions = [sa.and_(*[db_table.c[key] == value for key, value in row.items()]) for _, row in df.iterrows()]
+        where_clause = sa.or_(*conditions)
 
-    if is_str:
-        return str(where_clause.compile(engine, compile_kwargs={"literal_binds": True}))
-    return where_clause
+        if is_str:
+            return str(where_clause.compile(engine, compile_kwargs={"literal_binds": True}))
+        return where_clause
 
 
 def save_recovery(df_delta: pd.DataFrame, table_name: str, index: bool = False, recovery_path: PathOrIOBase = "."):
@@ -506,13 +528,13 @@ def execute_sql(
 
 def get_all_tables(database: Union[str, sa.engine.base.Engine]) -> list[str]:
     """Get all the tables in a database"""
-    engine = get_engine(database)
-    inspector = sa.inspect(engine)
-    return inspector.get_table_names()
+    with create_engine(database) as engine:
+        inspector = sa.inspect(engine)
+        return inspector.get_table_names()
 
 
 def get_all_views(database: Union[str, sa.engine.base.Engine]) -> list[str]:
     """Get all the views in a database"""
-    engine = get_engine(database)
-    inspector = sa.inspect(engine)
-    return inspector.get_view_names()
+    with create_engine(database) as engine:
+        inspector = sa.inspect(engine)
+        return inspector.get_view_names()
