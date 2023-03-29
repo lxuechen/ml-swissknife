@@ -85,7 +85,7 @@ def sql_to_df(
     with create_connection(database) as conn:
         engine = conn.engine
 
-        if engine.dialect.name != "sqlite":
+        if engine.dialect.name == "postgresql":
             # `method="multi"` means combines multiple rows into a single INSERT statement => faster
             # `chunksize` divides the DataFrame into smaller chunks and then insert each chunk separately. This can help
             # reduce the memory usage and improve the performance when inserting a large number of rows into the
@@ -205,6 +205,7 @@ def append_df_to_db(
     index: bool = False,
     recovery_path: PathOrIOBase = ".",
     is_prepare_to_add_to_db: bool = True,
+**to_sql_kwargs
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
@@ -228,6 +229,9 @@ def append_df_to_db(
     is_prepare_to_add_to_db : bool, optional
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
+
+    **to_sql_kwargs :
+        Additional arguments to `to_sql_kwargs`.
     """
     if is_prepare_to_add_to_db:
         # this removes exact duplicates and columns not in the database
@@ -250,7 +254,10 @@ def append_df_to_db(
 
     with create_connection(database) as conn:
         try:
-            df_delta.to_sql(table_name, conn, if_exists="append", index=index)
+            if engine.dialect.name == "postgres":
+                to_sql_kwargs["chunksize"] = 10000
+                to_sql_kwargs["method"] = "multi"
+            df_delta.to_sql(table_name, conn, if_exists="append", index=index, **to_sql_kwargs)
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
 
         except Exception as e:
