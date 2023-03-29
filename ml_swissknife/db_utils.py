@@ -231,7 +231,7 @@ def append_df_to_db(
     """
     if is_prepare_to_add_to_db:
         # this removes exact duplicates and columns not in the database
-        df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db_sql(
+        df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db(
             df_to_add=df_to_add,
             database=database,
             is_return_non_unique_primary_key=True,
