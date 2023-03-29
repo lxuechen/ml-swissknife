@@ -445,6 +445,9 @@ def prepare_to_add_to_db(
     database : str or engine
         The URL to the database to connect to, or the sqlalchemy engine.
 
+    table_name : str, optional
+        The name of the table in the database to check for existing rows.
+
     is_keep_all_columns_from_db : bool, optional
         Whether to return all columns in DB (or only the columns in the dataframe to add).
 
@@ -452,9 +455,6 @@ def prepare_to_add_to_db(
         Whether to return the rows you tried with primary keys that already exist in the database but have
         different values for non-primary keys. This will return a tuple of dataframes, the first being the
         dataframe to add, and the second being the rows that already exist in the database.
-
-    table_name : str, optional
-        The name of the table in the database to check for existing rows.
     """
     with create_engine(database) as engine:
         db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
@@ -497,7 +497,7 @@ def prepare_to_add_to_db(
             f"database but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
         )
 
-    df_try_added_pimary_key_duplicates = df_all[is_primary_key_duplicates]
+    df_try_added_primary_key_duplicates = df_all[is_primary_key_duplicates]
     df_all = df_all[
         ~is_primary_key_duplicates
     ]  # remove the rows whose primary keys already exist in the database
@@ -506,7 +506,7 @@ def prepare_to_add_to_db(
     df_delta = get_delta_df(df_all, df_db)
 
     if is_return_non_unique_primary_key:
-        return df_delta, df_try_added_pimary_key_duplicates
+        return df_delta, df_try_added_primary_key_duplicates
 
     return df_delta
 
