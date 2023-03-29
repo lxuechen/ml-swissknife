@@ -2,6 +2,28 @@
 All helper functions for database. This should work with sqlite / postgres / MySQL / etc.
 Note that if you want in memory database you can just use ":memory:" as the database name.
 """
+# MIT License
+#
+# Copyright (c) 2023 Yann Dubois
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 
 import logging
 import random
@@ -13,12 +35,80 @@ from typing import Optional
 import numpy as np
 import sqlalchemy as sa
 from typing import Union, Optional, Sequence, Tuple
+import os
 
 logging.basicConfig(level=logging.INFO)
 
+
+ENGINE_REGISTRY = {}
+INITIAL_PROCESS_ID = os.getpid()
+
+
+def get_engine(
+    database: Union[str, sa.engine.base.Engine],
+    is_use_cached_engine=True,
+    is_return_is_created_new_engine=False,
+    **engine_kwargs,
+) -> Union[sa.engine.base.Engine, Tuple[sa.engine.base.Engine, bool]]:
+    """Return the database engine to a database.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
+
+    is_use_cached_engine : bool, optional
+        Whether to use a cached engine if it exists.
+
+    is_return_is_created_new_engine : bool, optional
+        Whether to return a boolean indicating whether a new engine was created.
+
+    engine_kwargs :
+        Additional arguments to `create_engine`.
+    """
+    is_created_new_engine = False
+    if isinstance(database, sa.engine.base.Engine):
+        # if engine is already created, return it
+        engine = database
+    else:
+        if is_use_cached_engine and (os.getpid() != INITIAL_PROCESS_ID):
+            logging.warning(
+                "The current process is different from initial caching process. Maybe because you use multiprocessing"
+                " which is not recommended with engine caching. Setting is_use_cached_engine=False to be safe."
+            )
+            is_use_cached_engine = False
+
+        if database in ENGINE_REGISTRY and is_use_cached_engine:
+            engine = ENGINE_REGISTRY[database]
+
+        else:
+            try:
+                engine = sa.create_engine(database, **engine_kwargs)
+            except sa.exc.ArgumentError as e:
+                if Path(database).is_file():
+                    # converts path to sqlite url
+                    engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
+                else:
+                    raise e
+
+            logging.info(
+                f"Created engine for {database} which is a {engine.dialect.name} DB."
+            )
+            is_created_new_engine = True
+
+            if is_use_cached_engine:
+                ENGINE_REGISTRY[database] = engine
+
+    if is_return_is_created_new_engine:
+        return engine, is_created_new_engine
+    else:
+        return engine
+
 @contextmanager
 def create_engine(
-    database: Union[str, sa.engine.base.Engine], is_print: bool = True, **engine_kwargs
+    database: Union[str, sa.engine.base.Engine],
+    is_use_cached_engine=True,
+    **engine_kwargs,
 ) -> sa.engine.base.Engine:
     """Return the engine to a database.
 
@@ -28,31 +118,31 @@ def create_engine(
         The URL to the database to connect to, or the sqlalchemy engine, or the path if it's sqlite. If you want to use
         in memory database, you can use ":memory:".
 
-    is_print : bool, optional
-        Whether to print the database.
+    is_use_cached_engine : bool, optional
+        If True, will use the cached engine if it exists. If False, will create a new engine.
 
     **engine_kwargs :
         Additional arguments to pass to `sqlalchemy.create_engine`.
     """
-    is_new_engine = not isinstance(database, sa.engine.base.Engine)
-    if not is_new_engine:
-        yield database
-    else:
-        try:
-            engine = get_engine(database, **engine_kwargs)
-
-            if is_print:
-                logging.info(f"Connected to {database} which is a {engine.dialect.name} DB.")
-
-            yield engine
-        finally:
+    try:
+        engine, is_created_new_engine = get_engine(
+            database,
+            is_use_cached_engine=is_use_cached_engine,
+            is_return_is_created_new_engine=True,
+            **engine_kwargs,
+        )
+        yield engine
+    finally:
+        if is_created_new_engine:
             # only dispose if we created the engine
             engine.dispose()
 
 
 @contextmanager
 def create_connection(
-    database: Union[str, sa.engine.base.Engine], is_print: bool = True, **engine_kwargs
+    database: Union[str, sa.engine.base.Engine],
+    is_use_cached_engine=True,
+    **engine_kwargs,
 ) -> sa.engine.base.Connection:
     """Return the connection to a database.
 
@@ -62,13 +152,15 @@ def create_connection(
         The URL to the database to connect to, or the sqlalchemy engine, or the path if it's sqlite. If you want to use
         in memory database, you can use ":memory:".
 
-    is_print : bool, optional
-        Whether to print the database.
+    is_use_cached_engine : bool, optional
+        If True, will use the cached engine if it exists. If False, will create a new engine.
 
     **engine_kwargs :
         Additional arguments to pass to `sqlalchemy.create_engine`.
     """
-    with create_engine(database, is_print=is_print, **engine_kwargs) as engine:
+    with create_engine(
+        database, is_use_cached_engine=is_use_cached_engine, **engine_kwargs
+    ) as engine:
         try:
             connection = engine.connect()
             yield connection
@@ -118,7 +210,7 @@ def sql_to_df(
         # should be NaN and the column should be float. If you don't do that this can cause problems later on
 
         # parse sql to get the table name from which we read the query
-        all_table_and_views = get_all_tables(engine) + get_all_views(engine)
+        all_table_and_views = get_all_table_names(engine) + get_all_view_names(engine)
         all_tables_refered_in_sql = [t for t in sql.split() if t in all_table_and_views]
 
         if len(all_tables_refered_in_sql) == 1:
@@ -138,13 +230,17 @@ def sql_to_df(
             )
 
         if table_name_to_enforce_types is not None:
-            db_table = sa.Table(table_name_to_enforce_types, sa.MetaData(), autoload_with=engine)
-            enforce_type_cols_df_(df, db_table)
+            db_table = sa.Table(
+                table_name_to_enforce_types, sa.MetaData(), autoload_with=engine
+            )
+            _enforce_type_cols_df_(df, db_table)
 
     return df
 
 
-def delete_rows_from_db(database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame):
+def delete_rows_from_db(
+    database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame
+):
     """Delete rows from a table in a SQLite database based on the values of a dataframe.
 
     Parameters
@@ -211,7 +307,7 @@ def get_values_from_keys(
             result = connection.execute(select)
             out = pd.DataFrame(result.fetchall(), columns=result.keys())
 
-    enforce_type_cols_df_(out, db_table)
+    _enforce_type_cols_df_(out, db_table)
 
     return out
 
@@ -261,7 +357,7 @@ def append_df_to_db(
         )
         if len(df_to_add_primary_key_duplicates) > 0:
             # save the rows that have duplicated primary keys but not other columns
-            save_recovery(
+            _save_recovery(
                 df_to_add_primary_key_duplicates,
                 table_name,
                 index=index,
@@ -275,15 +371,19 @@ def append_df_to_db(
             if conn.engine.dialect.name == "postgres":
                 to_sql_kwargs["chunksize"] = 10000
                 to_sql_kwargs["method"] = "multi"
-            df_delta.to_sql(table_name, conn, if_exists="append", index=index, **to_sql_kwargs)
+            df_delta.to_sql(
+                table_name, conn, if_exists="append", index=index, **to_sql_kwargs
+            )
             logging.info(f"Added {len(df_delta)} rows to {table_name}")
 
     except Exception as e:
-        save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
+        _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
         raise e
 
 
-def get_primary_keys(database: Union[str, sa.engine.base.Engine], table_name: str) -> list[str]:
+def get_primary_keys(
+    database: Union[str, sa.engine.base.Engine], table_name: str
+) -> list[str]:
     """Get the primary keys of a table in a database.
 
     Parameters
@@ -300,7 +400,9 @@ def get_primary_keys(database: Union[str, sa.engine.base.Engine], table_name: st
 
 
 ### Secondary helpers ###
-def get_table_info(database: Union[str, sa.engine.base.Engine], table_name: str) -> pd.DataFrame:
+def get_table_info(
+    database: Union[str, sa.engine.base.Engine], table_name: str
+) -> pd.DataFrame:
     """Return a dataframe with the table information of table_name in a database."""
     with create_engine(database) as engine:
         table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
@@ -325,71 +427,6 @@ def get_table_info(database: Union[str, sa.engine.base.Engine], table_name: str)
         data["unique"].append(column.unique)
 
     return pd.DataFrame(data)
-
-
-ENGINE_REGISTRY = {}
-INITIAL_PROCESS_ID = os.getpid()
-def get_engine(database: Union[str, sa.engine.base.Engine], is_use_cached_engine=True, **engine_kwargs) -> sa.engine.base.Engine:
-    """Return the database engine to a database.
-
-    Parameters
-    ----------
-    database : str or engine
-        The URL to the database to connect to, or the sqlalchemy engine.
-    """
-    if isinstance(database, sa.engine.base.Engine):
-        # if engine is already created, return it
-        engine = database
-    else:
-        if is_use_cached_engine and (os.getpid() != INITIAL_PROCESS_ID):
-            logging.warning(
-                "The current process is different from initial caching process. Maybe because you use multiprocessing"
-                " which is not recommended with engine caching. Setting is_use_cached_engine=False to be safe."
-            )
-            is_use_cached_engine = False
-
-        if database in ENGINE_REGISTRY and is_use_cached_engine:
-            engine = ENGINE_REGISTRY[database]
-
-        else:
-            try:
-                engine = sa.create_engine(database, **engine_kwargs)
-            except sa.exc.ArgumentError as e:
-                if Path(database).is_file():
-                    # converts path to sqlite url
-                    engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
-                else:
-                    raise e
-
-            ENGINE_REGISTRY[database] = engine
-
-
-    return engine
-
-
-def enforce_type_cols_df_(df: pd.DataFrame, db_table: sa.Table):
-    """Inplace enforce the types of the columns in the dataframe to be the same as the types in the database."""
-    for col in df.columns:
-        if col in db_table.columns:
-            try:
-                sql_type = db_table.columns[col].type
-
-                if isinstance(sql_type, sa.types.NullType):
-                    # if column has to type we can't enforce it. This happens when some columns were added manually
-                    continue
-
-                elif sql_type.python_type == int:
-                    df[col] = df[col].apply(pd.to_numeric, errors="coerce")
-
-                else:
-                    df[col] = df[col].astype(db_table.columns[col].type.python_type)
-
-            except Exception as e:
-                # this should not happen, but worse case scenario we just don't enforce the type
-                logging.warning(
-                    f"Could not enforce type of column {col} in dataframe to be the same as in the database. Error: {e}"
-                )
-
 
 def prepare_to_add_to_db(
     df_to_add: pd.DataFrame,
@@ -424,14 +461,16 @@ def prepare_to_add_to_db(
         primary_keys = get_primary_keys(engine, table_name)
 
         # select all rows from the database that have the same primary keys as the rows to add
-        sql_where = get_sql_where_from_df(engine, table=db_table, df=df_to_add[primary_keys])
+        sql_where = get_sql_where_from_df(
+            engine, table=db_table, df=df_to_add[primary_keys]
+        )
         select = db_table.select().where(sql_where)
 
         with create_connection(engine) as conn:
             result = conn.execute(select)
             df_db = pd.DataFrame(result.fetchall(), columns=result.keys())
 
-    enforce_type_cols_df_(df_db, db_table)
+    _enforce_type_cols_df_(df_db, db_table)
 
     columns = [c for c in df_db.columns if c in df_to_add.columns]
 
@@ -446,16 +485,22 @@ def prepare_to_add_to_db(
         n_duplicates = is_primary_key_duplicates.sum()
 
         # for logging also shows the rows in the db
-        is_primary_key_duplicates_all = df_all.duplicated(subset=primary_keys, keep=False)
+        is_primary_key_duplicates_all = df_all.duplicated(
+            subset=primary_keys, keep=False
+        )
         grouped = df_all[is_primary_key_duplicates_all].groupby(primary_keys)
-        example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(list(grouped.groups.keys())[0])
+        example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(
+            list(grouped.groups.keys())[0]
+        )
         logging.warning(
             f"Trying to add {n_duplicates} rows with primary keys {primary_keys} that already exist in the "
             f"database but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
         )
 
     df_try_added_pimary_key_duplicates = df_all[is_primary_key_duplicates]
-    df_all = df_all[~is_primary_key_duplicates]  # remove the rows whose primary keys already exist in the database
+    df_all = df_all[
+        ~is_primary_key_duplicates
+    ]  # remove the rows whose primary keys already exist in the database
 
     # Remove rows that are already in the database
     df_delta = get_delta_df(df_all, df_db)
@@ -469,7 +514,9 @@ def prepare_to_add_to_db(
 def get_delta_df(df_all: pd.DataFrame, df_subset: pd.DataFrame) -> pd.DataFrame:
     """return the complement of df_subset"""
     columns = list(df_all.columns)
-    df_ind = df_all.merge(df_subset.drop_duplicates(), on=columns, how="left", indicator=True)
+    df_ind = df_all.merge(
+        df_subset.drop_duplicates(), on=columns, how="left", indicator=True
+    )
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
@@ -496,7 +543,6 @@ def get_sql_where_from_df(
         Whether to return the string of the SQL statement or the sqlalchemy select statement.
     """
     with create_engine(database) as engine:
-
         # Reflect the table
         if isinstance(table, str):
             db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
@@ -504,29 +550,17 @@ def get_sql_where_from_df(
             db_table = table
 
         # Create a SELECT statement using and_ and or_
-        conditions = [sa.and_(*[db_table.c[key] == value for key, value in row.items()]) for _, row in df.iterrows()]
+        conditions = [
+            sa.and_(*[db_table.c[key] == value for key, value in row.items()])
+            for _, row in df.iterrows()
+        ]
         where_clause = sa.or_(*conditions)
 
         if is_str:
-            return str(where_clause.compile(engine, compile_kwargs={"literal_binds": True}))
+            return str(
+                where_clause.compile(engine, compile_kwargs={"literal_binds": True})
+            )
         return where_clause
-
-
-def save_recovery(df_delta: pd.DataFrame, table_name: str, index: bool = False, recovery_path: PathOrIOBase = "."):
-    """Save the rows that failed to be added to the database"""
-
-    # saves the error rows to a csv file to avoid losing the data
-    random_idx = random.randint(10**5, 10**6)
-    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
-
-    # save json as a list of dict if you don't want to keep index, else dict of dict
-    orient = "index" if index else "records"
-    df_delta.to_json(recovery_all_path, orient=orient, indent=2)
-    logging.error(
-        f"Failed to add {len(df_delta)} rows to {table_name}."
-        f"Dumping all the df that you couldn't save to {recovery_all_path}"
-    )
-
 
 def execute_sql(
     database: Union[str, sa.engine.base.Engine],
@@ -543,15 +577,62 @@ def execute_sql(
         conn.commit()
 
 
-def get_all_tables(database: Union[str, sa.engine.base.Engine]) -> list[str]:
+def get_all_table_names(database: Union[str, sa.engine.base.Engine]) -> list[str]:
     """Get all the tables in a database"""
     with create_engine(database) as engine:
         inspector = sa.inspect(engine)
         return inspector.get_table_names()
 
 
-def get_all_views(database: Union[str, sa.engine.base.Engine]) -> list[str]:
+def get_all_view_names(database: Union[str, sa.engine.base.Engine]) -> list[str]:
     """Get all the views in a database"""
     with create_engine(database) as engine:
         inspector = sa.inspect(engine)
         return inspector.get_view_names()
+
+
+### private, not meant to be used
+def _enforce_type_cols_df_(df: pd.DataFrame, db_table: sa.Table):
+    """Inplace enforce the types of the columns in the dataframe to be the same as the types in the database."""
+    for col in df.columns:
+        if col in db_table.columns:
+            try:
+                sql_type = db_table.columns[col].type
+
+                if isinstance(sql_type, sa.types.NullType):
+                    # if column has to type we can't enforce it. This happens when some columns were added manually
+                    continue
+
+                elif sql_type.python_type == int:
+                    df[col] = df[col].apply(pd.to_numeric, errors="coerce")
+
+                else:
+                    df[col] = df[col].astype(db_table.columns[col].type.python_type)
+
+            except Exception as e:
+                # this should not happen, but worse case scenario we just don't enforce the type
+                logging.warning(
+                    f"Could not enforce type of column {col} in dataframe to be the same as in the database. Error: {e}"
+                )
+
+def _save_recovery(
+    df_delta: pd.DataFrame,
+    table_name: str,
+    index: bool = False,
+    recovery_path: PathOrIOBase = ".",
+):
+    """Save the rows that failed to be added to the database"""
+
+    # saves the error rows to a csv file to avoid losing the data
+    random_idx = random.randint(10**5, 10**6)
+    recovery_all_path = (
+        Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+    )
+
+    # save json as a list of dict if you don't want to keep index, else dict of dict
+    orient = "index" if index else "records"
+    df_delta.to_json(recovery_all_path, orient=orient, indent=2)
+    logging.error(
+        f"Failed to add {len(df_delta)} rows to {table_name}."
+        f"Dumping all the df that you couldn't save to {recovery_all_path}"
+    )
