@@ -327,7 +327,9 @@ def get_table_info(database: Union[str, sa.engine.base.Engine], table_name: str)
     return pd.DataFrame(data)
 
 
-def get_engine(database: Union[str, sa.engine.base.Engine], **engine_kwargs) -> sa.engine.base.Engine:
+ENGINE_REGISTRY = {}
+INITIAL_PROCESS_ID = os.getpid()
+def get_engine(database: Union[str, sa.engine.base.Engine], is_use_cached_engine=True, **engine_kwargs) -> sa.engine.base.Engine:
     """Return the database engine to a database.
 
     Parameters
@@ -336,16 +338,31 @@ def get_engine(database: Union[str, sa.engine.base.Engine], **engine_kwargs) -> 
         The URL to the database to connect to, or the sqlalchemy engine.
     """
     if isinstance(database, sa.engine.base.Engine):
+        # if engine is already created, return it
         engine = database
     else:
-        try:
-            engine = sa.create_engine(database, **engine_kwargs)
-        except sa.exc.ArgumentError as e:
-            if Path(database).is_file():
-                # converts path to sqlite url
-                engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
-            else:
-                raise e
+        if is_use_cached_engine and (os.getpid() != INITIAL_PROCESS_ID):
+            logging.warning(
+                "The current process is different from initial caching process. Maybe because you use multiprocessing"
+                " which is not recommended with engine caching. Setting is_use_cached_engine=False to be safe."
+            )
+            is_use_cached_engine = False
+
+        if database in ENGINE_REGISTRY and is_use_cached_engine:
+            engine = ENGINE_REGISTRY[database]
+
+        else:
+            try:
+                engine = sa.create_engine(database, **engine_kwargs)
+            except sa.exc.ArgumentError as e:
+                if Path(database).is_file():
+                    # converts path to sqlite url
+                    engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
+                else:
+                    raise e
+
+            ENGINE_REGISTRY[database] = engine
+
 
     return engine
 
