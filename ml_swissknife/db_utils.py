@@ -488,8 +488,7 @@ def save_recovery(df_delta: pd.DataFrame, table_name: str, index: bool = False, 
 def execute_sql(database: Union[str, sa.engine.base.Engine], sql: str):
     """Execute a sql command on a database"""
     with create_connection(database) as conn:
-        c = conn.cursor()
-        c.executescript(sql)
+        conn.execute(sql)
         conn.commit()
 
 
