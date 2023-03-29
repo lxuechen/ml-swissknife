@@ -489,6 +489,9 @@ def execute_sql(
     execution_options=None,
 ):
     """Execute a sql command on a database"""
+    if isinstance(sql, str):
+        sql = sa.text(sql)
+
     with create_connection(database) as conn:
         conn.execute(sql, parameters=parameters, execution_options=execution_options)
         conn.commit()
