@@ -302,23 +302,6 @@ def get_values_from_keys(
     with create_engine(database) as engine:
         db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
 
-        # sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
-        # select = sa.select(db_table).where(sql_where)
-        #
-        # with create_connection(engine) as connection:
-        #     result = connection.execution_options(stream_results=True).execute(select)
-        #     #out = pd.DataFrame(result.fetchall(), columns=result.keys())
-        #     # let's try to do it in chunks
-        #     rows = []
-        #     while True:
-        #         logging.info(f"Fetching {chunksize} rows")
-        #         chunk = result.fetchmany(chunksize)
-        #         if not chunk:
-        #             break
-        #         rows.extend(chunk)
-        #
-        #     out = pd.DataFrame(rows, columns=result.keys())
-
         outs = []
         len_df = max(1, len(df))  # to deal with empty df
 
