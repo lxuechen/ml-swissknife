@@ -370,10 +370,10 @@ def append_df_to_db(
         Additional arguments to `to_sql_kwargs`.
     """
     if commit_every_n_rows is None:
-        commit_every_n_rows = len(df_to_add)
+        commit_every_n_rows = max(1, len(df_to_add))
         iterator = range(0, len(df_to_add), commit_every_n_rows)
     else:
-        iterator = tqdm.tqdm(range(0, len(df_to_add), commit_every_n_rows))
+        iterator = tqdm.tqdm(range(0, max(1, len(df_to_add)), commit_every_n_rows))
 
     rows_added = 0
 
