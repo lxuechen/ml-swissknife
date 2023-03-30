@@ -105,6 +105,7 @@ def get_engine(
     else:
         return engine
 
+
 @contextmanager
 def create_engine(
     database: Union[str, sa.engine.base.Engine],
@@ -194,14 +195,8 @@ def sql_to_df(
     2     2      I...   chen         2           NaN                     NaN                     NaN                     NaN                    None            None              NaN
     """
     with create_engine(database) as engine:
-        if engine.dialect.name == "postgresql":
-            # `chunksize` divides the DataFrame into smaller chunks and then insert each chunk separately. This can help
-            # reduce the memory usage and improve the performance when inserting a large number of rows into the
-            # database.
-            read_sql_kwargs["chunksize"] = 10000
-
-        with create_connection(engine) as conn:
-            df = pd.read_sql(sql=sql, con=conn, **read_sql_kwargs)
+        # could make faster using fetchmany
+        df = pd.read_sql(sql=sql, con=engine, **read_sql_kwargs)
 
         # in the following we enforce the types of the columns in the dataframe to be the same as the types in the
         # database this is useful for example if a column is float but the rows you read are all None. In this case, the
@@ -270,8 +265,12 @@ def delete_rows_from_db(
 
         execute_sql(database=engine, sql=delete)
 
+
 def get_values_from_keys(
-    database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame, chunksize: int = 10000
+    database: Union[str, sa.engine.base.Engine],
+    table_name: str,
+    df: pd.DataFrame,
+    chunksize: int = 10000,
 ) -> pd.DataFrame:
     """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows
 
@@ -301,19 +300,26 @@ def get_values_from_keys(
     with create_engine(database) as engine:
         db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
 
-        outs = []
-        len_df = max(1, len(df))  # to deal with empty df
+        sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
+        select = sa.select(db_table).where(sql_where)
 
-        for i in range(0, len_df, chunksize):
-            sql_where = get_sql_where_from_df(engine, table=db_table, df=df.iloc[i:i + chunksize])
-            select = sa.select(db_table).where(sql_where)
+        with create_connection(engine) as connection:
+            if engine.dialect.name == "sqlite":
+                # sqlite does not support stream_results
+                out = pd.read_sql(sql=select, con=connection)
+            else:
+                # ~2x faster than pd.read_sql
+                result = connection.execution_options(stream_results=True).execute(
+                    select
+                )
+                rows = []
+                while True:
+                    chunk = result.fetchmany(chunksize)
+                    if not chunk:
+                        break
+                    rows.extend(chunk)
 
-            with create_connection(engine) as connection:
-                result = connection.execute(select)
-                curr_df = pd.DataFrame(result.fetchall(), columns=result.keys())
-                outs.append(curr_df)
-
-        out = pd.concat(outs)
+                out = pd.DataFrame(rows, columns=result.keys())
 
     _enforce_type_cols_df_(out, db_table)
 
@@ -328,8 +334,8 @@ def append_df_to_db(
     recovery_path: PathOrIOBase = ".",
     is_prepare_to_add_to_db: bool = True,
     commit_every_n_rows: Optional[int] = None,
-    is_skip_writing_errors: bool =True,
-    **to_sql_kwargs
+    is_skip_writing_errors: bool = False,
+    **to_sql_kwargs,
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
@@ -374,7 +380,7 @@ def append_df_to_db(
     rows_added = 0
 
     for i in iterator:
-        curr_df = df_to_add.iloc[i:i + commit_every_n_rows]
+        curr_df = df_to_add.iloc[i : i + commit_every_n_rows].copy()
 
         if is_prepare_to_add_to_db:
             # this removes exact duplicates and columns not in the database
@@ -393,7 +399,7 @@ def append_df_to_db(
                     recovery_path=recovery_path,
                 )
         else:
-            df_delta = df_to_add
+            df_delta = curr_df
 
         try:
             with create_connection(database) as conn:
@@ -406,7 +412,9 @@ def append_df_to_db(
                 rows_added += len(df_delta)
 
         except Exception as e:
-            _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
+            _save_recovery(
+                df_delta, table_name, index=index, recovery_path=recovery_path, error=e
+            )
             if not is_skip_writing_errors:
                 raise e
 
@@ -460,6 +468,7 @@ def get_table_info(
 
     return pd.DataFrame(data)
 
+
 def prepare_to_add_to_db(
     df_to_add: pd.DataFrame,
     database: Union[str, sa.engine.base.Engine],
@@ -488,9 +497,12 @@ def prepare_to_add_to_db(
         different values for non-primary keys. This will return a tuple of dataframes, the first being the
         dataframe to add, and the second being the rows that already exist in the database.
     """
+
     with create_engine(database) as engine:
         primary_keys = get_primary_keys(engine, table_name)
-        df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_to_add[primary_keys])
+        df_db = get_values_from_keys(
+            database=engine, table_name=table_name, df=df_to_add[primary_keys]
+        )
 
     columns = [c for c in df_db.columns if c in df_to_add.columns]
 
@@ -582,6 +594,7 @@ def get_sql_where_from_df(
             )
         return where_clause
 
+
 def execute_sql(
     database: Union[str, sa.engine.base.Engine],
     sql: Union[str, sa.sql.expression.Executable],
@@ -635,12 +648,13 @@ def _enforce_type_cols_df_(df: pd.DataFrame, db_table: sa.Table):
                     f"Could not enforce type of column {col} in dataframe to be the same as in the database. Error: {e}"
                 )
 
+
 def _save_recovery(
     df_delta: pd.DataFrame,
     table_name: str,
     index: bool = False,
     recovery_path: PathOrIOBase = ".",
-    error = None
+    error=None,
 ):
     """Save the rows that failed to be added to the database"""
 
