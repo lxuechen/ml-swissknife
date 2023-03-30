@@ -46,7 +46,7 @@ setuptools.setup(
         "seaborn",
         "imageio",
         "wandb",
-        "openai",
+        "openai>=0.27.2",
     ],
     extras_require=extras_require,
     python_requires="~=3.7",
