@@ -334,7 +334,10 @@ def get_values_from_keys(
 
                 outs.append(curr_out)
 
-            out = pd.concat(outs, ignore_index=True)
+            if len(outs) == 0:
+                out = pd.DataFrame(columns=db_table.columns.keys())
+            else:
+                out = pd.concat(outs, ignore_index=True)
 
     _enforce_type_cols_df_(out, db_table)
 
@@ -512,9 +515,13 @@ def prepare_to_add_to_db(
         except KeyError as e:
             logging.warning(
                 f"Could not find primary key in dataframe to add => assumes you want to filter on"
-                f" all columns {df_to_add.columns}. Error message: {e}."
+                f" all columns {df_to_add.columns}. Given that not primary key, we deactive"
+                " checking of non-unique secondary key for unique primary by settting is_keep_all_columns_from_db=False"
             )
             df_keys = df_to_add
+            primary_keys = df_to_add.columns
+            # by removing other keys we ensure that check is only on the given keys
+            is_keep_all_columns_from_db = False
 
         df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_keys)
 
