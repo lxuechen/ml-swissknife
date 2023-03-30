@@ -408,7 +408,7 @@ def append_df_to_db(
                 rows_added += len(df_delta)
 
         except Exception as e:
-            _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
+            _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
             if not is_skip_writing_errors:
                 raise e
 
@@ -642,6 +642,7 @@ def _save_recovery(
     table_name: str,
     index: bool = False,
     recovery_path: PathOrIOBase = ".",
+    error = None
 ):
     """Save the rows that failed to be added to the database"""
 
@@ -658,3 +659,5 @@ def _save_recovery(
         f"Failed to add {len(df_delta)} rows to {table_name}."
         f"Dumping all the df that you couldn't save to {recovery_all_path}"
     )
+    if error is not None:
+        logging.error(f"Error: {error}")
