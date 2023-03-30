@@ -1,3 +1,7 @@
+"""
+All helper functions for database. This should work with sqlite / postgres / MySQL / etc.
+Note that if you want in memory database you can just use ":memory:" as the database name.
+"""
 # MIT License
 #
 # Copyright (c) 2023 Yann Dubois
@@ -20,212 +24,336 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+
 import logging
 import random
-import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 import pandas as pd
+import tqdm
 from ml_swissknife.types import PathOrIOBase
 from typing import Optional
 import numpy as np
-
-try:
-    import sqlalchemy as sa
-except ImportError:
-    # we only use SQLalchemy for deleting and updating rows (not adding)
-    pass
+import sqlalchemy as sa
+from typing import Union, Optional, Sequence, Tuple
+import os
 
 logging.basicConfig(level=logging.INFO)
 
 
-def delete_rows_from_db(database, table_name, columns_to_select_on, df):
-    """Delete rows from a table in a SQLite database based on the values of a dataframe."""
-    engine = sa.create_engine(f"sqlite:///{database}")
-    table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
-
-    # Build the WHERE clause of your DELETE statement from rows in the dataframe.
-    # Equivalence in SQL:
-    #   WHERE (Year = <Year from row 1 of df> AND Month = <Month from row 1 of df>)
-    #      OR (Year = <Year from row 2 of df> AND Month = <Month from row 2 of df>)
-    #      ...
-    cond = df.apply(
-        lambda row: sa.and_(*[table.c[k] == row[k] for k in columns_to_select_on]),
-        axis=1,
-    )
-    cond = sa.or_(*cond)
-
-    # Define and execute the DELETE
-    delete = table.delete().where(cond)
-    with engine.connect() as conn:
-        conn.execute(delete)
-        conn.commit()
+ENGINE_REGISTRY = {}
+INITIAL_PROCESS_ID = os.getpid()
 
 
-def prepare_to_add_to_db_sql(
-    df_to_add: pd.DataFrame,
-    database: PathOrIOBase,
-    sql_already_annotated: str,
-    is_keep_all_columns_from_db: bool = True,
-    is_check_unique_primary_key: bool = False,
-    table_name: Optional[str] = None,
-) -> pd.DataFrame:
-    """Prepare a dataframe to be added to a table in a SQLite database by removing rows already in the database.
+def get_engine(
+    database: Union[str, sa.engine.base.Engine],
+    is_use_cached_engine=True,
+    is_return_is_created_new_engine=False,
+    **engine_kwargs,
+) -> Union[sa.engine.base.Engine, Tuple[sa.engine.base.Engine, bool]]:
+    """Return the database engine to a database.
 
     Parameters
     ----------
-    df_to_add : pd.DataFrame
-        The dataframe to add to the database.
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
 
-    database : PathOrIOBase
-        The database to add to.
+    is_use_cached_engine : bool, optional
+        Whether to use a cached engine if it exists.
 
-    sql_already_annotated : str
-        The SQL query to get the dataframe already in the database.
+    is_return_is_created_new_engine : bool, optional
+        Whether to return a boolean indicating whether a new engine was created.
 
-    is_keep_all_columns_from_db : bool, optional
-        Whether to return all columns in DB (or only the columns in the dataframe to add).
-
-    is_check_unique_primary_key : bool, optional
-        Raise an error if you are trying to add rows with primary keys that already exist in the database but have
-        different values for non-primary keys. If True needs `table_name`
-
-    table_name : str, optional
-        The name of the table in the database. Only needed if `is_check_unique_primary_key` is True.
+    engine_kwargs :
+        Additional arguments to `create_engine`.
     """
-    df_db = sql_to_df(
-        database=database,
-        sql=sql_already_annotated,
-    )
-    columns = [c for c in df_db.columns if c in df_to_add.columns]
+    is_created_new_engine = False
+    if isinstance(database, sa.engine.base.Engine):
+        # if engine is already created, return it
+        engine = database
+    else:
+        if is_use_cached_engine and (os.getpid() != INITIAL_PROCESS_ID):
+            logging.warning(
+                "The current process is different from initial caching process. Maybe because you use multiprocessing"
+                " which is not recommended with engine caching. Setting is_use_cached_engine=False to be safe."
+            )
+            is_use_cached_engine = False
 
-    if not is_keep_all_columns_from_db:
-        df_db = df_db[columns]
+        if database in ENGINE_REGISTRY and is_use_cached_engine:
+            engine = ENGINE_REGISTRY[database]
 
-    df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+        else:
+            try:
+                engine = sa.create_engine(database, **engine_kwargs)
+            except sa.exc.ArgumentError as e:
+                if Path(database).is_file():
+                    # converts path to sqlite url
+                    engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
+                else:
+                    raise e
 
-    if is_check_unique_primary_key:
-        assert table_name is not None
-        primary_keys = (
-            sql_to_df(database=database, sql=f"PRAGMA table_info('{table_name}')").query("pk > 0").name.to_list()
+            logging.info(f"Created engine for {database} which is a {engine.dialect.name} DB.")
+            is_created_new_engine = True
+
+            if is_use_cached_engine:
+                ENGINE_REGISTRY[database] = engine
+
+    if is_return_is_created_new_engine:
+        return engine, is_created_new_engine
+    else:
+        return engine
+
+
+@contextmanager
+def create_engine(
+    database: Union[str, sa.engine.base.Engine],
+    is_use_cached_engine=True,
+    **engine_kwargs,
+) -> sa.engine.base.Engine:
+    """Return the engine to a database.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine, or the path if it's sqlite. If you want to use
+        in memory database, you can use ":memory:".
+
+    is_use_cached_engine : bool, optional
+        If True, will use the cached engine if it exists. If False, will create a new engine.
+
+    **engine_kwargs :
+        Additional arguments to pass to `sqlalchemy.create_engine`.
+    """
+    try:
+        engine, is_created_new_engine = get_engine(
+            database,
+            is_use_cached_engine=is_use_cached_engine,
+            is_return_is_created_new_engine=True,
+            **engine_kwargs,
         )
-        assert len(primary_keys) > 0, f"Table {table_name} has no primary key"
+        yield engine
+    finally:
+        if is_created_new_engine:
+            # only dispose if we created the engine
+            engine.dispose()
 
-        # you previously removed exact duplicates => if there are duplicates based on primary keys it means that there
-        # are rows that you are trying to add which have the same primary key as a row already in the database but
-        # different non-primary keys => raise an error
-        is_primary_key_duplicates = df_all.duplicated(subset=primary_keys)
-        if is_primary_key_duplicates.any():
-            n_duplicates = is_primary_key_duplicates.sum()
-            grouped = df_all[is_primary_key_duplicates].groupby(primary_keys)
-            example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(list(grouped.groups.keys())[0])
-            raise ValueError(
-                f"Trying to add {n_duplicates} rows with primary keys {primary_keys} that already exist in the database "
-                f"but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
+
+@contextmanager
+def create_connection(
+    database: Union[str, sa.engine.base.Engine],
+    is_use_cached_engine=True,
+    **engine_kwargs,
+) -> sa.engine.base.Connection:
+    """Return the connection to a database.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine, or the path if it's sqlite. If you want to use
+        in memory database, you can use ":memory:".
+
+    is_use_cached_engine : bool, optional
+        If True, will use the cached engine if it exists. If False, will create a new engine.
+
+    **engine_kwargs :
+        Additional arguments to pass to `sqlalchemy.create_engine`.
+    """
+    with create_engine(database, is_use_cached_engine=is_use_cached_engine, **engine_kwargs) as engine:
+        connection = None
+        try:
+            connection = engine.connect()
+            yield connection
+        finally:
+            if connection is not None:
+                connection.close()
+
+
+def sql_to_df(
+    database: Union[str, sa.engine.base.Engine],
+    sql: str,
+    **read_sql_kwargs,
+) -> pd.DataFrame:
+    """Read a SQL query into a Pandas dataframe.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
+
+    sql : str
+        The SQL query to execute.
+
+    Examples
+    --------
+    >>> df = sql_to_df(sql="SELECT * FROM likert_annotations LIMIT 3",  database="instruction_following.sqlite")
+    >>> print(df.to_string(max_colwidth=5))
+       input_id output annotator  likert_score  likert_score_1_logprob  likert_score_2_logprob  likert_score_3_logprob  likert_score_4_logprob auto_raw_inputs auto_raw_outputs  auto_total_tokens
+    0     2      I...   t...         4           NaN                     NaN                     NaN                     NaN                    None            None              NaN
+    1     2      I...   t...         4           NaN                     NaN                     NaN                     NaN                    None            None              NaN
+    2     2      I...   chen         2           NaN                     NaN                     NaN                     NaN                    None            None              NaN
+    """
+    with create_engine(database) as engine:
+        # could make faster using fetchmany
+        df = pd.read_sql(sql=sql, con=engine, **read_sql_kwargs)
+
+        # in the following we enforce the types of the columns in the dataframe to be the same as the types in the
+        # database this is useful for example if a column is float but the rows you read are all None. In this case, the
+        # dataframe will by default be of type Object and not float (because it sees all None). In reality those None
+        # should be NaN and the column should be float. If you don't do that this can cause problems later on
+
+        # parse sql to get the table name from which we read the query
+        all_table_and_views = get_all_table_names(engine) + get_all_view_names(engine)
+        all_tables_refered_in_sql = [t for t in sql.split() if t in all_table_and_views]
+
+        if len(all_tables_refered_in_sql) == 1:
+            table_name_to_enforce_types = all_tables_refered_in_sql[0]
+
+        elif len(all_tables_refered_in_sql) > 1:
+            table_name_to_enforce_types = all_tables_refered_in_sql[0]
+            logging.warning(
+                f"There are multiple tables you referred to, we think {table_name_to_enforce_types} "
+                f"is the right one for enforcing column types in dataframe."
             )
 
-    # remove columns that are already in DB
-    df_delta = get_delta_df(df_all, df_db)
-    return df_delta
+        else:
+            table_name_to_enforce_types = None
+            logging.warning(
+                f"There are no tables you referred to in your SQL query, we cannot enforce column types in dataframe."
+            )
 
-
-# depreciate once merged
-def prepare_to_add_to_db(df_to_add, database, table_name, is_subset_columns=False) -> pd.DataFrame:
-    """Prepare a dataframe to be added to a table in a SQLite database. by removing rows already in the database.
-    and columns not in the database."""
-    df_db = sql_to_df(sql=f"SELECT * FROM {table_name}", database=database)
-    columns = [c for c in df_db.columns if c in df_to_add.columns]
-    if is_subset_columns:
-        df_db = df_db[columns]
-    df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
-    df_delta = get_delta_df(df_all, df_db)
-    return df_delta
-
-
-def get_delta_df(df_all, df_subset) -> pd.DataFrame:
-    """return the complement of df_subset"""
-    columns = list(df_all.columns)
-    df_ind = df_all.merge(df_subset.drop_duplicates(), on=columns, how="left", indicator=True)
-    return df_ind.query("_merge == 'left_only' ")[columns]
-
-
-def sql_to_df(database, sql, table=None, is_enforce_numeric=False, **kwargs) -> pd.DataFrame:
-    """
-    Return a dataframe from a SQL query.
-    If `is_enforce_numeric` will ensure that the dataframe's columns are numeric when the table columns are also.
-    """
-    with create_connection(database) as conn:
-        df = pd.read_sql(sql, conn, **kwargs)
-
-        if is_enforce_numeric:
-            assert table is not None, "If `is_type_enforce` is True, `table` must be specified."
-            table_info = pd.read_sql(sql=f"PRAGMA table_info({table})", con=conn)
-
-    if is_enforce_numeric:
-        cols_to_numeric = [r["name"] for _, r in table_info.iterrows() if r["type"] in ["INTEGER", "FLOAT"]]
-        for c in cols_to_numeric:
-            if c in df.columns:
-                df[c] = df[c].apply(pd.to_numeric, errors="coerce")
+        if table_name_to_enforce_types is not None:
+            db_table = sa.Table(table_name_to_enforce_types, sa.MetaData(), autoload_with=engine)
+            _enforce_type_cols_df_(df, db_table)
 
     return df
 
 
-def get_values_from_keys(database, table, df, is_rm_duplicates=False):
-    """Given a dataframe containing the primary keys of a table, will return the corresponding rows"""
-    keys = ", ".join(df.columns)
-    list_of_tuples = list(zip(*[df[c] for c in df.columns]))
+def delete_rows_from_db(database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame):
+    """Delete rows from a table in a SQLite database based on the values of a dataframe.
 
-    list_of_placeholders = [tuple("?" for _ in range(len(df.columns)))] * len(list_of_tuples)
-    placeholders = str(list_of_placeholders)[1:-1].replace("'?'", "?")
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
 
-    flattened_values = [item for sublist in list_of_tuples for item in sublist]
+    table_name : str
+        The name of the table to delete rows from.
 
-    try:
-        # this is much faster an memory efficient but sometimes has some formatting issues
-        # Example sql query is built as follows:
-        #   SELECT * FROM likert_annotations WHERE (input_id, output) IN (VALUES (?, ?), (?, ?), (?, ?))
-        out = sql_to_df(
-            database=database,
-            sql=f"""SELECT * FROM {table} WHERE ({keys}) IN (VALUES {placeholders})""",
-            params=flattened_values,
-        )
-    except:
-        # this reads everything in memory which is less efficient but more robust
-        out = sql_to_df(
-            database=database,
-            sql=f"SELECT * FROM {table}",
-        )
+    df : pd.DataFrame
+        The dataframe containing the rows to delete.
 
-    if not is_rm_duplicates:
-        out = df.merge(out, on=list(df.columns), how="left")
+    Examples
+    --------
+    >>> df = sql_to_df(sql="SELECT * FROM likert_annotations LIMIT 3", database=database)
+    >>> len(df)
+    3
+    >>> delete_rows_from_db(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations")
+    >>> len(get_values_from_keys(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations"))
+    0
+    """
+    with create_engine(database) as engine:
+        db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+
+        sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
+        delete = db_table.delete().where(sql_where)
+
+        execute_sql(database=engine, sql=delete)
+
+
+def get_values_from_keys(
+    database: Union[str, sa.engine.base.Engine],
+    table_name: str,
+    df: pd.DataFrame,
+    chunksize: int = 10000,
+    max_rows_in_memory: int = int(1e7),
+) -> pd.DataFrame:
+    """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
+
+    table_name : str
+        The name of the table to get the rows from.
+
+    df : pd.DataFrame
+        The dataframe containing the keys to select from. Every column treated as a key. We remove duplicates.
+
+    chunksize : int, optional
+        The number of rows to select at a time. This is useful if you have a large number of rows to select.
+        E.g. it seems sql aclehmy doesn't work well with huge queries at once.
+
+    max_rows_in_memory : int, optional
+        Maximum size of table in DB that you allow yourself to load in memory. If the table is larger than this, it will
+        have to use chunking and querying on the server.
+
+    Examples
+    --------
+    >>> df = sql_to_df(sql="SELECT * FROM likert_annotations LIMIT 3", database=database)
+    >>> len(df)
+    3
+    >>> delete_rows_from_db(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations")
+    >>> len(get_values_from_keys(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations"))
+    0
+    """
+    df = df.drop_duplicates()
+
+    with create_engine(database) as engine:
+        db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+        n_db_rows = count_rows(engine, table_name)
+
+        if n_db_rows == 0:
+            # avoid creating large query if empty
+            out = pd.DataFrame(columns=db_table.columns.keys())
+
+        elif len(df) > chunksize and n_db_rows < max_rows_in_memory:
+            df_db = sql_to_df(engine, f"SELECT * FROM {table_name}")
+            out = df.merge(df_db, on=list(df.columns), how="inner")
+
+        else:
+            # TODO given that you used that twice you sould have a context managfer for that
+            # then you can also copy curr_df only if needed
+            if chunksize is None:
+                chunksize = max(1, len(df))
+
+            if chunksize >= len(df):
+                iterator = range(0, len(df), chunksize)
+            else:
+                iterator = tqdm.tqdm(range(0, max(1, len(df)), chunksize))
+
+            outs = []
+            for i in iterator:
+                curr_df = df.iloc[i : i + chunksize].copy()
+
+                sql_where = get_sql_where_from_df(engine, table=db_table, df=curr_df)
+                select = sa.select(db_table).where(sql_where)
+
+                with create_connection(engine) as connection:
+                    curr_out = pd.read_sql(sql=select, con=connection)
+
+                outs.append(curr_out)
+
+            if len(outs) == 0:
+                out = pd.DataFrame(columns=db_table.columns.keys())
+            else:
+                out = pd.concat(outs, ignore_index=True)
+
+    _enforce_type_cols_df_(out, db_table)
 
     return out
 
 
-def save_recovery(df_delta, table_name, index=False, recovery_path="."):
-    """Save the rows that failed to be added to the database"""
-
-    # saves the error rows to a csv file to avoid losing the data
-    random_idx = random.randint(10**5, 10**6)
-    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
-
-    # save json as a list of dict if you don't want to keep index, else dict of dict
-    orient = "index" if index else "records"
-    df_delta.to_json(recovery_all_path, orient=orient, indent=2)
-    logging.error(
-        f"Failed to add {len(df_delta)} rows to {table_name}."
-        f"Dumping all the df that you couldn't save to {recovery_all_path}"
-    )
-
-
 def append_df_to_db(
-    df_to_add,
-    database,
-    table_name,
-    index=False,
-    recovery_path=".",
-    is_prepare_to_add_to_db=True,
-    is_avoid_infinity=True,
+    df_to_add: pd.DataFrame,
+    database: Union[str, sa.engine.base.Engine],
+    table_name: str,
+    index: bool = False,
+    recovery_path: PathOrIOBase = ".",
+    is_prepare_to_add_to_db: bool = True,
+    commit_every_n_rows: Optional[int] = None,
+    is_skip_writing_errors: bool = False,
+    **to_sql_kwargs,
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
 
@@ -250,78 +378,313 @@ def append_df_to_db(
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
 
-    is_avoid_infinity : bool, optional
-        Whether to replace infinity values with NaNs before adding the dataframe to the database. THis is useful because
-        sqlite seems to have issues with infinity values.
-    """
-    if is_avoid_infinity:
-        df_to_add = df_to_add.replace([np.inf, -np.inf], np.nan)
+    commit_every_n_rows : int, optional
+        The number of rows that you should have a try except over. This is useful so that if you have an error in one
+        row you still add rows in other chunks. If None tries to add everything at once.
 
-    if is_prepare_to_add_to_db:
-        try:
+    is_skip_writing_errors : bool, optional
+        Whether to skip any encountered errors when writing to db. This is useful when you are using `commit_every_n_rows`
+        and still want to continue writing.
+
+    **to_sql_kwargs :
+        Additional arguments to `to_sql_kwargs`.
+    """
+    if commit_every_n_rows is None:
+        commit_every_n_rows = max(1, len(df_to_add))
+        iterator = range(0, len(df_to_add), commit_every_n_rows)
+    else:
+        iterator = tqdm.tqdm(range(0, max(1, len(df_to_add)), commit_every_n_rows))
+
+    rows_added = 0
+
+    for i in iterator:
+        curr_df = df_to_add.iloc[i : i + commit_every_n_rows].copy()
+
+        if is_prepare_to_add_to_db:
             # this removes exact duplicates and columns not in the database
-            df_delta = prepare_to_add_to_db_sql(
-                df_to_add=df_to_add,
+            df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db(
+                df_to_add=curr_df,
                 database=database,
-                sql_already_annotated=f"SELECT * FROM {table_name}",
-                is_check_unique_primary_key=True,  # raise if primary key is not unique
+                is_return_non_unique_primary_key=True,
                 table_name=table_name,
             )
-        except Exception as e:
-            save_recovery(df_to_add, table_name, index=index, recovery_path=recovery_path)
-            raise e
-    else:
-        df_delta = df_to_add
+            if len(df_to_add_primary_key_duplicates) > 0:
+                # save the rows that have duplicated primary keys but not other columns
+                _save_recovery(
+                    df_to_add_primary_key_duplicates,
+                    table_name,
+                    index=index,
+                    recovery_path=recovery_path,
+                )
+        else:
+            df_delta = curr_df
 
-    with create_connection(database) as conn:
         try:
-            df_delta.to_sql(table_name, conn, if_exists="append", index=index)
-            logging.info(f"Added {len(df_delta)} rows to {table_name}")
+            with create_connection(database) as conn:
+                if conn.engine.dialect.name == "postgres":
+                    to_sql_kwargs["chunksize"] = 10000
+                    to_sql_kwargs["method"] = "multi"
+                df_delta.to_sql(table_name, conn, if_exists="append", index=index, **to_sql_kwargs)
+                rows_added += len(df_delta)
 
         except Exception as e:
-            save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
-            raise e
+            _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
+            if not is_skip_writing_errors:
+                raise e
+
+    logging.info(f"Added {rows_added} rows to {table_name}")
 
 
-@contextmanager
-def create_connection(database, timeout=5.0, is_print=True, **kwargs):
-    """Create a database connection to a SQLite database"""
-    conn = None
-    try:
-        conn = sqlite3.connect(database, timeout=timeout, **kwargs)
-        if is_print:
-            logging.info(f"Connected to {database} SQLite")
-        yield conn
-    except sqlite3.Error:
-        logging.exception("Failed to connect with sqlite3 database:")
-    finally:
-        if conn:
-            conn.close()
+def get_primary_keys(database: Union[str, sa.engine.base.Engine], table_name: str) -> list[str]:
+    """Get the primary keys of a table in a database.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
+
+    table_name : str
+        The name of the table to get the primary keys from.
+    """
+    with create_engine(database) as engine:
+        inspector = sa.inspect(engine)
+        return inspector.get_pk_constraint(table_name)["constrained_columns"]
 
 
-def execute_sql(database, sql):
+### Secondary helpers ###
+def get_table_info(database: Union[str, sa.engine.base.Engine], table_name: str) -> pd.DataFrame:
+    """Return a dataframe with the table information of table_name in a database."""
+    with create_engine(database) as engine:
+        table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+
+    data = {
+        "name": [],
+        "type": [],
+        "primary_key": [],
+        "nullable": [],
+        "default": [],
+        "autoincrement": [],
+        "unique": [],
+    }
+
+    for column in table.columns:
+        data["name"].append(column.name)
+        data["type"].append(column.type)
+        data["primary_key"].append(column.primary_key)
+        data["nullable"].append(column.nullable)
+        data["default"].append(column.default)
+        data["autoincrement"].append(column.autoincrement)
+        data["unique"].append(column.unique)
+
+    return pd.DataFrame(data)
+
+
+def prepare_to_add_to_db(
+    df_to_add: pd.DataFrame,
+    database: Union[str, sa.engine.base.Engine],
+    table_name: str,
+    is_keep_all_columns_from_db: bool = True,
+    is_return_non_unique_primary_key: bool = False,
+) -> Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame]]:
+    """Prepare a dataframe to be added to a table in a database by removing rows already in the database.
+
+    Parameters
+    ----------
+    df_to_add : pd.DataFrame
+        The dataframe to add to the database.
+
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
+
+    table_name : str, optional
+        The name of the table in the database to check for existing rows.
+
+    is_keep_all_columns_from_db : bool, optional
+        Whether to return all columns in DB (or only the columns in the dataframe to add).
+
+    is_return_non_unique_primary_key : bool, optional
+        Whether to return the rows you tried with primary keys that already exist in the database but have
+        different values for non-primary keys. This will return a tuple of dataframes, the first being the
+        dataframe to add, and the second being the rows that already exist in the database.
+    """
+
+    with create_engine(database) as engine:
+        primary_keys = get_primary_keys(engine, table_name)
+        try:
+            df_keys = df_to_add[primary_keys]
+        except KeyError as e:
+            logging.warning(
+                f"Could not find primary key in dataframe to add => assumes you want to filter on"
+                f" all columns {df_to_add.columns}. Given that not primary key, we deactive"
+                " checking of non-unique secondary key for unique primary by settting is_keep_all_columns_from_db=False"
+            )
+            df_keys = df_to_add
+            primary_keys = df_to_add.columns
+            # by removing other keys we ensure that check is only on the given keys
+            is_keep_all_columns_from_db = False
+
+        df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_keys)
+
+    columns = [c for c in df_db.columns if c in df_to_add.columns]
+
+    if not is_keep_all_columns_from_db:
+        df_db = df_db[columns]
+
+    df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+
+    # Check for duplicates based on primary keys
+    is_primary_key_duplicates = df_all.duplicated(subset=primary_keys, keep="first")
+    if is_primary_key_duplicates.any():
+        n_duplicates = is_primary_key_duplicates.sum()
+
+        # for logging also shows the rows in the db
+        is_primary_key_duplicates_all = df_all.duplicated(subset=primary_keys, keep=False)
+        grouped = df_all[is_primary_key_duplicates_all].groupby(primary_keys)
+        example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(list(grouped.groups.keys())[0])
+        logging.warning(
+            f"Trying to add {n_duplicates} rows with primary keys {primary_keys} that already exist in the "
+            f"database but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
+        )
+
+    df_try_added_primary_key_duplicates = df_all[is_primary_key_duplicates]
+    df_all = df_all[~is_primary_key_duplicates]  # remove the rows whose primary keys already exist in the database
+
+    # Remove rows that are already in the database
+    df_delta = get_delta_df(df_all, df_db)
+
+    if is_return_non_unique_primary_key:
+        return df_delta, df_try_added_primary_key_duplicates
+
+    return df_delta
+
+
+def get_delta_df(df_all: pd.DataFrame, df_subset: pd.DataFrame) -> pd.DataFrame:
+    """return the complement of df_subset"""
+    columns = list(df_all.columns)
+    df_ind = df_all.merge(df_subset.drop_duplicates(), on=columns, how="left", indicator=True)
+    return df_ind.query("_merge == 'left_only' ")[columns]
+
+
+def get_sql_where_from_df(
+    database: Union[str, sa.engine.base.Engine],
+    table: Union[str, sa.Table],
+    df: pd.DataFrame,
+    is_str: bool = False,
+) -> Union[str, sa.sql.selectable.Select]:
+    """Given a dataframe of rows to select on from table_name, will return the corresponding select statement.
+
+    Parameters
+    ----------
+    database : str or engine
+        The URL to the database to connect to, or the sqlalchemy engine.
+
+    table : str or Table
+        The name of the table in the database to check for existing rows, or the sqlalchemy Table.
+
+    df : pd.DataFrame
+        The dataframe of rows to select on from table_name.
+
+    is_str : bool, optional
+        Whether to return the string of the SQL statement or the sqlalchemy select statement.
+    """
+    with create_engine(database) as engine:
+        # Reflect the table
+        if isinstance(table, str):
+            db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+        else:
+            db_table = table
+
+        # Create a SELECT statement using and_ and or_
+        conditions = [sa.and_(*[db_table.c[key] == value for key, value in row.items()]) for _, row in df.iterrows()]
+        where_clause = sa.or_(*conditions)
+
+        if is_str:
+            return str(where_clause.compile(engine, compile_kwargs={"literal_binds": True}))
+        return where_clause
+
+
+def execute_sql(
+    database: Union[str, sa.engine.base.Engine],
+    sql: Union[str, sa.sql.expression.Executable],
+    parameters=None,
+    execution_options=None,
+):
     """Execute a sql command on a database"""
+    if isinstance(sql, str):
+        sql = sa.text(sql)
+
     with create_connection(database) as conn:
-        c = conn.cursor()
-        c.executescript(sql)
+        conn.execute(sql, parameters=parameters, execution_options=execution_options)
         conn.commit()
 
 
-def get_all_tables(database):
+def get_all_table_names(database: Union[str, sa.engine.base.Engine]) -> list[str]:
     """Get all the tables in a database"""
-    with create_connection(database) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        tables = cursor.fetchall()
-        cursor.close()
-    return [t[0] for t in tables]
+    with create_engine(database) as engine:
+        inspector = sa.inspect(engine)
+        return inspector.get_table_names()
 
 
-def get_all_views(database):
-    """Get all the tables in a database"""
+def get_all_view_names(database: Union[str, sa.engine.base.Engine]) -> list[str]:
+    """Get all the views in a database"""
+    with create_engine(database) as engine:
+        inspector = sa.inspect(engine)
+        return inspector.get_view_names()
+
+
+def count_rows(database: Union[str, sa.engine.base.Engine], table_name: str) -> int:
+    """Count the number of rows in a table"""
     with create_connection(database) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name")
-        tables = cursor.fetchall()
-        cursor.close()
-    return [t[0] for t in tables]
+        row_count = conn.execute(sa.text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+    return row_count
+
+
+### private, not meant to be used
+def _enforce_type_cols_df_(df: pd.DataFrame, db_table: sa.Table):
+    """Inplace enforce the types of the columns in the dataframe to be the same as the types in the database."""
+    for col in df.columns:
+        if col in db_table.columns:
+            try:
+                sql_type = db_table.columns[col].type
+
+                if isinstance(sql_type, sa.types.NullType):
+                    # if column has to type we can't enforce it. This happens when some columns were added manually
+                    continue
+
+                elif sql_type.python_type in [int, float]:
+                    # issue with
+                    df[col] = df[col].apply(pd.to_numeric, errors="coerce")
+
+                # don't try conversion of bool and str because will convert None to "None" and False respectively
+                # else:
+                #     df[col] = df[col].astype(db_table.columns[col].type.python_type)
+
+            except Exception as e:
+                # this should not happen, but worse case scenario we just don't enforce the type
+                logging.warning(
+                    f"Could not enforce type of column {col} in dataframe to be the same as in the database. Error: {e}"
+                )
+
+
+def _save_recovery(
+    df_delta: pd.DataFrame,
+    table_name: str,
+    index: bool = False,
+    recovery_path: PathOrIOBase = ".",
+    error=None,
+):
+    """Save the rows that failed to be added to the database"""
+
+    # saves the error rows to a csv file to avoid losing the data
+    random_idx = random.randint(10**5, 10**6)
+    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+
+    # save json as a list of dict if you don't want to keep index, else dict of dict
+    orient = "index" if index else "records"
+    df_delta.to_json(recovery_all_path, orient=orient, indent=2)
+    logging.error(
+        f"Failed to add {len(df_delta)} rows to {table_name}."
+        f"Dumping all the df that you couldn't save to {recovery_all_path}"
+    )
+    if error is not None:
+        logging.error(f"Error: {error}")
