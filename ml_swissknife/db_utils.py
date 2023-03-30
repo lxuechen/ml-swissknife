@@ -30,6 +30,7 @@ import random
 from contextlib import contextmanager
 from pathlib import Path
 import pandas as pd
+import tqdm
 from ml_swissknife.types import PathOrIOBase
 from typing import Optional
 import numpy as np
@@ -328,7 +329,8 @@ def append_df_to_db(
     index: bool = False,
     recovery_path: PathOrIOBase = ".",
     is_prepare_to_add_to_db: bool = True,
-    chunksize_for_errors: Optional[int] = None,
+    commit_every_n_rows: Optional[int] = None,
+    is_skip_writing_errors: bool =True,
     **to_sql_kwargs
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
@@ -354,20 +356,27 @@ def append_df_to_db(
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
 
-    chunksize_for_errors : int, optional
+    commit_every_n_rows : int, optional
         The number of rows that you should have a try except over. This is useful so that if you have an error in one
-        row you still add rows in other chunks.
+        row you still add rows in other chunks. If None tries to add everything at once.
+
+    is_skip_writing_errors : bool, optional
+        Whether to skip any encountered errors when writing to db. This is useful when you are using `commit_every_n_rows`
+        and still want to continue writing.
 
     **to_sql_kwargs :
         Additional arguments to `to_sql_kwargs`.
     """
-    if chunksize_for_errors is None:
-        chunksize_for_errors = len(df_to_add)
+    if commit_every_n_rows is None:
+        commit_every_n_rows = len(df_to_add)
+        iterator = range(0, len(df_to_add), commit_every_n_rows)
+    else:
+        iterator = tqdm.trange(0, len(df_to_add), step=commit_every_n_rows)
 
     rows_added = 0
 
-    for i in range(0, len(df_to_add), chunksize_for_errors):
-        curr_df = df_to_add.iloc[i:i + chunksize_for_errors]
+    for i in iterator:
+        curr_df = df_to_add.iloc[i:i + commit_every_n_rows]
 
         if is_prepare_to_add_to_db:
             # this removes exact duplicates and columns not in the database
@@ -400,7 +409,8 @@ def append_df_to_db(
 
         except Exception as e:
             _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
-            raise e
+            if not is_skip_writing_errors:
+                raise e
 
     logging.info(f"Added {rows_added} rows to {table_name}")
 
