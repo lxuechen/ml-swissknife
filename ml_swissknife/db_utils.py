@@ -271,9 +271,8 @@ def delete_rows_from_db(
 
         execute_sql(database=engine, sql=delete)
 
-
 def get_values_from_keys(
-    database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame
+    database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame, chunksize: int = 10000
 ) -> pd.DataFrame:
     """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows
 
@@ -287,6 +286,9 @@ def get_values_from_keys(
 
     df : pd.DataFrame
         The dataframe containing the keys to select from. Every column treated as a key.
+
+    chunksize : int, optional
+        The number of rows to select at a time. This is useful if you have a large number of rows to select.
 
     Examples
     --------
@@ -304,8 +306,18 @@ def get_values_from_keys(
         select = sa.select(db_table).where(sql_where)
 
         with create_connection(engine) as connection:
-            result = connection.execute(select)
-            out = pd.DataFrame(result.fetchall(), columns=result.keys())
+            result = connection.execute(select) # might want to try `.execution_options(stream_results=True).execute(select)` if slow
+            #out = pd.DataFrame(result.fetchall(), columns=result.keys())
+            # let's try to do it in chunks
+            rows = []
+            while True:
+                logging.info(f"Fetching {chunksize} rows")
+                chunk = result.fetchmany(chunksize)
+                if not chunk:
+                    break
+                rows.extend(chunk)
+
+            out = pd.DataFrame(rows, columns=result.keys())
 
     _enforce_type_cols_df_(out, db_table)
 
@@ -457,20 +469,8 @@ def prepare_to_add_to_db(
         dataframe to add, and the second being the rows that already exist in the database.
     """
     with create_engine(database) as engine:
-        db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
         primary_keys = get_primary_keys(engine, table_name)
-
-        # select all rows from the database that have the same primary keys as the rows to add
-        sql_where = get_sql_where_from_df(
-            engine, table=db_table, df=df_to_add[primary_keys]
-        )
-        select = db_table.select().where(sql_where)
-
-        with create_connection(engine) as conn:
-            result = conn.execute(select)
-            df_db = pd.DataFrame(result.fetchall(), columns=result.keys())
-
-    _enforce_type_cols_df_(df_db, db_table)
+        df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_to_add[primary_keys])
 
     columns = [c for c in df_db.columns if c in df_to_add.columns]
 
