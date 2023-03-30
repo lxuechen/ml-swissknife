@@ -195,12 +195,10 @@ def sql_to_df(
     """
     with create_engine(database) as engine:
         if engine.dialect.name == "postgresql":
-            # `method="multi"` means combines multiple rows into a single INSERT statement => faster
             # `chunksize` divides the DataFrame into smaller chunks and then insert each chunk separately. This can help
             # reduce the memory usage and improve the performance when inserting a large number of rows into the
             # database.
             read_sql_kwargs["chunksize"] = 10000
-            read_sql_kwargs["method"] = "multi"
 
         with create_connection(engine) as conn:
             df = pd.read_sql(sql=sql, con=conn, **read_sql_kwargs)
