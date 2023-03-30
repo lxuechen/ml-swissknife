@@ -371,7 +371,7 @@ def append_df_to_db(
         commit_every_n_rows = len(df_to_add)
         iterator = range(0, len(df_to_add), commit_every_n_rows)
     else:
-        iterator = tqdm.trange(0, len(df_to_add), step=commit_every_n_rows)
+        iterator = tqdm.tqdm(range(0, len(df_to_add), commit_every_n_rows))
 
     rows_added = 0
 
@@ -493,7 +493,6 @@ def prepare_to_add_to_db(
     with create_engine(database) as engine:
         primary_keys = get_primary_keys(engine, table_name)
         df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_to_add[primary_keys])
-        print("done get_values_from_keys")
 
     columns = [c for c in df_db.columns if c in df_to_add.columns]
 
@@ -528,7 +527,6 @@ def prepare_to_add_to_db(
     # Remove rows that are already in the database
     df_delta = get_delta_df(df_all, df_db)
 
-    print("done prepare_to_add_to_db")
     if is_return_non_unique_primary_key:
         return df_delta, df_try_added_primary_key_duplicates
 
