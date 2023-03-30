@@ -265,8 +265,9 @@ def get_values_from_keys(
     table_name: str,
     df: pd.DataFrame,
     chunksize: int = 10000,
+    max_rows_in_memory: int = int(1e7),
 ) -> pd.DataFrame:
-    """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows
+    """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows.
 
     Parameters
     ----------
@@ -277,10 +278,15 @@ def get_values_from_keys(
         The name of the table to get the rows from.
 
     df : pd.DataFrame
-        The dataframe containing the keys to select from. Every column treated as a key.
+        The dataframe containing the keys to select from. Every column treated as a key. We remove duplicates.
 
     chunksize : int, optional
         The number of rows to select at a time. This is useful if you have a large number of rows to select.
+        E.g. it seems sql aclehmy doesn't work well with huge queries at once.
+
+    max_rows_in_memory : int, optional
+        Maximum size of table in DB that you allow yourself to load in memory. If the table is larger than this, it will
+        have to use chunking and querying on the server.
 
     Examples
     --------
@@ -291,33 +297,44 @@ def get_values_from_keys(
     >>> len(get_values_from_keys(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations"))
     0
     """
+    df = df.drop_duplicates()
 
     with create_engine(database) as engine:
         db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+        n_db_rows = count_rows(engine, table_name)
 
-        if count_rows(engine, table_name) == 0:
+        if n_db_rows == 0:
             # avoid creating large query if empty
             out = pd.DataFrame(columns=db_table.columns.keys())
 
+        elif len(df) > chunksize and n_db_rows < max_rows_in_memory:
+            df_db = sql_to_df(engine, f"SELECT * FROM {table_name}")
+            out = df.merge(df_db, on=list(df.columns), how="inner")
+
         else:
-            sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
-            select = sa.select(db_table).where(sql_where)
+            # TODO given that you used that twice you sould have a context managfer for that
+            # then you can also copy curr_df only if needed
+            if chunksize is None:
+                chunksize = max(1, len(df))
 
-            with create_connection(engine) as connection:
-                if engine.dialect.name == "sqlite":
-                    # sqlite does not support stream_results
-                    out = pd.read_sql(sql=select, con=connection)
-                else:
-                    # ~2x faster than pd.read_sql
-                    result = connection.execution_options(stream_results=True).execute(select)
-                    rows = []
-                    while True:
-                        chunk = result.fetchmany(chunksize)
-                        if not chunk:
-                            break
-                        rows.extend(chunk)
+            if chunksize >= len(df):
+                iterator = range(0, len(df), chunksize)
+            else:
+                iterator = tqdm.tqdm(range(0, max(1, len(df)), chunksize))
 
-                    out = pd.DataFrame(rows, columns=result.keys())
+            outs = []
+            for i in iterator:
+                curr_df = df.iloc[i : i + chunksize].copy()
+
+                sql_where = get_sql_where_from_df(engine, table=db_table, df=curr_df)
+                select = sa.select(db_table).where(sql_where)
+
+                with create_connection(engine) as connection:
+                    curr_out = pd.read_sql(sql=select, con=connection)
+
+                outs.append(curr_out)
+
+            out = pd.concat(outs, ignore_index=True)
 
     _enforce_type_cols_df_(out, db_table)
 
@@ -490,7 +507,16 @@ def prepare_to_add_to_db(
 
     with create_engine(database) as engine:
         primary_keys = get_primary_keys(engine, table_name)
-        df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_to_add[primary_keys])
+        try:
+            df_keys = df_to_add[primary_keys]
+        except KeyError as e:
+            logging.warning(
+                f"Could not find primary key in dataframe to add => assumes you want to filter on"
+                f" all columns {df_to_add.columns}. Error message: {e}."
+            )
+            df_keys = df_to_add
+
+        df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_keys)
 
     columns = [c for c in df_db.columns if c in df_to_add.columns]
 
@@ -618,11 +644,13 @@ def _enforce_type_cols_df_(df: pd.DataFrame, db_table: sa.Table):
                     # if column has to type we can't enforce it. This happens when some columns were added manually
                     continue
 
-                elif sql_type.python_type == int:
+                elif sql_type.python_type in [int, float]:
+                    # issue with
                     df[col] = df[col].apply(pd.to_numeric, errors="coerce")
 
-                else:
-                    df[col] = df[col].astype(db_table.columns[col].type.python_type)
+                # don't try conversion of bool and str because will convert None to "None" and False respectively
+                # else:
+                #     df[col] = df[col].astype(db_table.columns[col].type.python_type)
 
             except Exception as e:
                 # this should not happen, but worse case scenario we just don't enforce the type
