@@ -355,8 +355,8 @@ def append_df_to_db(
         remove columns that are not in the database.
 
     chunksize_for_errors : int, optional
-        The number of rows to add at a time. This is useful so that if you have an error in one row you still add
-        rows in other chunks.
+        The number of rows that you should have a try except over. This is useful so that if you have an error in one
+        row you still add rows in other chunks.
 
     **to_sql_kwargs :
         Additional arguments to `to_sql_kwargs`.
