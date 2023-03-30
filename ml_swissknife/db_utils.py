@@ -163,11 +163,13 @@ def create_connection(
     with create_engine(
         database, is_use_cached_engine=is_use_cached_engine, **engine_kwargs
     ) as engine:
+        connection = None
         try:
             connection = engine.connect()
             yield connection
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
 
 def sql_to_df(
