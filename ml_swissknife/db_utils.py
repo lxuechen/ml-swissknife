@@ -302,22 +302,36 @@ def get_values_from_keys(
     with create_engine(database) as engine:
         db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
 
-        sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
-        select = sa.select(db_table).where(sql_where)
+        # sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
+        # select = sa.select(db_table).where(sql_where)
+        #
+        # with create_connection(engine) as connection:
+        #     result = connection.execution_options(stream_results=True).execute(select)
+        #     #out = pd.DataFrame(result.fetchall(), columns=result.keys())
+        #     # let's try to do it in chunks
+        #     rows = []
+        #     while True:
+        #         logging.info(f"Fetching {chunksize} rows")
+        #         chunk = result.fetchmany(chunksize)
+        #         if not chunk:
+        #             break
+        #         rows.extend(chunk)
+        #
+        #     out = pd.DataFrame(rows, columns=result.keys())
 
-        with create_connection(engine) as connection:
-            result = connection.execute(select) # might want to try `.execution_options(stream_results=True).execute(select)` if slow
-            #out = pd.DataFrame(result.fetchall(), columns=result.keys())
-            # let's try to do it in chunks
-            rows = []
-            while True:
-                logging.info(f"Fetching {chunksize} rows")
-                chunk = result.fetchmany(chunksize)
-                if not chunk:
-                    break
-                rows.extend(chunk)
+        outs = []
+        len_df = max(1, len(df))  # to deal with empty df
 
-            out = pd.DataFrame(rows, columns=result.keys())
+        for i in range(0, len_df, chunksize):
+            sql_where = get_sql_where_from_df(engine, table=db_table, df=df.iloc[i:i + chunksize])
+            select = sa.select(db_table).where(sql_where)
+
+            with create_connection(engine) as connection:
+                result = connection.execute(select)
+                curr_df = pd.DataFrame(result.fetchall(), columns=result.keys())
+                outs.append(curr_df)
+
+        out = pd.concat(outs)
 
     _enforce_type_cols_df_(out, db_table)
 
@@ -331,6 +345,7 @@ def append_df_to_db(
     index: bool = False,
     recovery_path: PathOrIOBase = ".",
     is_prepare_to_add_to_db: bool = True,
+    chunksize_for_errors: Optional[int] = None,
     **to_sql_kwargs
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
@@ -356,41 +371,55 @@ def append_df_to_db(
         Whether to clean the dataframe before adding it to the database. Specifically will drop duplicates and
         remove columns that are not in the database.
 
+    chunksize_for_errors : int, optional
+        The number of rows to add at a time. This is useful so that if you have an error in one row you still add
+        rows in other chunks.
+
     **to_sql_kwargs :
         Additional arguments to `to_sql_kwargs`.
     """
-    if is_prepare_to_add_to_db:
-        # this removes exact duplicates and columns not in the database
-        df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db(
-            df_to_add=df_to_add,
-            database=database,
-            is_return_non_unique_primary_key=True,
-            table_name=table_name,
-        )
-        if len(df_to_add_primary_key_duplicates) > 0:
-            # save the rows that have duplicated primary keys but not other columns
-            _save_recovery(
-                df_to_add_primary_key_duplicates,
-                table_name,
-                index=index,
-                recovery_path=recovery_path,
-            )
-    else:
-        df_delta = df_to_add
+    if chunksize_for_errors is None:
+        chunksize_for_errors = len(df_to_add)
 
-    try:
-        with create_connection(database) as conn:
-            if conn.engine.dialect.name == "postgres":
-                to_sql_kwargs["chunksize"] = 10000
-                to_sql_kwargs["method"] = "multi"
-            df_delta.to_sql(
-                table_name, conn, if_exists="append", index=index, **to_sql_kwargs
-            )
-            logging.info(f"Added {len(df_delta)} rows to {table_name}")
+    rows_added = 0
 
-    except Exception as e:
-        _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
-        raise e
+    for i in range(0, len(df_to_add), chunksize_for_errors):
+        curr_df = df_to_add.iloc[i:i + chunksize_for_errors]
+
+        if is_prepare_to_add_to_db:
+            # this removes exact duplicates and columns not in the database
+            df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db(
+                df_to_add=curr_df,
+                database=database,
+                is_return_non_unique_primary_key=True,
+                table_name=table_name,
+            )
+            if len(df_to_add_primary_key_duplicates) > 0:
+                # save the rows that have duplicated primary keys but not other columns
+                _save_recovery(
+                    df_to_add_primary_key_duplicates,
+                    table_name,
+                    index=index,
+                    recovery_path=recovery_path,
+                )
+        else:
+            df_delta = df_to_add
+
+        try:
+            with create_connection(database) as conn:
+                if conn.engine.dialect.name == "postgres":
+                    to_sql_kwargs["chunksize"] = 10000
+                    to_sql_kwargs["method"] = "multi"
+                df_delta.to_sql(
+                    table_name, conn, if_exists="append", index=index, **to_sql_kwargs
+                )
+                rows_added += len(df_delta)
+
+        except Exception as e:
+            _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path)
+            raise e
+
+    logging.info(f"Added {rows_added} rows to {table_name}")
 
 
 def get_primary_keys(
@@ -471,6 +500,7 @@ def prepare_to_add_to_db(
     with create_engine(database) as engine:
         primary_keys = get_primary_keys(engine, table_name)
         df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_to_add[primary_keys])
+        print("done get_values_from_keys")
 
     columns = [c for c in df_db.columns if c in df_to_add.columns]
 
@@ -505,6 +535,7 @@ def prepare_to_add_to_db(
     # Remove rows that are already in the database
     df_delta = get_delta_df(df_all, df_db)
 
+    print("done prepare_to_add_to_db")
     if is_return_non_unique_primary_key:
         return df_delta, df_try_added_primary_key_duplicates
 
