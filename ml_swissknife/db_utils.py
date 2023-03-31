@@ -125,6 +125,7 @@ def create_engine(
     **engine_kwargs :
         Additional arguments to pass to `sqlalchemy.create_engine`.
     """
+    is_created_new_engine = False
     try:
         engine, is_created_new_engine = get_engine(
             database,
