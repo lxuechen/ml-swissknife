@@ -88,7 +88,8 @@ def get_engine(
             except sa.exc.ArgumentError as e:
                 if Path(database).is_file():
                     # converts path to sqlite url
-                    engine = sa.create_engine(f"sqlite:///{database}", **engine_kwargs)
+                    db_file = Path(database).expanduser().resolve()
+                    engine = sa.create_engine(f"sqlite:///{db_file}", **engine_kwargs)
                 else:
                     raise e
 
