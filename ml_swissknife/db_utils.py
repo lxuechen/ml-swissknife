@@ -683,9 +683,9 @@ def _dataframe_chunk_generator(df: pd.DataFrame, chunksize: Optional[int] = None
         chunksize = max(1, len(df))
 
     if chunksize >= len(df):
-        iterator = range(0, max(1, len(df)), chunksize)
+        iterator = range(0, len(df), chunksize)
     else:
-        iterator = tqdm.tqdm(range(0, max(1, len(df)), chunksize))
+        iterator = tqdm.tqdm(range(0, len(df), chunksize))
 
     n_iter = len(df) // chunksize
 
