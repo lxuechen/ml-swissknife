@@ -78,6 +78,7 @@ def get_engine(
                 " which is not recommended with engine caching. Setting is_use_cached_engine=False to be safe."
             )
             is_use_cached_engine = False
+            # in this case you likely also want to use poolclass=NullPool
 
         if database in ENGINE_REGISTRY and is_use_cached_engine:
             engine = ENGINE_REGISTRY[database]
@@ -189,10 +190,10 @@ def sql_to_df(
     --------
     >>> df = sql_to_df(sql="SELECT * FROM likert_annotations LIMIT 3",  database="instruction_following.sqlite")
     >>> print(df.to_string(max_colwidth=5))
-       input_id output annotator  likert_score  likert_score_1_logprob  likert_score_2_logprob  likert_score_3_logprob  likert_score_4_logprob auto_raw_inputs auto_raw_outputs  auto_total_tokens
-    0     2      I...   t...         4           NaN                     NaN                     NaN                     NaN                    None            None              NaN
-    1     2      I...   t...         4           NaN                     NaN                     NaN                     NaN                    None            None              NaN
-    2     2      I...   chen         2           NaN                     NaN                     NaN                     NaN                    None            None              NaN
+       input_id  output_id annotator  likert_score  likert_score_1_logprob  likert_score_2_logprob  likert_score_3_logprob  likert_score_4_logprob auto_raw_inputs auto_raw_outputs  auto_total_tokens
+    0     0         1       chen         1           NaN                     NaN                     NaN                     NaN                    None            None              NaN
+    1     0         1       t...         1           NaN                     NaN                     NaN                     NaN                    None            None              NaN
+    2     0         1       t...         1           NaN                     NaN                     NaN                     NaN                    None            None              NaN
     """
     with create_engine(database) as engine:
         # could make faster using fetchmany
@@ -203,7 +204,8 @@ def sql_to_df(
         # dataframe will by default be of type Object and not float (because it sees all None). In reality those None
         # should be NaN and the column should be float. If you don't do that this can cause problems later on
 
-        # parse sql to get the table name from which we read the query
+        # parse sql to get the table name from which we read the query. THis is dirty but I didn't find a way to do
+        # it using sqlalchemy (surprisingly)
         all_table_and_views = get_all_table_names(engine) + get_all_view_names(engine)
         all_tables_refered_in_sql = [t for t in sql.split() if t in all_table_and_views]
 
@@ -230,7 +232,9 @@ def sql_to_df(
     return df
 
 
-def delete_rows_from_db(database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame):
+def delete_rows_from_db(
+    database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame, chunksize=10000
+):
     """Delete rows from a table in a SQLite database based on the values of a dataframe.
 
     Parameters
@@ -256,10 +260,11 @@ def delete_rows_from_db(database: Union[str, sa.engine.base.Engine], table_name:
     with create_engine(database) as engine:
         db_table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
 
-        sql_where = get_sql_where_from_df(engine, table=db_table, df=df)
-        delete = db_table.delete().where(sql_where)
+        for df_chunk in _dataframe_chunk_generator(df, chunksize=chunksize):
+            sql_where = get_sql_where_from_df(engine, table=db_table, df=df_chunk)
+            delete = db_table.delete().where(sql_where)
 
-        execute_sql(database=engine, sql=delete)
+            execute_sql(database=engine, sql=delete)
 
 
 def get_values_from_keys(
@@ -295,8 +300,8 @@ def get_values_from_keys(
     >>> df = sql_to_df(sql="SELECT * FROM likert_annotations LIMIT 3", database=database)
     >>> len(df)
     3
-    >>> delete_rows_from_db(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations")
-    >>> len(get_values_from_keys(database=database,  df=df[["input_id", "output", "annotator"]], table_name="likert_annotations"))
+    >>> delete_rows_from_db(database=database,  df=df[["input_id", "output_id", "annotator"]], table_name="likert_annotations")
+    >>> len(get_values_from_keys(database=database,  df=df[["input_id", "output_id", "annotator"]], table_name="likert_annotations"))
     0
     """
     df = df.drop_duplicates()
@@ -310,25 +315,14 @@ def get_values_from_keys(
             out = pd.DataFrame(columns=db_table.columns.keys())
 
         elif len(df) > chunksize and n_db_rows < max_rows_in_memory:
+            # if the query is large and the table is manageable, then it can be much faster in memory
             df_db = sql_to_df(engine, f"SELECT * FROM {table_name}")
             out = df.merge(df_db, on=list(df.columns), how="inner")
 
         else:
-            # TODO given that you used that twice you sould have a context managfer for that
-            # then you can also copy curr_df only if needed
-            if chunksize is None:
-                chunksize = max(1, len(df))
-
-            if chunksize >= len(df):
-                iterator = range(0, len(df), chunksize)
-            else:
-                iterator = tqdm.tqdm(range(0, max(1, len(df)), chunksize))
-
             outs = []
-            for i in iterator:
-                curr_df = df.iloc[i : i + chunksize].copy()
-
-                sql_where = get_sql_where_from_df(engine, table=db_table, df=curr_df)
+            for df_chunk in _dataframe_chunk_generator(df, chunksize=chunksize):
+                sql_where = get_sql_where_from_df(engine, table=db_table, df=df_chunk)
                 select = sa.select(db_table).where(sql_where)
 
                 with create_connection(engine) as connection:
@@ -391,21 +385,13 @@ def append_df_to_db(
     **to_sql_kwargs :
         Additional arguments to `to_sql_kwargs`.
     """
-    if commit_every_n_rows is None:
-        commit_every_n_rows = max(1, len(df_to_add))
-        iterator = range(0, len(df_to_add), commit_every_n_rows)
-    else:
-        iterator = tqdm.tqdm(range(0, max(1, len(df_to_add)), commit_every_n_rows))
-
     rows_added = 0
 
-    for i in iterator:
-        curr_df = df_to_add.iloc[i : i + commit_every_n_rows].copy()
-
+    for df_chunk in _dataframe_chunk_generator(df_to_add, chunksize=commit_every_n_rows):
         if is_prepare_to_add_to_db:
             # this removes exact duplicates and columns not in the database
             df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db(
-                df_to_add=curr_df,
+                df_to_add=df_chunk,
                 database=database,
                 is_return_non_unique_primary_key=True,
                 table_name=table_name,
@@ -514,10 +500,10 @@ def prepare_to_add_to_db(
         primary_keys = get_primary_keys(engine, table_name)
         try:
             df_keys = df_to_add[primary_keys]
-        except KeyError as e:
+        except KeyError:
             logging.warning(
                 f"Could not find primary key in dataframe to add => assumes you want to filter on"
-                f" all columns {df_to_add.columns}. Given that not primary key, we deactive"
+                f" all columns {df_to_add.columns}. Given that it's not a primary key, we deactivate"
                 " checking of non-unique secondary key for unique primary by settting is_keep_all_columns_from_db=False"
             )
             df_keys = df_to_add
@@ -690,3 +676,24 @@ def _save_recovery(
     )
     if error is not None:
         logging.error(f"Error: {error}")
+
+
+def _dataframe_chunk_generator(df: pd.DataFrame, chunksize: Optional[int] = None):
+    if chunksize is None:
+        chunksize = max(1, len(df))
+
+    if chunksize >= len(df):
+        iterator = range(0, max(1, len(df)), chunksize)
+    else:
+        iterator = tqdm.tqdm(range(0, max(1, len(df)), chunksize))
+
+    n_iter = len(df) // chunksize
+
+    for i in iterator:
+        df_chunk = df.iloc[i : i + chunksize]
+
+        # if many iterations then better to copy the dataframe to avoid memory issues
+        if n_iter > 1:
+            df_chunk = df_chunk.copy()
+
+        yield df_chunk
