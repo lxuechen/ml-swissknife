@@ -495,7 +495,6 @@ def prepare_to_add_to_db(
         different values for non-primary keys. This will return a tuple of dataframes, the first being the
         dataframe to add, and the second being the rows that already exist in the database.
     """
-
     with create_engine(database) as engine:
         primary_keys = get_primary_keys(engine, table_name)
         try:
@@ -512,6 +511,11 @@ def prepare_to_add_to_db(
             is_keep_all_columns_from_db = False
 
         df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_keys)
+
+    if df_db.empty:
+        if is_return_non_unique_primary_key:
+            return df_to_add, df_to_add.iloc[0:0]
+        return df_to_add
 
     columns = [c for c in df_db.columns if c in df_to_add.columns]
 
