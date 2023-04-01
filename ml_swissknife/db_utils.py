@@ -503,7 +503,7 @@ def prepare_to_add_to_db(
             logging.warning(
                 f"Could not find primary key in dataframe to add => assumes you want to filter on"
                 f" all columns {df_to_add.columns}. Given that it's not a primary key, we deactivate"
-                " checking of non-unique secondary key for unique primary by settting is_keep_all_columns_from_db=False"
+                " checking of non-unique secondary key for unique primary by setting is_keep_all_columns_from_db=False"
             )
             df_keys = df_to_add
             primary_keys = df_to_add.columns
