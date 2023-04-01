@@ -512,17 +512,17 @@ def prepare_to_add_to_db(
 
         df_db = get_values_from_keys(database=engine, table_name=table_name, df=df_keys)
 
+    columns = [c for c in df_db.columns if c in df_to_add.columns]
+    df_to_add = df_to_add[columns]
+    if not is_keep_all_columns_from_db:
+        df_db = df_db[columns]
+
     if df_db.empty:
         if is_return_non_unique_primary_key:
             return df_to_add, df_to_add.iloc[0:0]
         return df_to_add
 
-    columns = [c for c in df_db.columns if c in df_to_add.columns]
-
-    if not is_keep_all_columns_from_db:
-        df_db = df_db[columns]
-
-    df_all = pd.concat([df_db, df_to_add[columns]]).drop_duplicates()
+    df_all = pd.concat([df_db, df_to_add]).drop_duplicates()
 
     # Check for duplicates based on primary keys
     is_primary_key_duplicates = df_all.duplicated(subset=primary_keys, keep="first")
