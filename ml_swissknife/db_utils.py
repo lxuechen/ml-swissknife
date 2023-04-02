@@ -669,7 +669,7 @@ def _save_recovery(
 
     # saves the error rows to a csv file to avoid losing the data
     random_idx = random.randint(10**5, 10**6)
-    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.csv"
+    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.json"
 
     # save json as a list of dict if you don't want to keep index, else dict of dict
     orient = "index" if index else "records"
