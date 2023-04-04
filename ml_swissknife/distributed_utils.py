@@ -2,12 +2,15 @@
 
 Compatible with torchrun / elastic and torch.distributed.launch.
 """
+import logging
 import os
 import sys
 from typing import Optional
 
 import torch
 import torch.distributed as dist
+
+logger = logging.getLogger(__name__)
 
 
 def setup(rank: Optional[int] = None, world_size: Optional[int] = None):
@@ -20,7 +23,11 @@ def setup(rank: Optional[int] = None, world_size: Optional[int] = None):
         return rank, world_size
 
     if not dist.is_initialized():
-        if sys.platform == 'win32':
+        logger.warning(
+            "Initializing torch.distributed by setting up the process group..."
+        )
+
+        if sys.platform == "win32":
             # Distributed package only covers collective communications with Gloo
             # backend and FileStore on Windows platform. Set init_method parameter
             # in init_process_group to a local file.
@@ -30,7 +37,7 @@ def setup(rank: Optional[int] = None, world_size: Optional[int] = None):
                 backend="gloo",
                 init_method=init_method,
                 rank=rank,
-                world_size=world_size
+                world_size=world_size,
             )
         elif torch.cuda.is_available():
             dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
