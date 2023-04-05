@@ -908,8 +908,8 @@ def manual_seed(
             logging.warning("Tensorflow not installed; ignoring set seed for tf.")
 
 
-def convert_str_dtype_to_torch_dtype(str_dtype: str):
-    if str_dtype in ("single", "float32", "float", "fp32"):
+def convert_str_dtype_to_torch_dtype(str_dtype: Optional[str]):
+    if str_dtype in ("single", "float32", "float", "fp32", None):
         return torch.float
     elif str_dtype in ("half", "float16", "fp16"):
         return torch.float16
