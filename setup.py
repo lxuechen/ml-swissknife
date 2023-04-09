@@ -38,7 +38,7 @@ setuptools.setup(
         "transformers",
         "datasets",
         "gdown>=4.4.0",
-        "pandas",  # TODO add >=2.0.0 once in pypy
+        "pandas>=2.0.0",
         "pytest",
         "matplotlib",
         "seaborn",
