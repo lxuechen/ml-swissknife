@@ -405,7 +405,7 @@ def append_df_to_db(
                     recovery_path=recovery_path,
                 )
         else:
-            df_delta = curr_df
+            df_delta = df_chunk
 
         try:
             with create_connection(database) as conn:
