@@ -314,7 +314,7 @@ def get_values_from_keys(
             # avoid creating large query if empty
             out = pd.DataFrame(columns=db_table.columns.keys())
 
-        elif len(df) > 500 and n_db_rows < max_rows_in_memory:
+        elif len(df) > 100 and n_db_rows < max_rows_in_memory:
             # if the query is large and the table is manageable, then it can be much faster in memory
             df_db = sql_to_df(engine, f"SELECT * FROM {table_name}")
             out = df.merge(df_db, on=list(df.columns), how="inner")
