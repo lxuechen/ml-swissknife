@@ -273,6 +273,7 @@ def get_values_from_keys(
     df: pd.DataFrame,
     chunksize: int = 10000,
     max_rows_in_memory: int = int(1e7),
+    min_rows_in_memory: int = 1000,
 ) -> pd.DataFrame:
     """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows.
 
@@ -295,6 +296,10 @@ def get_values_from_keys(
         Maximum size of table in DB that you allow yourself to load in memory. If the table is larger than this, it will
         have to use chunking and querying on the server.
 
+    min_rows_in_memory : int, optional
+        Minimum number of rows in dataframe before which you should prefer loading all table in memory rather than
+        using SQL.
+
     Examples
     --------
     >>> df = sql_to_df(sql="SELECT * FROM likert_annotations LIMIT 3", database=database)
@@ -314,7 +319,7 @@ def get_values_from_keys(
             # avoid creating large query if empty
             out = pd.DataFrame(columns=db_table.columns.keys())
 
-        elif len(df) > 100 and n_db_rows < max_rows_in_memory:
+        elif len(df) > min_rows_in_memory and n_db_rows < max_rows_in_memory:
             # if the query is large and the table is manageable, then it can be much faster in memory
             df_db = sql_to_df(engine, f"SELECT * FROM {table_name}")
             out = df.merge(df_db, on=list(df.columns), how="inner")
@@ -707,9 +712,10 @@ def sequence_to_in_sql(sequence: Sequence):
     """Converts a sequence (eg list) to a string that can be used in an SQL query. EG
     "WHERE dataset IN {sequence_to_in_sql(['train', 'test'])}"
     """
-    if len(sequence) > 1:
-        return str(tuple(sequence))
-    elif len(sequence) == 1:
-        return str(tuple(sequence))[0:-2] + ")"  # remove the last comma
-    else:
-        return "()"
+
+    # code will fail if sequence has a string containing ,) => assert that
+    assert len([e for e in sequence if isinstance(e, str) and ",)" in e]) == 0
+
+    # the following line deals with singleton and with the case where you have tuples of tuples => do not change unless
+    # you understand all subcases (eg if stamtement on length doesn't work)
+    return str(tuple(sequence)).replace(",)", ")")  # (item,) -> (item)
