@@ -701,3 +701,10 @@ def _dataframe_chunk_generator(df: pd.DataFrame, chunksize: Optional[int] = None
             df_chunk = df_chunk.copy()
 
         yield df_chunk
+
+
+def sequence_to_in_sql(sequence: Sequence):
+    """Converts a sequence (eg list) to a string that can be used in an SQL query. EG
+    "WHERE dataset IN {sequence_to_in_sql(['train', 'test'])}"
+    """
+    return str(tuple(sequence)).replace(",)", ")")  # replace deals with singleton
