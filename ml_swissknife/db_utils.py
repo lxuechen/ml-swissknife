@@ -274,6 +274,7 @@ def get_values_from_keys(
     chunksize: int = 10000,
     max_rows_in_memory: int = int(1e7),
     min_rows_in_memory: int = 1000,
+    is_logging: bool = False,
 ) -> pd.DataFrame:
     """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows.
 
@@ -320,11 +321,17 @@ def get_values_from_keys(
             out = pd.DataFrame(columns=db_table.columns.keys())
 
         elif len(df) > min_rows_in_memory and n_db_rows < max_rows_in_memory:
+            if is_logging:
+                logging.info(f"Loading {n_db_rows} rows of {table_name} in memory.")
+
             # if the query is large and the table is manageable, then it can be much faster in memory
             df_db = sql_to_df(engine, f"SELECT * FROM {table_name}")
             out = df.merge(df_db, on=list(df.columns), how="inner")
 
         else:
+            if is_logging:
+                logging.info(f"Querying {table_name} in chunks of {chunksize} rows.")
+
             outs = []
             for df_chunk in _dataframe_chunk_generator(df, chunksize=chunksize):
                 sql_where = get_sql_where_from_df(engine, table=db_table, df=df_chunk)
