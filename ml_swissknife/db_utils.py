@@ -707,4 +707,9 @@ def sequence_to_in_sql(sequence: Sequence):
     """Converts a sequence (eg list) to a string that can be used in an SQL query. EG
     "WHERE dataset IN {sequence_to_in_sql(['train', 'test'])}"
     """
-    return str(tuple(sequence)).replace(",)", ")")  # replace deals with singleton
+    if len(sequence) > 1:
+        return str(tuple(sequence))
+    elif len(sequence) == 1:
+        return str(tuple(sequence))[0:-2] + ")"  # remove the last comma
+    else:
+        return "()"
