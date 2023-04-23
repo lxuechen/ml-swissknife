@@ -361,6 +361,7 @@ def append_df_to_db(
     is_prepare_to_add_to_db: bool = True,
     commit_every_n_rows: Optional[int] = None,
     is_skip_writing_errors: bool = False,
+    is_keep_all_columns_from_db: bool = True, 
     **to_sql_kwargs,
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
@@ -405,6 +406,7 @@ def append_df_to_db(
             df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db(
                 df_to_add=df_chunk,
                 database=database,
+                is_keep_all_columns_from_db=is_keep_all_columns_from_db,
                 is_return_non_unique_primary_key=True,
                 table_name=table_name,
             )
