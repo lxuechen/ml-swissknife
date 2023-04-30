@@ -215,8 +215,8 @@ def sql_to_df(
         else:
             table_name_to_enforce_types = None
             logging.warning(
-                f"We cannot enforce column types in dataframe given that there are multiple tables referred to in the "
-                f"query. In most cases you should be fine, but it can be an issue if a float column has only NaN"
+                f"We cannot enforce column types in df given that there are multiple tables in the "
+                f"query. You should be fine, but this can be an issue if a float column has only NaN"
             )
 
         if table_name_to_enforce_types is not None:
