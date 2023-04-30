@@ -24,7 +24,7 @@ Note that if you want in memory database you can just use ":memory:" as the data
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-
+import time
 import logging
 import random
 from contextlib import contextmanager
@@ -90,11 +90,15 @@ def get_engine(
                 db_as_path = Path(database).expanduser()
                 if db_as_path.is_file():
                     # converts path to sqlite url
-                    engine = sa.create_engine(f"sqlite:///{db_as_path.resolve()}", **engine_kwargs)
+                    engine = sa.create_engine(
+                        f"sqlite:///{db_as_path.resolve()}", **engine_kwargs
+                    )
                 else:
                     raise e
 
-            logging.info(f"Created engine for {database} which is a {engine.dialect.name} DB.")
+            logging.info(
+                f"Created engine for {database} which is a {engine.dialect.name} DB."
+            )
             is_created_new_engine = True
 
             if is_use_cached_engine:
@@ -161,7 +165,9 @@ def create_connection(
     **engine_kwargs :
         Additional arguments to pass to `sqlalchemy.create_engine`.
     """
-    with create_engine(database, is_use_cached_engine=is_use_cached_engine, **engine_kwargs) as engine:
+    with create_engine(
+        database, is_use_cached_engine=is_use_cached_engine, **engine_kwargs
+    ) as engine:
         connection = None
         try:
             connection = engine.connect()
@@ -226,14 +232,19 @@ def sql_to_df(
             )
 
         if table_name_to_enforce_types is not None:
-            db_table = sa.Table(table_name_to_enforce_types, sa.MetaData(), autoload_with=engine)
+            db_table = sa.Table(
+                table_name_to_enforce_types, sa.MetaData(), autoload_with=engine
+            )
             _enforce_type_cols_df_(df, db_table)
 
     return df
 
 
 def delete_rows_from_db(
-    database: Union[str, sa.engine.base.Engine], table_name: str, df: pd.DataFrame, chunksize=10000
+    database: Union[str, sa.engine.base.Engine],
+    table_name: str,
+    df: pd.DataFrame,
+    chunksize=10000,
 ):
     """Delete rows from a table in a SQLite database based on the values of a dataframe.
 
@@ -400,7 +411,9 @@ def append_df_to_db(
     """
     rows_added = 0
 
-    for df_chunk in _dataframe_chunk_generator(df_to_add, chunksize=commit_every_n_rows):
+    for df_chunk in _dataframe_chunk_generator(
+        df_to_add, chunksize=commit_every_n_rows
+    ):
         if is_prepare_to_add_to_db:
             # this removes exact duplicates and columns not in the database
             df_delta, df_to_add_primary_key_duplicates = prepare_to_add_to_db(
@@ -426,18 +439,24 @@ def append_df_to_db(
                 if conn.engine.dialect.name == "postgres":
                     to_sql_kwargs["chunksize"] = 10000
                     to_sql_kwargs["method"] = "multi"
-                df_delta.to_sql(table_name, conn, if_exists="append", index=index, **to_sql_kwargs)
+                df_delta.to_sql(
+                    table_name, conn, if_exists="append", index=index, **to_sql_kwargs
+                )
                 rows_added += len(df_delta)
 
         except Exception as e:
-            _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
+            _save_recovery(
+                df_delta, table_name, index=index, recovery_path=recovery_path, error=e
+            )
             if not is_skip_writing_errors:
                 raise e
 
     logging.info(f"Added {rows_added} rows to {table_name}")
 
 
-def get_primary_keys(database: Union[str, sa.engine.base.Engine], table_name: str) -> list[str]:
+def get_primary_keys(
+    database: Union[str, sa.engine.base.Engine], table_name: str
+) -> list[str]:
     """Get the primary keys of a table in a database.
 
     Parameters
@@ -454,7 +473,9 @@ def get_primary_keys(database: Union[str, sa.engine.base.Engine], table_name: st
 
 
 ### Secondary helpers ###
-def get_table_info(database: Union[str, sa.engine.base.Engine], table_name: str) -> pd.DataFrame:
+def get_table_info(
+    database: Union[str, sa.engine.base.Engine], table_name: str
+) -> pd.DataFrame:
     """Return a dataframe with the table information of table_name in a database."""
     with create_engine(database) as engine:
         table = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
@@ -544,16 +565,22 @@ def prepare_to_add_to_db(
         n_duplicates = is_primary_key_duplicates.sum()
 
         # for logging also shows the rows in the db
-        is_primary_key_duplicates_all = df_all.duplicated(subset=primary_keys, keep=False)
+        is_primary_key_duplicates_all = df_all.duplicated(
+            subset=primary_keys, keep=False
+        )
         grouped = df_all[is_primary_key_duplicates_all].groupby(primary_keys)
-        example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(list(grouped.groups.keys())[0])
+        example_primary_key_duplicates = df_all.groupby(primary_keys).get_group(
+            list(grouped.groups.keys())[0]
+        )
         logging.warning(
             f"Trying to add {n_duplicates} rows with primary keys {primary_keys} that already exist in the "
             f"database but have different values for non-primary keys. Example:\n {example_primary_key_duplicates}"
         )
 
     df_try_added_primary_key_duplicates = df_all[is_primary_key_duplicates]
-    df_all = df_all[~is_primary_key_duplicates]  # remove the rows whose primary keys already exist in the database
+    df_all = df_all[
+        ~is_primary_key_duplicates
+    ]  # remove the rows whose primary keys already exist in the database
 
     # Remove rows that are already in the database
     df_delta = get_delta_df(df_all, df_db)
@@ -567,7 +594,9 @@ def prepare_to_add_to_db(
 def get_delta_df(df_all: pd.DataFrame, df_subset: pd.DataFrame) -> pd.DataFrame:
     """return the complement of df_subset"""
     columns = list(df_all.columns)
-    df_ind = df_all.merge(df_subset.drop_duplicates(), on=columns, how="left", indicator=True)
+    df_ind = df_all.merge(
+        df_subset.drop_duplicates(), on=columns, how="left", indicator=True
+    )
     return df_ind.query("_merge == 'left_only' ")[columns]
 
 
@@ -601,11 +630,16 @@ def get_sql_where_from_df(
             db_table = table
 
         # Create a SELECT statement using and_ and or_
-        conditions = [sa.and_(*[db_table.c[key] == value for key, value in row.items()]) for _, row in df.iterrows()]
+        conditions = [
+            sa.and_(*[db_table.c[key] == value for key, value in row.items()])
+            for _, row in df.iterrows()
+        ]
         where_clause = sa.or_(*conditions)
 
         if is_str:
-            return str(where_clause.compile(engine, compile_kwargs={"literal_binds": True}))
+            return str(
+                where_clause.compile(engine, compile_kwargs={"literal_binds": True})
+            )
         return where_clause
 
 
@@ -682,8 +716,11 @@ def _save_recovery(
     """Save the rows that failed to be added to the database"""
 
     # saves the error rows to a csv file to avoid losing the data
-    random_idx = random.randint(10**5, 10**6)
-    recovery_all_path = Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.json"
+    rng = random.Random(time.time())
+    random_idx = rng.randint(10**5, 10**6)
+    recovery_all_path = (
+        Path(recovery_path) / f"failed_add_to_{table_name}_all_{random_idx}.json"
+    )
 
     # save json as a list of dict if you don't want to keep index, else dict of dict
     orient = "index" if index else "records"
