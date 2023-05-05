@@ -111,6 +111,10 @@ def anthropic_completion(
         )
         max_instances = max_batches * batch_size
 
+    if batch_size > 1:
+        logging.warning("Batching is not supported for Anthropic API. Setting batch_size to 1.")
+        batch_size = 1
+
     prompts = prompts[:max_instances]
     num_prompts = len(prompts)
     prompt_batches = [
