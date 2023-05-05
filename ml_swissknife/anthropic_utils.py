@@ -98,6 +98,7 @@ def anthropic_completion(
             - an openai_object.OpenAIObject object (if return_text is False)
             - a list of objects of the above types (if decoding_args.n > 1)
     """
+    assert num_procs < 8, "Anthropic API only allows 8 concurrent requests."
     logging.info(f"Decoding with Anthropic API model {model_name} and numproc == {num_procs}.")
     is_single_prompt = isinstance(prompts, (str, dict))
     if is_single_prompt:
