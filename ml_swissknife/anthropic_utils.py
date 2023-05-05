@@ -32,7 +32,7 @@ def convert_args_oai_to_anthropic(decoding_args: dict):
 def _anthropic_completion_helper(
     prompt_batch: Sequence[str],
     shared_kwargs: dict,
-    sleep_time: int = 1,
+    sleep_time: int = 2,
 ) -> Sequence[dict[str, Union[str, float]]]:
     shared_kwargs = copy.deepcopy(shared_kwargs)
     client = anthropic.Client(os.environ["ANTHROPIC_API_KEY"])
@@ -69,7 +69,7 @@ def anthropic_completion(
     prompts: Union[str, Sequence[str], Sequence[dict[str, str]], dict[str, str]],
     decoding_args: OpenAIDecodingArguments,
     model_name="claude-v1.3",
-    sleep_time=1,
+    sleep_time=2,
     batch_size=1,
     max_instances=sys.maxsize,
     max_batches=sys.maxsize,
