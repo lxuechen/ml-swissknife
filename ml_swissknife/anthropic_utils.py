@@ -14,6 +14,7 @@ import tqdm
 import copy
 from .openai_utils import OpenAIDecodingArguments, convert_dict_to_openai_object
 
+
 def convert_args_oai_to_anthropic(decoding_args: dict):
     args_mapping = {
         "max_tokens": "max_tokens_to_sample",
@@ -27,9 +28,11 @@ def convert_args_oai_to_anthropic(decoding_args: dict):
         decoding_args["stop_sequences"] = [anthropic.HUMAN_PROMPT]
     return decoding_args
 
+
 def _anthropic_completion_helper(
     prompt_batch: Sequence[str],
     shared_kwargs: dict,
+    sleep_time: int = 1,
 ) -> Sequence[dict[str, Union[str, float]]]:
     shared_kwargs = copy.deepcopy(shared_kwargs)
     client = anthropic.Client(os.environ["ANTHROPIC_API_KEY"])
@@ -38,9 +41,7 @@ def _anthropic_completion_helper(
 
     while True:
         try:
-            response = client.completion(
-                prompt=prompt_batch[0], **shared_kwargs
-            )
+            response = client.completion(prompt=prompt_batch[0], **shared_kwargs)
 
             if response["completion"] == "":
                 response["completion"] = " "  # annoying doesn't allow empty string
@@ -49,7 +50,8 @@ def _anthropic_completion_helper(
         except anthropic.api.ApiException as e:
             logging.warning(f"ApiException: {e}.")
             if "status code: 429" in str(e):
-                raise ValueError("Reduce concurrent number of processes in constants.")
+                logging.warning(f"Rate limit hit. Sleeping for {sleep_time} seconds.")
+                time.sleep(sleep_time)
             elif "exceeds max" in str(e):
                 shared_kwargs["max_tokens_to_sample"] = int(shared_kwargs["max_tokens_to_sample"] * 0.8)
                 logging.warning(f"Reducing target length to {shared_kwargs['max_tokens_to_sample']}, Retrying...")
@@ -64,16 +66,16 @@ def _anthropic_completion_helper(
 
 
 def anthropic_completion(
-        prompts: Union[str, Sequence[str], Sequence[dict[str, str]], dict[str, str]],
-        decoding_args: OpenAIDecodingArguments,
-        model_name="claude-v1.3",
-        sleep_time=2,
-        batch_size=1,
-        max_instances=sys.maxsize,
-        max_batches=sys.maxsize,
-        return_text=False,
-        num_procs=1,
-        **decoding_kwargs,
+    prompts: Union[str, Sequence[str], Sequence[dict[str, str]], dict[str, str]],
+    decoding_args: OpenAIDecodingArguments,
+    model_name="claude-v1.3",
+    sleep_time=1,
+    batch_size=1,
+    max_instances=sys.maxsize,
+    max_batches=sys.maxsize,
+    return_text=False,
+    num_procs=1,
+    **decoding_kwargs,
 ) -> Union[Sequence[str], Sequence[dict[str, str]],]:
     """Decode with OpenAI API.
 
@@ -129,8 +131,7 @@ def anthropic_completion(
     )
     with multiprocessing.Pool(num_procs) as p:
         partial_completion_helper = functools.partial(
-            _anthropic_completion_helper,
-            shared_kwargs=shared_kwargs,
+            _anthropic_completion_helper, shared_kwargs=shared_kwargs, sleep_time=sleep_time
         )
         completions = list(
             tqdm.tqdm(
