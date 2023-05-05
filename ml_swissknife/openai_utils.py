@@ -64,6 +64,11 @@ def requires_chatml(model: str) -> bool:
     # TODO: this should ideally be an OpenAI function... Maybe it already exists?
     return "turbo" in model or "gpt-4" in model
 
+def convert_dict_to_openai_object(data: dict) -> openai_object.OpenAIObject:
+    return_data = openai_object.OpenAIObject()
+    return_data.update(data)
+    return return_data
+
 
 def _openai_completion_helper(
     prompt_batch: Sequence[StrOrOpenAIObject],

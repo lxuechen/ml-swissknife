@@ -26,24 +26,19 @@ StrOrCompletionObject = Union[
 crfm_model_names = tuple(MODEL_NAME_TO_MODEL.keys())
 
 
-def convert_dict_to_openai_object(data: dict) -> openai_object.OpenAIObject:
-    return_data = openai_object.OpenAIObject()
-    return_data.update(data)
-    return return_data
-
 
 def convert_crfm_object_to_openai_object(
     data: helm.common.request.Sequence,
 ) -> openai_object.OpenAIObject:
     """Convert helm.common.request.Sequence object to openai_object.OpenAIObject object."""
-    return_data = convert_dict_to_openai_object(
+    return_data = openai_utils.convert_dict_to_openai_object(
         dict(
             text=data.text,
-            logprobs=convert_dict_to_openai_object(
+            logprobs=openai_utils.convert_dict_to_openai_object(
                 dict(
                     tokens=[token.text for token in data.tokens],
                     top_logprobs=[
-                        convert_dict_to_openai_object(token.top_logprobs)
+                        openai_utils.convert_dict_to_openai_object(token.top_logprobs)
                         for token in data.tokens
                     ],
                     token_logprobs=[token.logprob for token in data.tokens],
