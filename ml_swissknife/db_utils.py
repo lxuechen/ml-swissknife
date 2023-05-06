@@ -359,6 +359,7 @@ def append_df_to_db(
     commit_every_n_rows: Optional[int] = None,
     is_skip_writing_errors: bool = False,
     is_keep_all_columns_from_db: bool = True,
+    n_retries: int = 3,
     **to_sql_kwargs,
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
@@ -391,6 +392,9 @@ def append_df_to_db(
     is_skip_writing_errors : bool, optional
         Whether to skip any encountered errors when writing to db. This is useful when you are using `commit_every_n_rows`
         and still want to continue writing.
+
+    n_retries : int, optional
+        Number of retries if you have errors.
 
     **to_sql_kwargs :
         Additional arguments to `to_sql_kwargs`.
@@ -427,9 +431,25 @@ def append_df_to_db(
                 rows_added += len(df_delta)
 
         except Exception as e:
-            _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
-            if not is_skip_writing_errors:
-                raise e
+            if n_retries > 0:
+                logging.info(f"You encountered error: {e}. \n\nRetrying appending {n_retries} more times")
+                append_df_to_db(
+                    df_to_add=df_to_add,
+                    database=database,
+                    table_name=table_name,
+                    index=index,
+                    recovery_path=recovery_path,
+                    is_prepare_to_add_to_db=is_prepare_to_add_to_db,
+                    commit_every_n_rows=commit_every_n_rows,
+                    is_skip_writing_errors=is_skip_writing_errors,
+                    is_keep_all_columns_from_db=is_keep_all_columns_from_db,
+                    n_retries=n_retries - 1,
+                    **to_sql_kwargs,
+                )
+            else:
+                _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
+                if not is_skip_writing_errors:
+                    raise e
 
     logging.info(f"Added {rows_added} rows to {table_name}")
 
@@ -694,11 +714,11 @@ def _save_recovery(
         logging.error(f"Error: {error}")
 
 
-def _dataframe_chunk_generator(df: pd.DataFrame, chunksize: Optional[int] = None):
+def _dataframe_chunk_generator(df: pd.DataFrame, chunksize: Optional[int] = None, is_force_tqdm: bool = False):
     if chunksize is None:
         chunksize = max(1, len(df))
 
-    if chunksize >= len(df):
+    if chunksize >= len(df) and not is_force_tqdm:
         iterator = range(0, len(df), chunksize)
     else:
         iterator = tqdm.tqdm(range(0, len(df), chunksize))
