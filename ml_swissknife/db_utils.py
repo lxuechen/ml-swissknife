@@ -37,6 +37,8 @@ import numpy as np
 import sqlalchemy as sa
 from typing import Union, Optional, Sequence, Tuple
 import os
+import psycopg2
+from sqlalchemy.exc import IntegrityError
 
 logging.basicConfig(level=logging.INFO)
 
@@ -359,7 +361,7 @@ def append_df_to_db(
     commit_every_n_rows: Optional[int] = None,
     is_skip_writing_errors: bool = False,
     is_keep_all_columns_from_db: bool = True,
-    n_retries: int = 3,
+    n_retries_unique: int = 5,
     **to_sql_kwargs,
 ):
     """Add a dataframe to a table in a SQLite database, with recovery in case of failure.
@@ -393,7 +395,7 @@ def append_df_to_db(
         Whether to skip any encountered errors when writing to db. This is useful when you are using `commit_every_n_rows`
         and still want to continue writing.
 
-    n_retries : int, optional
+    n_retries_unique : int, optional
         Number of retries if you have errors.
 
     **to_sql_kwargs :
@@ -431,8 +433,11 @@ def append_df_to_db(
                 rows_added += len(df_delta)
 
         except Exception as e:
-            if n_retries > 0:
-                logging.info(f"You encountered error: {e}. \n\nRetrying appending {n_retries} more times")
+            # the only errors you want to retry on are the one where primary key is not unique because
+            # prepare_to_add_to_db should filter those
+            is_unique_error = isinstance(e, IntegrityError) and isinstance(e.orig, psycopg2.errors.UniqueViolation)
+            if is_unique_error and is_prepare_to_add_to_db and n_retries_unique > 0:
+                logging.info(f"You encountered error: {e}. \n\nRetrying appending {n_retries_unique} more times")
                 append_df_to_db(
                     df_to_add=df_delta,
                     database=database,
@@ -443,7 +448,7 @@ def append_df_to_db(
                     commit_every_n_rows=commit_every_n_rows,
                     is_skip_writing_errors=is_skip_writing_errors,
                     is_keep_all_columns_from_db=is_keep_all_columns_from_db,
-                    n_retries=n_retries - 1,
+                    n_retries_unique=n_retries_unique - 1,
                     **to_sql_kwargs,
                 )
                 rows_added += len(df_delta)
@@ -707,12 +712,12 @@ def _save_recovery(
     # save json as a list of dict if you don't want to keep index, else dict of dict
     orient = "index" if index else "records"
     df_delta.to_json(recovery_all_path, orient=orient, indent=2)
-    logging.error(
+    logging.warning(
         f"Failed to add {len(df_delta)} rows to {table_name}."
         f"Dumping all the df that you couldn't save to {recovery_all_path}"
     )
     if error is not None:
-        logging.error(f"Error: {error}")
+        logging.warning(f"Error we are skipping: {error}")
 
 
 def _dataframe_chunk_generator(df: pd.DataFrame, chunksize: Optional[int] = None, is_force_tqdm: bool = False):
