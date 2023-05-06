@@ -27,6 +27,7 @@ Note that if you want in memory database you can just use ":memory:" as the data
 import time
 import logging
 import random
+from sqlalchemy.dialects.postgresql import JSONB
 from contextlib import contextmanager
 from pathlib import Path
 import pandas as pd
@@ -274,6 +275,7 @@ def get_values_from_keys(
     max_rows_in_memory: int = int(1e7),
     min_rows_in_memory: int = 1000,
     is_logging: bool = False,
+    is_drop_JSONB: bool = True,
 ) -> pd.DataFrame:
     """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows.
 
@@ -299,6 +301,9 @@ def get_values_from_keys(
     min_rows_in_memory : int, optional
         Minimum number of rows in dataframe before which you should prefer loading all table in memory rather than
         using SQL.
+
+    is_drop_JSONB : bool, optional
+        If True, will drop JSONB columns from the dataframe.
 
     Examples
     --------
@@ -345,6 +350,9 @@ def get_values_from_keys(
                 out = pd.DataFrame(columns=db_table.columns.keys())
             else:
                 out = pd.concat(outs, ignore_index=True)
+
+    if is_drop_JSONB:
+        out = out.drop(columns=[col for col in out.columns if isinstance(db_table.columns[col].type, JSONB)])
 
     _enforce_type_cols_df_(out, db_table)
 
