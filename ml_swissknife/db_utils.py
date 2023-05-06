@@ -436,7 +436,7 @@ def append_df_to_db(
             # the only errors you want to retry on are the one where primary key is not unique because
             # prepare_to_add_to_db should filter those
             is_unique_error = isinstance(e, IntegrityError) and isinstance(e.orig, psycopg2.errors.UniqueViolation)
-            if is_unique_error and is_prepare_to_add_to_db and n_retries_unique > 0:
+            if is_unique_error and n_retries_unique > 0:
                 logging.info(f"You encountered error: {e}. \n\nRetrying appending {n_retries_unique} more times")
                 append_df_to_db(
                     df_to_add=df_delta,
