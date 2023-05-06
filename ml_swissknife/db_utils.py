@@ -434,7 +434,7 @@ def append_df_to_db(
             if n_retries > 0:
                 logging.info(f"You encountered error: {e}. \n\nRetrying appending {n_retries} more times")
                 append_df_to_db(
-                    df_to_add=df_to_add,
+                    df_to_add=df_delta,
                     database=database,
                     table_name=table_name,
                     index=index,
@@ -446,6 +446,7 @@ def append_df_to_db(
                     n_retries=n_retries - 1,
                     **to_sql_kwargs,
                 )
+                rows_added += len(df_delta)
             else:
                 _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
                 if not is_skip_writing_errors:
