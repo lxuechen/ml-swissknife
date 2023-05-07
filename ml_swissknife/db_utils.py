@@ -272,9 +272,9 @@ def get_values_from_keys(
     table_name: str,
     df: pd.DataFrame,
     chunksize: int = 10000,
-    max_rows_in_memory: int = int(1e7),
+    max_rows_in_memory: int = int(1e9),
     min_rows_in_memory: int = 1000,
-    is_logging: bool = False,
+    is_logging: bool = True,
     is_drop_JSONB: bool = True,
 ) -> pd.DataFrame:
     """Given a dataframe containing the primary keys of a table_name, will return the corresponding rows.
