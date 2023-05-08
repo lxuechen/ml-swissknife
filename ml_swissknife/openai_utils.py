@@ -64,6 +64,7 @@ def requires_chatml(model: str) -> bool:
     # TODO: this should ideally be an OpenAI function... Maybe it already exists?
     return "turbo" in model or "gpt-4" in model
 
+
 def convert_dict_to_openai_object(data: dict) -> openai_object.OpenAIObject:
     return_data = openai_object.OpenAIObject()
     return_data.update(data)
@@ -110,6 +111,9 @@ def _openai_completion_helper(
                 logging.warning(f"Reducing target length to {shared_kwargs['max_tokens']}, Retrying...")
             else:
                 logging.warning("Hit request rate limit; retrying...")
+                if len(organization_ids) > 1:
+                    openai.organization = random.choice([o for o in organization_ids if o != openai.organization])
+                    logging.warning(f"Switching to organization: {openai.organization} for OAI API key.")
                 time.sleep(sleep_time)  # Annoying rate limit on requests.
     return choices
 
