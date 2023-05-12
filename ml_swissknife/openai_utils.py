@@ -17,11 +17,26 @@ from typing import Optional, Sequence, Union
 import random
 
 import openai
+import tiktoken
 import tqdm
 from openai import openai_object
 import copy
 
 StrOrOpenAIObject = Union[str, openai_object.OpenAIObject]
+
+# These lengths are slightly smaller than the official ones to be safe.
+MODEL_NAME_TO_CONTEXT_LENGTH = {
+    "text-davinci-003": 4000,
+    "gpt-3.5-turbo": 4000,
+    "gpt-4": 4000,
+}
+
+# Reference: https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
+MODEL_NAME_TO_ENCODING_NAME = {
+    "text-davinci-003": "p50k_base",
+    "gpt-3.5-turbo": "cl100k_base",
+    "gpt-4": "cl100k_base",
+}
 
 openai_org = os.getenv("OPENAI_ORG")
 if openai_org is not None:
@@ -158,6 +173,15 @@ def _openai_completion(
     if is_single_prompt:
         prompts = [prompts]
 
+    # Limit the number of instances to decode.
+    if max_batches < sys.maxsize:
+        logging.warning(
+            "`max_batches` will be deprecated in the future, please use `max_instances` instead."
+            "Setting `max_instances` to `max_batches * batch_size` for now."
+        )
+        max_instances = max_batches * batch_size
+    prompts = prompts[:max_instances]
+
     # convert prompts to chat format
     is_chat = requires_chatml(model_name)
     is_chat_format = isinstance(prompts[0], dict)
@@ -168,18 +192,10 @@ def _openai_completion(
         if not is_chat_format:
             prompts = [prompt_to_chatml(prompt) for prompt in prompts]
 
-    if max_batches < sys.maxsize:
-        logging.warning(
-            "`max_batches` will be deprecated in the future, please use `max_instances` instead."
-            "Setting `max_instances` to `max_batches * batch_size` for now."
-        )
-        max_instances = max_batches * batch_size
-
-    prompts = prompts[:max_instances]
-    num_prompts = len(prompts)
+    # Break prompts into batches.
     prompt_batches = [
-        prompts[batch_id * batch_size : (batch_id + 1) * batch_size]
-        for batch_id in range(int(math.ceil(num_prompts / batch_size)))
+        prompts[batch_id * batch_size: (batch_id + 1) * batch_size]
+        for batch_id in range(int(math.ceil(len(prompts) / batch_size)))
     ]
 
     shared_kwargs = dict(
@@ -208,7 +224,8 @@ def _openai_completion(
         completions = [completion.text for completion in completions]
     if decoding_args.n > 1:
         # make completions a nested list, where each entry is a consecutive decoding_args.n of original entries.
-        completions = [completions[i : i + decoding_args.n] for i in range(0, len(completions), decoding_args.n)]
+        completions = [completions[i: i + decoding_args.n] for i in range(0, len(completions), decoding_args.n)]
+    # TODO: repack the stuff.
     if is_single_prompt:
         # Return non-tuple if only 1 input and 1 generation.
         (completions,) = completions
