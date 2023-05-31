@@ -14,7 +14,7 @@ import time
 import multiprocessing
 import functools
 from typing import Optional, Sequence, Union
-
+import random
 import openai
 import tqdm
 from openai import openai_object
@@ -75,6 +75,7 @@ def _openai_completion_helper(
     is_chat: bool,
     sleep_time: int,
     shared_kwargs: dict,
+    organization_ids=(),
 ):
     # copy shared_kwargs to avoid modifying it
     shared_kwargs = copy.deepcopy(shared_kwargs)
