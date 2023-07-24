@@ -22,10 +22,12 @@ def gpu_job_wrapper(
     salt_length=8,
     memory="16G",
     time="3-0",  # Timeout, e.g., "10-0" means 10 days and 0 hours.
-    # If True, submit the job held and rely on background fetcher to run: /afs/cs.stanford.edu/u/lxuechen/scripts/job_manager.sh.
+    # If True, submit the job held and rely on background fetcher to run:
+    #   /afs/cs.stanford.edu/u/lxuechen/scripts/job_manager.sh.
     hold_job=True,
     log_path=None,
     exclusion="john0,john1,john2,john3,john4,john5,john6,john7,john8,john9,john10,john11,jagupard15",
+    machine=None,
     binary="nlprun",
 ):
     """Create a string version of the command to be run that can be written to file.
@@ -53,6 +55,8 @@ def gpu_job_wrapper(
         f"--memory {memory} "
         f"--queue {queue} "
     )
+    if machine is not None:
+        wrapped_command += f"-m {machine} "
     if cpu_count is not None:
         wrapped_command += f"-c {cpu_count} "
     if gpu_type is not None:
@@ -89,11 +93,11 @@ def high_end_gpu_job_wrapper(
     salt_length=8,
     memory="16G",
     time="3-0",  # Timeout, e.g., "10-0" means 10 days and 0 hours.
-    # If True, submit the job held and rely on background fetcher to run: /afs/cs.stanford.edu/u/lxuechen/scripts/job_manager.sh.
     hold_job=True,
     log_path=None,
     binary="nlprun",
-    exclusion="sphinx1,sphinx2,sphinx3"
+    exclusion="sphinx1,sphinx2,sphinx3",
+    machine=None,
 ):
     """Schedule jobs on machines with A100 80G."""
     return gpu_job_wrapper(
@@ -113,6 +117,7 @@ def high_end_gpu_job_wrapper(
         hold_job=hold_job,
         log_path=log_path,
         exclusion=exclusion,
+        machine=machine,
         binary=binary,
     )
 
@@ -129,6 +134,7 @@ def cpu_job_wrapper(
     memory="16g",
     hold_job=True,
     log_path=None,
+    machine=None,
 ):
     """Wrapper to create commands that run CPU-only jobs.
 
@@ -148,6 +154,8 @@ def cpu_job_wrapper(
         f"--memory {memory} "
         f"-g 0 "  # No GPU.
     )
+    if machine is not None:
+        wrapped_command += f"-m {machine} "
     if time is not None:
         wrapped_command += f"-t {time} "
     if hold_job:
@@ -177,22 +185,9 @@ def report_node_and_scratch_dirs():
     return machine_name, scratch_dirs
 
 
-# These are useful for naming directories with float or int parameter values.
-def float2str(x, precision=8):
-    if x is None:
-        return str(None)
-    return f"{x:.{precision}f}".replace('.', "_")
-
-
-def int2str(x, leading_zeros=8):
-    if x is None:
-        return str(None)
-    return f"{x:0{leading_zeros}d}"
-
-
 class ContainerMeta(type):
     def all(cls):
-        return sorted(getattr(cls, x) for x in dir(cls) if not x.startswith('__'))
+        return sorted(getattr(cls, x) for x in dir(cls) if not x.startswith("__"))
 
     def __str__(cls):
         return str(cls.all())
