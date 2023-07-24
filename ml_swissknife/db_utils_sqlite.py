@@ -28,10 +28,12 @@ import random
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-import pandas as pd
-from ml_swissknife.types import PathOrIOBase
 from typing import Optional
+
 import numpy as np
+import pandas as pd
+
+from ml_swissknife.types import PathOrIOBase
 
 try:
     import sqlalchemy as sa

@@ -38,7 +38,7 @@ class PositionalEncoding(nn.Module):
         pe = pe.unsqueeze(0)
         if not batch_first:
             pe = pe.transpose(0, 1)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
         self.batch_first = batch_first
 
     def forward(self, x):
@@ -51,7 +51,7 @@ class PositionalEncoding(nn.Module):
         Examples:
             >>> output = pos_encoder(x)
         """
-        offset = self.pe[:, :x.size(1)] if self.batch_first else self.pe[:x.size(0), :]
+        offset = self.pe[:, : x.size(1)] if self.batch_first else self.pe[: x.size(0), :]
         x = x + offset
         return self.dropout(x)
 
@@ -68,7 +68,7 @@ class Residual(nn.Module):
 class VerboseSequential(nn.Module):
     """A Wrapper for nn.Sequential that prints intermediate output sizes."""
 
-    def __init__(self, *args, verbose=False, stream: str = 'stdout'):
+    def __init__(self, *args, verbose=False, stream: str = "stdout"):
         super(VerboseSequential, self).__init__()
         self.layers = nn.ModuleList(args)
         self.forward = self._forward_verbose if verbose else self._forward
@@ -76,13 +76,14 @@ class VerboseSequential(nn.Module):
 
     def _forward_verbose(self, net):
         stream = (
-            {'stdout': sys.stdout, 'stderr': sys.stderr}[self.stream]
-            if self.stream in ('stdout', 'stderr') else self.stream
+            {"stdout": sys.stdout, "stderr": sys.stderr}[self.stream]
+            if self.stream in ("stdout", "stderr")
+            else self.stream
         )
-        print(f'Input size: {net.size()}', file=stream)
+        print(f"Input size: {net.size()}", file=stream)
         for i, layer in enumerate(self.layers):
             net = layer(net)
-            print(f'Layer {i}, output size: {net.size()}', file=stream)
+            print(f"Layer {i}, output size: {net.size()}", file=stream)
         return net
 
     def _forward(self, net):
@@ -94,8 +95,7 @@ class VerboseSequential(nn.Module):
 class GatedLinear(nn.Module):
     def __init__(self, in_features: int, out_features: int, bias: Optional[bool] = True):
         super(GatedLinear, self).__init__()
-        self.linear = nn.Linear(
-            in_features=in_features, out_features=out_features + out_features, bias=bias)
+        self.linear = nn.Linear(in_features=in_features, out_features=out_features + out_features, bias=bias)
 
     def forward(self, x):
         x1, x2 = self.linear(x).chunk(chunks=2, dim=-1)
@@ -113,13 +113,15 @@ class SeparableConv1d(nn.Module):
     https://www.tensorflow.org/api_docs/python/tf/keras/layers/SeparableConv1D
     """
 
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 bias: Optional[bool] = True,
-                 padding: Optional[int] = 0,
-                 padding_mode: str = 'zeros'):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        bias: Optional[bool] = True,
+        padding: Optional[int] = 0,
+        padding_mode: str = "zeros",
+    ):
         super(SeparableConv1d, self).__init__()
         self.depthwise = torch.nn.Conv1d(
             in_channels,
@@ -128,7 +130,8 @@ class SeparableConv1d(nn.Module):
             groups=in_channels,
             bias=bias,
             padding=padding,
-            padding_mode=padding_mode)
+            padding_mode=padding_mode,
+        )
         self.pointwise = nn.Linear(in_channels, out_channels, bias=bias)
 
     def forward(self, x):

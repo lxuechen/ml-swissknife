@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 22.10.0
+    hooks:
+      - id: black
+        language_version: python3
+        exclude: ^experiments/.*|^latex/.*|^turk/.*
+        args: ["--line-length", "120"]
+  - repo: https://github.com/PyCQA/flake8
+    rev: 5.0.4
+    hooks:
+      - id: flake8
+        language_version: python3
+        exclude: ^experiments/.*|^latex/.*|^turk/.*
+        args: ["--max-line-length", "120"]
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+        name: isort (python)
+        exclude: ^experiments/.*|^latex/.*|^turk/.*
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v2.7.1
+    hooks:
+      - id: prettier
+        additional_dependencies:
+          - prettier@2.8.8
+          - "@trivago/prettier-plugin-sort-imports"
+        exclude: ^experiments/.*|^latex/.*|^turk/.*

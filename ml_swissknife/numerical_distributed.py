@@ -5,12 +5,12 @@ into chunks.
 
 With this code, I have scaled spectral computation to a model with 50 million optimizable parameters.
 """
-from typing import Optional, Union, Callable, Tuple
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import tqdm
-from torch.utils.data import DataLoader, TensorDataset, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 from ml_swissknife import utils
 
@@ -56,7 +56,7 @@ def orthogonal_iteration(
     """
     loader = _input_mat_to_loader(input_mat, dim0_chunk_size)
     n = sum(batch.size(0) for batch, in loader)
-    batch, = next(iter(loader))
+    (batch,) = next(iter(loader))
     p = batch.size(1)
     k = min(k, p, n)
 
@@ -69,7 +69,9 @@ def orthogonal_iteration(
     for global_step in tqdm.tqdm(range(1, num_power_iteration + 1), desc="power iteration", disable=disable_tqdm):
         matrix = _mem_saving_matmul(loader=loader, eigenvectors=eigenvectors, disable_tqdm=disable_tqdm)
         eigenvectors = _orthogonalize(
-            matrix=matrix, chunk_size=orthogonalization_chunk_size, disable_tqdm=disable_tqdm
+            matrix=matrix,
+            chunk_size=orthogonalization_chunk_size,
+            disable_tqdm=disable_tqdm,
         )  # (p, k).
         eigenvalues = _eigenvectors_to_eigenvalues(loader=loader, eigenvectors=eigenvectors, disable_tqdm=disable_tqdm)
 
@@ -122,9 +124,7 @@ def check_error(
         batch_recs = []
         for evec_chunk in evec_chunks:
             this_batch = batch.to(evec_chunk.device, non_blocking=True)
-            batch_recs.append(
-                torch.mm(evec_chunk, torch.mm(evec_chunk.T, this_batch.T)).T
-            )
+            batch_recs.append(torch.mm(evec_chunk, torch.mm(evec_chunk.T, this_batch.T)).T)
 
         batch_rec = batch_recs[0]
         for this_batch_rec in batch_recs[1:]:
@@ -164,7 +164,7 @@ def _mem_saving_matmul(
 
         outs = [o.cpu() for o in outs]
         for o, chunk_col_range in utils.zip_(outs, chunk_col_ranges):
-            out[:, chunk_col_range[0]:chunk_col_range[1]] += o
+            out[:, chunk_col_range[0] : chunk_col_range[1]] += o
 
     return out
 
@@ -194,7 +194,7 @@ def _orthogonalize(matrix, disable_tqdm: bool, chunk_size):
         col_ = col_.to(rest_)
         start_idx = 0
         while start_idx < rest_.size(1):
-            batch = rest_[:, start_idx:start_idx + chunk_size]
+            batch = rest_[:, start_idx : start_idx + chunk_size]
             batch -= torch.sum(col_ * batch, dim=0) * col_
             start_idx += chunk_size
 
@@ -202,15 +202,15 @@ def _orthogonalize(matrix, disable_tqdm: bool, chunk_size):
         k, offset = col_idx_to_chunk_idx_and_offset(i)
         matrix_chunk = matrix_chunks[k]
 
-        col = matrix_chunk[:, offset:offset + 1]
+        col = matrix_chunk[:, offset : offset + 1]
         col /= col.norm(2)
         if i + 1 < matrix.size(1):
             # current matrix_chunk.
-            rest = matrix_chunk[:, offset + 1:]
+            rest = matrix_chunk[:, offset + 1 :]
             gram_schmidt_helper(col, rest)
 
             # future matrix_chunk.
-            for future_matrix_chunk in matrix_chunks[k + 1:]:
+            for future_matrix_chunk in matrix_chunks[k + 1 :]:
                 rest = future_matrix_chunk
                 gram_schmidt_helper(col, rest)
     return torch.cat(tuple(matrix_chunk.cpu() for matrix_chunk in matrix_chunks), dim=1)
@@ -226,18 +226,18 @@ def _eigenvectors_to_eigenvalues(
     evec_chunks = torch.tensor_split(eigenvectors, len(devices), dim=1)
     evec_chunks = tuple(evec_chunk.to(device) for evec_chunk, device in utils.zip_(evec_chunks, devices))
 
-    dens = [(chunk ** 2.).sum(dim=0) for chunk in evec_chunks]
+    dens = [(chunk**2.0).sum(dim=0) for chunk in evec_chunks]
     nums = [torch.zeros_like(den) for den in dens]
     for (batch,) in tqdm.tqdm(loader, disable=disable_tqdm, desc="evec2eval"):
         for chunk_id, chunk in enumerate(evec_chunks):
             # Don't override `batch` here to prevent weird bugs. Moving batches across GPUs introduces issues!
             gpu_batch = batch.to(chunk.device)
             vec = gpu_batch @ chunk  # (nj, ki).
-            nums[chunk_id] += (vec ** 2.).sum(dim=0)
+            nums[chunk_id] += (vec**2.0).sum(dim=0)
     nums = [num.cpu() for num in nums]
     dens = [den.cpu() for den in dens]
     return torch.cat(nums) / torch.cat(dens)
 
 
 def _get_devices() -> Tuple[Union[str, int], ...]:
-    return tuple(range(torch.cuda.device_count())) if torch.cuda.is_available() else ('cpu',)
+    return tuple(range(torch.cuda.device_count())) if torch.cuda.is_available() else ("cpu",)

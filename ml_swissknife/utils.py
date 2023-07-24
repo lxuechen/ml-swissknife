@@ -33,7 +33,7 @@ import signal
 import sys
 import time
 import warnings
-from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union, Any
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import requests
@@ -850,7 +850,10 @@ def manual_seed(args_or_seed: Union[int, argparse.Namespace], hardcore=True, dis
 
 
 @contextlib.contextmanager
-def tmp_seed(args_or_seed: Optional[Union[int, argparse.Namespace]], is_cuda: bool = torch.cuda.is_available()):
+def tmp_seed(
+    args_or_seed: Optional[Union[int, argparse.Namespace]],
+    is_cuda: bool = torch.cuda.is_available(),
+):
     """Context manager to use a temporary random seed with `with` statement."""
 
     np_state = np.random.get_state()
@@ -1005,8 +1008,8 @@ def evaluate_prettiness(
     Returns:
         A dictionary of metric values.
     """
-    import torch_fidelity
     import matplotlib.pyplot as plt
+    import torch_fidelity
 
     if sampler is None and folder is None:
         raise ValueError(f"model and folder cannot both be none")
@@ -3133,8 +3136,9 @@ def gpu_scheduler(
         log: Write all logs to `train_dir/log.out` if True. So assumes command has `--train_dir` argument.
     """
     print(f"Scheduling {len(commands)} jobs...")
-    import GPUtil
     import subprocess
+
+    import GPUtil
 
     procs = []
     for job_id, command in enumerate(commands):

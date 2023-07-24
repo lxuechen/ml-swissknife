@@ -1,17 +1,16 @@
-import dataclasses
+import copy
+import functools
 import logging
 import math
+import multiprocessing
 import os
 import sys
 import time
-import multiprocessing
-import functools
-from typing import Optional, Sequence, Union
-import random
+from typing import Sequence, Union
 
 import anthropic
 import tqdm
-import copy
+
 from .openai_utils import OpenAIDecodingArguments, convert_dict_to_openai_object
 
 
@@ -131,7 +130,9 @@ def anthropic_completion(
     )
     with multiprocessing.Pool(num_procs) as p:
         partial_completion_helper = functools.partial(
-            _anthropic_completion_helper, shared_kwargs=shared_kwargs, sleep_time=sleep_time
+            _anthropic_completion_helper,
+            shared_kwargs=shared_kwargs,
+            sleep_time=sleep_time,
         )
         completions = list(
             tqdm.tqdm(
