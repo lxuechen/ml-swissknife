@@ -8,7 +8,7 @@ TODO:
     Memory scaling for `orthogonal_iteration_mem_saving` is bad in G-S.
 """
 import math
-from typing import Callable, Optional, Union, Sequence
+from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -45,7 +45,7 @@ def power_iteration(
         v0 = mvp / mvp.norm(dim=-1, keepdim=True)
 
     vector = v0
-    value = (matmul_closure(vector) * vector).sum(dim=-1) / (vector ** 2).sum(dim=-1)
+    value = (matmul_closure(vector) * vector).sum(dim=-1) / (vector**2).sum(dim=-1)
     return value, vector
 
 
@@ -212,16 +212,16 @@ def _gram_schmidt_mem_saving(Q, device, batch_size=100):
     n, m = Q.size()
     for i in range(m):
         # Normalize the ith column.
-        col = Q[:, i: i + 1]  # (n, 1).
+        col = Q[:, i : i + 1]  # (n, 1).
         col /= col.norm(2)
         # Remove contribution of this component for remaining columns.
         if i + 1 < m:
-            rest = Q[:, i + 1:]  # (p, r).
+            rest = Q[:, i + 1 :]  # (p, r).
             r = rest.size(1)
 
             start_idx = 0
             while start_idx < r:
-                batch = rest[:, start_idx:start_idx + batch_size]
+                batch = rest[:, start_idx : start_idx + batch_size]
                 # Broadcast, point-wise multiply, and then reduce seems to
                 # suffer from less imprecision than direct matmul or mm.
                 batch -= torch.sum(col * batch, dim=0) * col
@@ -241,8 +241,14 @@ def eigenvectors_to_eigenvalues(
     return ((mat @ eigenvectors) * eigenvectors).sum(dim=0) / (eigenvectors * eigenvectors).sum(dim=0)
 
 
-def eigv_to_density(eig_vals, all_weights=None, grids=None,
-                    grid_len=10000, sigma_squared=None, grid_expand=1e-2):
+def eigv_to_density(
+    eig_vals,
+    all_weights=None,
+    grids=None,
+    grid_len=10000,
+    sigma_squared=None,
+    grid_expand=1e-2,
+):
     """Compute the smoothed spectral density from a set of eigenvalues.
     Convolves the given eigenvalues with a Gaussian kernel, weighting the values
     by all_weights (or uniform weighting if all_weights is None). Example output
@@ -277,12 +283,12 @@ def eigv_to_density(eig_vals, all_weights=None, grids=None,
     lambda_min = np.nanmean(np.min(eig_vals, axis=1), axis=0) - grid_expand
 
     if grids is None:
-        assert grid_len is not None, 'grid_len is required if grids is None.'
+        assert grid_len is not None, "grid_len is required if grids is None."
         grids = np.linspace(lambda_min, lambda_max, num=grid_len)
 
     grid_len = grids.shape[0]
     if sigma_squared is None:
-        sigma = 10 ** -5 * max(1, (lambda_max - lambda_min))
+        sigma = 10**-5 * max(1, (lambda_max - lambda_min))
     else:
         sigma = sigma_squared * max(1, (lambda_max - lambda_min))
 
@@ -290,7 +296,7 @@ def eigv_to_density(eig_vals, all_weights=None, grids=None,
     for i in range(num_draws):
 
         if np.isnan(eig_vals[i, 0]):
-            raise ValueError('tridaig has nan values.')
+            raise ValueError("tridaig has nan values.")
         else:
             for j in range(grid_len):
                 x = grids[j]
@@ -318,7 +324,7 @@ def _kernel(x, x0, variance):
         C exp(-(x - x0) ^2 /(2 * variance)).
     """
     coeff = 1.0 / np.sqrt(2 * math.pi * variance)
-    val = -(x0 - x) ** 2
+    val = -((x0 - x) ** 2)
     val = val / (2.0 * variance)
     val = np.exp(val)
     point_estimate = coeff * val

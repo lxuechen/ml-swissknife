@@ -24,25 +24,24 @@ Note that if you want in memory database you can just use ":memory:" as the data
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import time
 import logging
+import os
 import random
-from sqlalchemy.dialects.postgresql import JSONB
+import time
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Optional, Sequence, Tuple, Union
+
 import pandas as pd
-import tqdm
-from ml_swissknife.types import PathOrIOBase
-from typing import Optional
-import numpy as np
-import sqlalchemy as sa
-from typing import Union, Optional, Sequence, Tuple
-import os
 import psycopg2
+import sqlalchemy as sa
+import tqdm
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 
-logging.basicConfig(level=logging.INFO)
+from ml_swissknife.types import PathOrIOBase
 
+logging.basicConfig(level=logging.INFO)
 
 ENGINE_REGISTRY = {}
 INITIAL_PROCESS_ID = os.getpid()
@@ -461,7 +460,13 @@ def append_df_to_db(
                 )
                 rows_added += len(df_delta)
             else:
-                _save_recovery(df_delta, table_name, index=index, recovery_path=recovery_path, error=e)
+                _save_recovery(
+                    df_delta,
+                    table_name,
+                    index=index,
+                    recovery_path=recovery_path,
+                    error=e,
+                )
                 if not is_skip_writing_errors:
                     raise e
 

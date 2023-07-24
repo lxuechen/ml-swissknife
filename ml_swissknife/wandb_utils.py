@@ -9,7 +9,7 @@ from . import utils
 class WandbHelper(object):
     """Project-based wandb helper."""
 
-    def __init__(self, project_name, user='lxuechen'):
+    def __init__(self, project_name, user="lxuechen"):
         super(WandbHelper, self).__init__()
         self._user = user
         self._api = wandb.Api()
@@ -40,14 +40,14 @@ class WandbHelper(object):
         """
         return self._name_to_run_map[name]
 
-    def download_run(self, name, root='.', replace=False):
+    def download_run(self, name, root=".", replace=False):
         """Download all files associated with a run."""
         base_dir = utils.join(root, name)
         run = self.name_to_run(name)
         for file in run.files():
             file.download(root=base_dir, replace=replace)
 
-    def download_runs(self, names=Sequence[str], root='.', replace=False):
+    def download_runs(self, names=Sequence[str], root=".", replace=False):
         """Download all files associated with multiple runs."""
         for name in names:
             self.download_run(name, root=root, replace=replace)

@@ -5,20 +5,21 @@ Should not rewrite these multiple times for different projects...
 For reference:
     https://beta.openai.com/docs/api-reference/completions/create
 """
+import copy
 import dataclasses
+import functools
 import logging
 import math
+import multiprocessing
 import os
+import random
 import sys
 import time
-import multiprocessing
-import functools
 from typing import Optional, Sequence, Union
-import random
+
 import openai
 import tqdm
 from openai import openai_object
-import copy
 
 StrOrOpenAIObject = Union[str, openai_object.OpenAIObject]
 
