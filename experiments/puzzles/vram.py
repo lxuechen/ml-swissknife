@@ -3,6 +3,7 @@ import fire
 from ml_swissknife import utils
 
 configs = {
+    # 7, 65,
     # 13b
     "llama-13b": {
         "hidden_size": 5120,
@@ -79,7 +80,10 @@ def plot():
     num_shards = 8
     seq_lens = [1024, 2048, 4096, 8192, 16384]
 
-    def config_to_plot(config, img_path):
+    def config_to_plot(model_name, img_path):
+        config = configs[model_name]
+        state = state_memory_in_gb[model_name]
+
         no = []
         tp = []
         tp_sp = []
@@ -116,13 +120,19 @@ def plot():
             img_path=img_path,
             plots=[dict(x=seq_lens, y=no, label="total activation memory"),
                    dict(x=seq_lens, y=tp, label="tensor parallel"),
-                   dict(x=seq_lens, y=tp_sp, label="tensor parallel + sequence parallel")],
-            options=dict(xscale='log', title="activation memory per shard vs sequence length for num_shards=8"),
+                   dict(x=seq_lens, y=tp_sp, label="tensor parallel + sequence parallel"),
+                   dict(x=seq_lens, y=[state / num_shards] * len(no), label="model+opt+grad per shard")],
+            options=dict(
+                xscale='linear',
+                yscale='log',
+                title="activation memory (GB) per shard vs seq_len for num_shards=8",
+                xlabel='seq_len',
+                ylabel='memory (GB)'
+            )
         )
 
-    # 13b
-    config_to_plot(configs['llama-13b'], img_path="./llama-13b.pdf")
-    config_to_plot(configs['llama-33b'], img_path="./llama-33b.pdf")
+    config_to_plot('llama-13b', img_path="./llama-13b.pdf")
+    config_to_plot('llama-33b', img_path="./llama-33b.pdf")
 
 
 def main(task, **kwargs):
