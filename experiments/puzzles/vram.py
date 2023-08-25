@@ -3,7 +3,12 @@ import fire
 from ml_swissknife import utils
 
 configs = {
-    # 7, 65,
+    # 7b
+    "llama-7b": {
+        "hidden_size": 4096,
+        "num_layers": 32,
+        "num_heads": 32,
+    },
     # 13b
     "llama-13b": {
         "hidden_size": 5120,
@@ -16,13 +21,23 @@ configs = {
         "num_layers": 60,
         "num_heads": 52,
     },
+    # 65b
+    "llama-65b": {
+        "hidden_size": 8192,
+        "num_layers": 80,
+        "num_heads": 64,
+    },
 }
 
 state_memory_in_gb = {
     # 13b
+    "llama-7b": 56,
+    # 13b
     "llama-13b": 104,
     # 33b
-    "llama-33b": 264,
+    "llama-33b": 520,
+    # 65b,
+    "llama-65b": 1040,
 }
 
 
@@ -131,8 +146,10 @@ def plot():
             )
         )
 
-    config_to_plot('llama-13b', img_path="./llama-13b.pdf")
-    config_to_plot('llama-33b', img_path="./llama-33b.pdf")
+    config_to_plot('llama-7b', img_path="./llama-13b.png")
+    config_to_plot('llama-13b', img_path="./llama-13b.png")
+    config_to_plot('llama-33b', img_path="./llama-33b.png")
+    config_to_plot('llama-65b', img_path="./llama-65b.png")
 
 
 def main(task, **kwargs):
