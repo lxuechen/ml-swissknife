@@ -146,7 +146,7 @@ def plot():
             )
         )
 
-    config_to_plot('llama-7b', img_path="./llama-13b.png")
+    config_to_plot('llama-7b', img_path="./llama-7b.png")
     config_to_plot('llama-13b', img_path="./llama-13b.png")
     config_to_plot('llama-33b', img_path="./llama-33b.png")
     config_to_plot('llama-65b', img_path="./llama-65b.png")
