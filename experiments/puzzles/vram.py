@@ -79,11 +79,10 @@ def plot():
     num_shards = 8
     seq_lens = [1024, 2048, 4096, 8192, 16384]
 
-    no = []
-    tp = []
-    tp_sp = []
-
     def config_to_plot(config, img_path):
+        no = []
+        tp = []
+        tp_sp = []
         for seq_len in seq_lens:
             no.append(
                 get_activation_memory(
@@ -113,11 +112,13 @@ def plot():
                 )
             )
 
+        print(no, tp, tp_sp)
         utils.plot(
             img_path=img_path,
             plots=[dict(x=seq_lens, y=no, label="vanilla"),
                    dict(x=seq_lens, y=tp, label="tensor parallel"),
                    dict(x=seq_lens, y=tp_sp, label="tensor parallel + sequence parallel")],
+            options=dict(xscale='log', title="activation memory vs sequence length for num_shards=8"),
         )
 
     # 13b
