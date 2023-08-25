@@ -1,3 +1,5 @@
+import fire
+
 configs = {
     # 13b
     "llama-13b-2k": {
@@ -90,7 +92,7 @@ def get_activation_memory(
     return bytes_ / 1024 ** 3 * num_layers
 
 
-if __name__ == "__main__":
+def basic():
     # TP brings massive gains (>70%); SP brings minor gains (10%).
     for tensor_parallel in (False, True):
         for sequence_parallel in (False, True):
@@ -110,3 +112,11 @@ if __name__ == "__main__":
                 f'per_device_train_batch_size=1, llama config (but standard architecture), '
                 f'mem spending per device: {gbs}'
             )
+
+
+def main(task, **kwargs):
+    globals()[task](**kwargs)
+
+
+if __name__ == "__main__":
+    fire.Fire(main)
