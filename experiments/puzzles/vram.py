@@ -112,13 +112,12 @@ def plot():
                 )
             )
 
-        print(no, tp, tp_sp)
         utils.plot(
             img_path=img_path,
-            plots=[dict(x=seq_lens, y=no, label="vanilla"),
+            plots=[dict(x=seq_lens, y=no, label="total activation memory"),
                    dict(x=seq_lens, y=tp, label="tensor parallel"),
                    dict(x=seq_lens, y=tp_sp, label="tensor parallel + sequence parallel")],
-            options=dict(xscale='log', title="activation memory vs sequence length for num_shards=8"),
+            options=dict(xscale='log', title="activation memory per shard vs sequence length for num_shards=8"),
         )
 
     # 13b
