@@ -1,69 +1,27 @@
 import fire
 
+from ml_swissknife import utils
+
 configs = {
     # 13b
-    "llama-13b-2k": {
+    "llama-13b": {
         "hidden_size": 5120,
         "num_layers": 40,
         "num_heads": 40,
-        "seq_len": 2048,
-    },
-    "llama-13b-4k": {
-        "hidden_size": 5120,
-        "num_layers": 40,
-        "num_heads": 40,
-        "seq_len": 4096,
-    },
-    "llama-13b-8k": {
-        "hidden_size": 5120,
-        "num_layers": 40,
-        "num_heads": 40,
-        "seq_len": 8192,
-    },
-    "llama-13b-16k": {
-        "hidden_size": 5120,
-        "num_layers": 40,
-        "num_heads": 40,
-        "seq_len": 16384,
     },
     # 33b
-    "llama-33b-2k": {
+    "llama-33b": {
         "hidden_size": 6656,
         "num_layers": 60,
         "num_heads": 52,
-        "seq_len": 2048,
     },
-    "llama-33b-4k": {
-        "hidden_size": 6656,
-        "num_layers": 60,
-        "num_heads": 52,
-        "seq_len": 4096,
-    },
-    "llama-33b-8k": {
-        "hidden_size": 6656,
-        "num_layers": 60,
-        "num_heads": 52,
-        "seq_len": 8192,
-    },
-    "llama-33b-16k": {
-        "hidden_size": 6656,
-        "num_layers": 60,
-        "num_heads": 52,
-        "seq_len": 16384,
-    }
 }
 
-state_mem = {
+state_memory_in_gb = {
     # 13b
-    "llama-13b-2k": 104,
-    "llama-13b-4k": 104,
-    "llama-13b-8k": 104,
-    "llama-13b-16k": 104,
+    "llama-13b": 104,
     # 33b
-    "llama-33b-2k": 264,
-    "llama-33b-4k": 264,
-    "llama-33b-8k": 264,
-    "llama-33b-16k": 264,
+    "llama-33b": 264,
 }
 
 
@@ -77,8 +35,10 @@ def get_activation_memory(
     num_shards=1,
     num_layers=1,  # Transformer layers / blocks.
 ) -> float:
-    """Compute the activation memory needed for standard Transformer architecture in GB."""
-    # TODO: Llama involves rotary position embeddings, thus the usage would be different.
+    """Compute the activation memory needed for standard Transformer architecture in GB.
+
+    Note: llama involves rotary position embeddings, thus the usage would be different.
+    """
     if tensor_parallel and sequence_parallel:
         bytes_ = seq_len * batch_size * hidden_size / num_shards * (34 + 5 * num_heads * seq_len / hidden_size)
     elif tensor_parallel:
@@ -112,6 +72,57 @@ def basic():
                 f'per_device_train_batch_size=1, llama config (but standard architecture), '
                 f'mem spending per device: {gbs}'
             )
+
+
+def plot():
+    batch_size = 1
+    num_shards = 8
+    seq_lens = [1024, 2048, 4096, 8192, 16384]
+
+    no = []
+    tp = []
+    tp_sp = []
+
+    def config_to_plot(config, img_path):
+        for seq_len in seq_lens:
+            no.append(
+                get_activation_memory(
+                    batch_size=batch_size,
+                    num_shards=num_shards,
+                    seq_len=seq_len,
+                    tensor_parallel=False, sequence_parallel=False,
+                    **config,
+                )
+            )
+            tp.append(
+                get_activation_memory(
+                    batch_size=batch_size,
+                    num_shards=num_shards,
+                    seq_len=seq_len,
+                    tensor_parallel=True, sequence_parallel=False,
+                    **config,
+                )
+            )
+            tp_sp.append(
+                get_activation_memory(
+                    batch_size=batch_size,
+                    num_shards=num_shards,
+                    seq_len=seq_len,
+                    tensor_parallel=True, sequence_parallel=True,
+                    **config,
+                )
+            )
+
+        utils.plot(
+            img_path=img_path,
+            plots=[dict(x=seq_lens, y=no, label="vanilla"),
+                   dict(x=seq_lens, y=tp, label="tensor parallel"),
+                   dict(x=seq_lens, y=tp_sp, label="tensor parallel + sequence parallel")],
+        )
+
+    # 13b
+    config_to_plot(configs['llama-13b'], img_path="./llama-13b.pdf")
+    config_to_plot(configs['llama-33b'], img_path="./llama-33b.pdf")
 
 
 def main(task, **kwargs):
