@@ -140,7 +140,7 @@ def plot():
             options=dict(
                 xscale='linear',
                 yscale='log',
-                title=f"activation memory (GB) per shard vs seq_len "
+                title=f"activation memory (GB) per shard vs seq_len\n"
                       f"for num_shards=8 , batch_size={batch_size}, model_name: {model_name}",
                 xlabel='seq_len',
                 ylabel='memory (GB)'
