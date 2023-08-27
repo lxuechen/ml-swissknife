@@ -37,7 +37,7 @@ state_memory_in_gb = {
     # 33b
     "llama-33b": 520,
     # 65b,
-    "llama-65b": 1040,
+    "llama-65b": 520,
 }
 
 
@@ -140,7 +140,8 @@ def plot():
             options=dict(
                 xscale='linear',
                 yscale='log',
-                title=f"activation memory (GB) per shard vs seq_len for num_shards=8 and architecture: {model_name}",
+                title=f"activation memory (GB) per shard vs seq_len\n"
+                      f"for num_shards=8 , batch_size={batch_size}, model_name: {model_name}",
                 xlabel='seq_len',
                 ylabel='memory (GB)'
             )
