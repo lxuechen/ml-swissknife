@@ -13,9 +13,15 @@ class MCTS:
     """Monte Carlo tree searcher. First rollout the tree then choose a move."""
 
     def __init__(self, exploration_weight=1):
-        self.Q = defaultdict(int)  # total reward of each node
-        self.N = defaultdict(int)  # total visit count for each node
-        self.children = dict()  # children of each node; node -> set of its children.
+        self.Q = defaultdict(int)  # total reward of each node; Q(s) = sum_a Q(s, a).
+        self.N = defaultdict(int)  # total visit count for each node. N(s) = sum_a 1.
+        # children of each node; node -> set of its children.
+        # also serves as a marker for which nodes have been expanded. a node is expanded if simulate(node) has been run.
+        # note:
+        #   1) any node that has been expanded, it has a valid Q(s) / N(s).
+        #   2) there may be nodes which themselves are expanded, but not all its children are expanded.
+        #   3) in this particular implementation, simulate does not mark descendents on the path to bottom as expanded.
+        self.children = dict()
         self.exploration_weight = exploration_weight
 
     def choose(self, node):
