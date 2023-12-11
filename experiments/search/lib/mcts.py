@@ -13,10 +13,10 @@ class MCTS:
     """Monte Carlo tree searcher. First rollout the tree then choose a move."""
 
     def __init__(self, exploration_weight=1):
-        self.Q = defaultdict(int)  # total reward of each node;  TODO: it this the sum?
+        self.Q = defaultdict(int)  # total reward of each node
         self.N = defaultdict(int)  # total visit count for each node
-        self.children = dict()  # children of each node; node -> set of its children.  TODO: when does this set expand?
-        self.exploration_weight = exploration_weight  # TODO: how does this work?
+        self.children = dict()  # children of each node; node -> set of its children.
+        self.exploration_weight = exploration_weight
 
     def choose(self, node):
         """Choose the best successor of node. (Choose a move in the game)"""
@@ -64,7 +64,6 @@ class MCTS:
 
     def _simulate(self, node):
         """Returns the reward for a random simulation (to completion) of `node`."""
-        # TODO: why inverted reward
         invert_reward = True
         while True:
             if node.is_terminal():
@@ -74,7 +73,6 @@ class MCTS:
             invert_reward = not invert_reward
 
     def _backpropagate(self, path, reward):
-        # TODO: why reward inversion?
         """Send the reward back up to the ancestors of the leaf."""
         for node in reversed(path):
             self.N[node] += 1

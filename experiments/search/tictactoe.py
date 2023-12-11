@@ -15,7 +15,7 @@ For example, this game board
 O - X
 O X -
 X - -
-corrresponds to this tuple:
+corresponds to this tuple:
 (False, None, True, False, True, None, True, None, None)
 """
 
