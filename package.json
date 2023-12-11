@@ -1,0 +1,19 @@
+{
+  "name": "ml-swissknife",
+  "version": "1.0.0",
+  "description": "Reusable ML research primitives for fast prototyping.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
+    "husky": "^8.0.3"
+  }
+}
