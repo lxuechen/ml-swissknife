@@ -76,6 +76,19 @@ class AlpacaTextFormatter(TextFormatter):
         return source, target
 
 
+class GuanacoOASST(TextFormatter):
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
+        super().__init__()
+        self.tokenizer = tokenizer
+
+    def __call__(self, example):
+        text = example['text']
+        first_round = text.split('### Human: ')[1]
+        source = f"""### Human: {first_round.split("### Assistant:")[0]}### Assistant:"""
+        target = f"""{first_round.split("### Assistant:")[1]}{self.tokenizer.eos_token}"""
+        return source, target
+
+
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
