@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import datasets
 import abc
 import copy
 import logging
@@ -96,8 +97,7 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default=None, metadata={"help": "Path to the training data."})
-    text_formatter: Literal["guanaco_oasst", "alpaca"] = field(default="guanaco_oasst")
+    data_path: str = field(default="timdettmers/openassistant-guanaco", metadata={"help": "Path to the training data."})
 
 
 @dataclass
@@ -178,10 +178,14 @@ class SupervisedDataset(Dataset):
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        list_data_dict = utils.jload(data_args.data_path)
+        dataset = datasets.load_dataset(data_args.data_path, split="train")
+        list_data_dict = dataset.to_list()
 
         logging.warning("Formatting inputs...")
-        text_formatter_cls = {"alpaca": AlpacaTextFormatter, "guanaco_oasst": GuanacoOASST}[data_args.text_formatter]
+        text_formatter_cls = {
+            "tatsu-lab/alpaca": AlpacaTextFormatter,
+            "timdettmers/openassistant-guanaco": GuanacoOASST
+        }[data_args.data_path]
         text_formatter = text_formatter_cls(tokenizer=tokenizer)
         text_formatted = [text_formatter(example) for example in list_data_dict]
         sources, targets = tuple(zip(*text_formatted))
