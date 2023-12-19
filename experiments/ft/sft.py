@@ -16,7 +16,7 @@ import abc
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Literal
 
 import torch
 import transformers
@@ -97,6 +97,7 @@ class ModelArguments:
 @dataclass
 class DataArguments:
     data_path: str = field(default=None, metadata={"help": "Path to the training data."})
+    text_formatter: Literal["guanaco_oasst", "alpaca"] = field(default="guanaco_oasst")
 
 
 @dataclass
@@ -174,13 +175,14 @@ def preprocess(
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer):
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        list_data_dict = utils.jload(data_path)
+        list_data_dict = utils.jload(data_args.data_path)
 
         logging.warning("Formatting inputs...")
-        text_formatter = AlpacaTextFormatter(tokenizer=tokenizer)
+        text_formatter_cls = {"alpaca": AlpacaTextFormatter, "guanaco_oasst": GuanacoOASST}[data_args.text_formatter]
+        text_formatter = text_formatter_cls(tokenizer=tokenizer)
         text_formatted = [text_formatter(example) for example in list_data_dict]
         sources, targets = tuple(zip(*text_formatted))
 
@@ -216,9 +218,9 @@ class DataCollatorForSupervisedDataset(object):
         )
 
 
-def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args) -> Dict:
+def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path)
+    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_args=data_args)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
 
