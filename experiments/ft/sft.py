@@ -107,6 +107,7 @@ class TrainingArguments(transformers.TrainingArguments):
         default=512,
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
+    save_raw_state_dict: bool = field(default=False)
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -265,7 +266,10 @@ def train():
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
     trainer.train()
     trainer.save_state()
-    trainer.save_model(output_dir=training_args.output_dir)
+    if training_args.save_raw_state_dict:
+        torch.save(model.state_dict(), f"{training_args.output_dir}/model.pt")
+    else:
+        trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
