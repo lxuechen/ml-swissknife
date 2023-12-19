@@ -12,19 +12,17 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import datasets
 import abc
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Sequence, Literal
+from typing import Dict, Optional, Sequence
 
+import datasets
 import torch
 import transformers
 from torch.utils.data import Dataset
 from transformers import Trainer
-
-from lib import utils
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -85,7 +83,7 @@ class GuanacoOASST(TextFormatter):
     def __call__(self, example):
         text = example['text']
         first_round = text.split('### Human: ')[1]
-        source = f"""### Human: {first_round.split("### Assistant:")[0]}### Assistant:"""
+        source = f"""### Human: {first_round.split("### Assistant:")[0]}\n\n### Assistant:"""
         target = f"""{first_round.split("### Assistant:")[1]}{self.tokenizer.eos_token}"""
         return source, target
 
@@ -93,6 +91,7 @@ class GuanacoOASST(TextFormatter):
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
+    trust_remote_code: bool = field(default=True)
 
 
 @dataclass
@@ -236,6 +235,7 @@ def train():
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
