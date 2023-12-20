@@ -30,12 +30,6 @@ DEFAULT_BOS_TOKEN = "<s>"
 DEFAULT_UNK_TOKEN = "<unk>"
 
 
-# TODO:
-#   1. Sketch out trainer.
-#   2. collator need sto chance
-#   3. dataset preproc
-
-
 @dataclass
 class TextFormatter:
     tokenizer: transformers.PreTrainedTokenizer
@@ -71,6 +65,10 @@ class TrainingArguments(transformers.TrainingArguments):
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     save_raw_state_dict: bool = field(default=False)
+    label_names: Optional[list[str]] = field(
+        default_factory=lambda: ["input_ids_w", "labels_w", "attention_mask_w", "input_ids_l", "labels_l",
+                                 "attention_mask_l"]
+    )
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -96,7 +94,6 @@ def smart_tokenizer_and_embedding_resize(
         output_embeddings[-num_new_tokens:] = output_embeddings_avg
 
 
-# TODO: Change this!
 def _tokenize_fn(strings: Sequence[str], tokenizer: transformers.PreTrainedTokenizer) -> Dict:
     """Tokenize a list of strings."""
     tokenized_list = [
@@ -141,6 +138,7 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str, data_split: str):
         super(Dataset, self).__init__()
         logging.warning("Loading data...")
+        # TODO: Pass in the list list dict!
         dataset_df = datasets.load_dataset(data_path, split=data_split).to_pandas()
 
         text_formatter = TextFormatter(tokenizer=tokenizer)
@@ -158,19 +156,21 @@ class Dataset(torch.utils.data.Dataset):
         chosen_data_dict = preprocess(chosen_sources, chosen_targets, tokenizer)
         rejected_data_dict = preprocess(rejected_sources, rejected_targets, tokenizer)
 
-        self.chosen_input_ids = chosen_data_dict["input_ids"]
-        self.chosen_labels = chosen_data_dict["labels"]
+        self.input_ids_w = chosen_data_dict["input_ids"]
+        self.labels_w = chosen_data_dict["labels"]
 
-        self.rejected_input_ids = rejected_data_dict["input_ids"]
-        self.rejected_labels = rejected_data_dict["labels"]
+        self.input_ids_l = rejected_data_dict["input_ids"]
+        self.labels_l = rejected_data_dict["labels"]
 
     def __len__(self):
-        return len(self.chosen_input_ids)
+        return len(self.input_ids_w)
 
     def __getitem__(self, i: int) -> dict[str, torch.Tensor]:
         return dict(
-            chosen_input_ids=self.chosen_input_ids[i], chosen_labels=self.chosen_labels[i],
-            rejected_input_ids=self.rejected_input_ids[i], rejected_labels=self.rejected_labels[i],
+            input_ids_w=self.input_ids_w[i],
+            labels_w=self.labels_w[i],
+            input_ids_l=self.input_ids_l[i],
+            labels_l=self.labels_l[i],
         )
 
 
@@ -187,20 +187,19 @@ class DataCollator(object):
         return input_ids, labels, attention_mask
 
     def __call__(self, instances: Sequence[Dict]) -> dict[str, torch.Tensor]:
-        chosen_input_ids, chosen_labels, rejected_input_ids, rejected_labels = tuple(
-            [instance[key] for instance in instances] for key in
-            ("chosen_input_ids", "chosen_labels", "rejected_input_ids", "rejected_labels")
-        )
-        chosen_input_ids, chosen_labels, chosen_attention_mask = self._process(chosen_input_ids, chosen_labels)
-        rejected_input_ids, rejected_labels, rejected_attention_mask = self._process(rejected_input_ids,
-                                                                                     rejected_labels)
+        input_ids_w, labels_w, input_ids_l, labels_l = [
+            [instance[key] for instance in instances] for key in ("input_ids_w", "labels_w", "input_ids_l", "labels_l")
+        ]
+        input_ids_w, labels_w, attention_mask_w = self._process(input_ids_w, labels_w)
+        input_ids_l, labels_l, attention_mask_l = self._process(input_ids_l, labels_l)
         return dict(
-            chosen_input_ids=chosen_input_ids, chosen_labels=chosen_labels, chosen_attention_mask=chosen_attention_mask,
-            rejected_input_ids=rejected_input_ids, rejected_labels=rejected_labels,
-            rejected_attention_mask=rejected_attention_mask,
+            input_ids_w=input_ids_w,
+            labels_w=labels_w,
+            attention_mask_w=attention_mask_w,
+            input_ids_l=input_ids_l,
+            labels_l=labels_l,
+            attention_mask_l=attention_mask_l,
         )
-
-
 
 
 def make_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> dict:
