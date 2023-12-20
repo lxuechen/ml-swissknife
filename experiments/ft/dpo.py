@@ -178,16 +178,26 @@ class Dataset(torch.utils.data.Dataset):
 class DataCollator(object):
     tokenizer: transformers.PreTrainedTokenizer
 
-    def __call__(self, instances: Sequence[Dict]) -> dict[str, torch.Tensor]:
-        input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
+    def _process(self, input_ids: list[torch.Tensor], labels: list[torch.Tensor]):
         input_ids = torch.nn.utils.rnn.pad_sequence(
             input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
         labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX)
+        attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
+        return input_ids, labels, attention_mask
+
+    def __call__(self, instances: Sequence[Dict]) -> dict[str, torch.Tensor]:
+        chosen_input_ids, chosen_labels, rejected_input_ids, rejected_labels = tuple(
+            [instance[key] for instance in instances] for key in
+            ("chosen_input_ids", "chosen_labels", "rejected_input_ids", "rejected_labels")
+        )
+        chosen_input_ids, chosen_labels, chosen_attention_mask = self._process(chosen_input_ids, chosen_labels)
+        rejected_input_ids, rejected_labels, rejected_attention_mask = self._process(rejected_input_ids,
+                                                                                     rejected_labels)
         return dict(
-            input_ids=input_ids,
-            labels=labels,
-            attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
+            chosen_input_ids=chosen_input_ids, chosen_labels=chosen_labels, chosen_attention_mask=chosen_attention_mask,
+            rejected_input_ids=rejected_input_ids, rejected_labels=rejected_labels,
+            rejected_attention_mask=rejected_attention_mask,
         )
 
 
