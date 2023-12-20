@@ -30,10 +30,6 @@ DEFAULT_BOS_TOKEN = "<s>"
 DEFAULT_UNK_TOKEN = "<unk>"
 
 
-def unpack_dict(payload: dict, keys: list[str]):
-    return {key: payload[key] for key in keys}
-
-
 @dataclass
 class TextFormatter:
     tokenizer: transformers.PreTrainedTokenizer
@@ -216,8 +212,9 @@ class Trainer(transformers.Trainer):
         self.ref_model = self._wrap_model(copy.deepcopy(model)).eval()
 
     def compute_loss(self, model, inputs, return_outputs=False):
-        input_ids_w, labels_w, attention_mask_w, input_ids_l, labels_l, attention_mask_l = unpack_dict(inputs,
-                                                                                                       self.args.label_names)
+        input_ids_w, labels_w, attention_mask_w, input_ids_l, labels_l, attention_mask_l = tuple(
+            inputs[key] for key in self.args.label_names
+        )
         labels_w, labels_l = labels_w[..., 1:], labels_l[..., 1:]
 
         with torch.no_grad():

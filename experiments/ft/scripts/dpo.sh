@@ -2,10 +2,10 @@ python dpo.py \
     --model_name_or_path "/self/scr-ssd/lxuechen/working_dir/phi-2-sft" \
     --bf16 True \
     --output_dir "/self/scr-ssd/lxuechen/working_dir/phi-2-dpo" \
-    --num_train_epochs 0.2 \
-    --per_device_train_batch_size 4 \
+    --num_train_epochs 1 \
+    --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 16 \
+    --gradient_accumulation_steps 64 \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 2000 \
