@@ -252,6 +252,7 @@ def main():
         low_cpu_mem_usage=True,
         device_map="auto",
         trust_remote_code=True,
+        flash_attn=True,
     )
     model.resize_token_embeddings(len(tokenizer))
     model.load_state_dict(torch.load(f"{model_args.model_name_or_path}/model.pt"))
