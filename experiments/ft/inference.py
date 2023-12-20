@@ -1,9 +1,12 @@
+import sys
+
+import datasets
 import fire
+import pandas as pd
 import torch
 import tqdm
 import transformers
 from transformers import GenerationConfig
-import datasets
 
 
 def batch_decode(
@@ -36,6 +39,7 @@ def main(
     model_name_or_path: str = "microsoft/phi-2",
     cache_dir=None,
     batch_size: int = 8,
+    maxsize: int = sys.maxsize
 ):
     dataset = datasets.load_dataset("tatsu-lab/alpaca_eval", split="eval")
     instructions = dataset['instruction']
@@ -53,9 +57,11 @@ def main(
 
     tokenizer.padding_side = "left"
 
-    instructions = instructions[:10]
-    texts = batch_decode(model, tokenizer, instructions, batch_size=batch_size)
-    print(texts)
+    instructions = instructions[:maxsize]
+    output = batch_decode(model, tokenizer, instructions, batch_size=batch_size)
+
+    df = pd.DataFrame({"instruction": instructions, "output": output})
+    df.to_json('./phi2-guanaco.json', orient='records', lines=False)
 
 
 if __name__ == "__main__":
