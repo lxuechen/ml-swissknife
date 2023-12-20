@@ -9,7 +9,8 @@ def main(
     cache_dir=None,
 ):
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
-        "microsoft/phi-2", cache_dir=cache_dir, low_cpu_mem_usage=True, device_map="auto", trust_remote_code=True,
+        "microsoft/phi-2", cache_dir=cache_dir, low_cpu_mem_usage=True, device_map="auto",
+        trust_remote_code=True, torch_dtype=torch.bfloat16
     )
     tokenizer: transformers.PreTrainedTokenizer = transformers.AutoTokenizer.from_pretrained(
         model_name_or_path, cache_dir=cache_dir
