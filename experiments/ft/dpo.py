@@ -42,7 +42,7 @@ class TextFormatter:
         human_turn = messages[0]['content']
         assistant_turn = messages[1]['content']
         source = f"""### Human: {human_turn}\n\n### Assistant:"""
-        target = f" {assistant_turn}"
+        target = f" {assistant_turn}{self.tokenizer.eos_token}"
         return source, target
 
 
@@ -65,7 +65,7 @@ class TrainingArguments(transformers.TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
     optim: str = field(default="adamw_torch")
     model_max_length: int = field(
-        default=512,
+        default=2048,
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     save_raw_state_dict: bool = field(default=False)
@@ -241,34 +241,24 @@ def main():
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    model = transformers.AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=training_args.cache_dir,
-        trust_remote_code=model_args.trust_remote_code,
-    )
-
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side="right",
-        use_fast=False,
+        use_fast=True,
     )
-    special_tokens_dict = dict()
-    if tokenizer.pad_token is None:
-        special_tokens_dict["pad_token"] = DEFAULT_PAD_TOKEN
-    if tokenizer.eos_token is None:
-        special_tokens_dict["eos_token"] = DEFAULT_EOS_TOKEN
-    if tokenizer.bos_token is None:
-        special_tokens_dict["bos_token"] = DEFAULT_BOS_TOKEN
-    if tokenizer.unk_token is None:
-        special_tokens_dict["unk_token"] = DEFAULT_UNK_TOKEN
 
-    smart_tokenizer_and_embedding_resize(
-        special_tokens_dict=special_tokens_dict,
-        tokenizer=tokenizer,
-        model=model,
+    model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
+        "microsoft/phi-2",
+        cache_dir=training_args.cache_dir,
+        low_cpu_mem_usage=True,
+        device_map="auto",
+        trust_remote_code=True,
+        torch_dtype=torch.bfloat16,
     )
+    model.resize_token_embeddings(len(tokenizer))
+    model.load_state_dict(torch.load(f"{model_args.model_name_or_path}/model.pt"))
 
     data_module = make_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
