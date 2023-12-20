@@ -175,17 +175,17 @@ def preprocess(
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments):
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        dataset = datasets.load_dataset(data_args.data_path, split="train")
+        dataset = datasets.load_dataset(data_path, split="train")
         list_data_dict = dataset.to_list()
 
         logging.warning("Formatting inputs...")
         text_formatter_cls = {
             "tatsu-lab/alpaca": AlpacaTextFormatter,
             "timdettmers/openassistant-guanaco": GuanacoOASST
-        }[data_args.data_path]
+        }[data_path]
         text_formatter = text_formatter_cls(tokenizer=tokenizer)
         text_formatted = [text_formatter(example) for example in list_data_dict]
         sources, targets = tuple(zip(*text_formatted))
@@ -224,7 +224,7 @@ class DataCollatorForSupervisedDataset(object):
 
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_args=data_args)
+    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
 
