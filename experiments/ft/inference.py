@@ -1,5 +1,6 @@
 import fire
 import torch
+import tqdm
 import transformers
 from transformers import GenerationConfig
 import datasets
@@ -10,22 +11,25 @@ def batch_decode(
     tokenizer: transformers.PreTrainedTokenizer,
     texts: list[str],
     batch_size: int = 8,
-):
+) -> list[str]:
     sources = [f"""### Human: {text}\n\n### Assistant:""" for text in texts]
-    encoded = tokenizer.batch_encode_plus(sources, return_tensors="pt")
+    encoded = tokenizer.batch_encode_plus(sources, return_tensors="pt", padding=True)
+
     encoded = {key: value.to(model.device) for key, value in encoded.items()}
 
-    output_ids = []
-    for i in range(0, len(texts), batch_size):
+    outputs = []
+    for i in tqdm.tqdm(range(0, len(texts), batch_size)):
         batch = {key: value[i:i + batch_size] for key, value in encoded.items()}
         batch_output_ids = model.generate(
             inputs=batch['input_ids'], attention_mask=batch['attention_mask'],
-            max_length=1000, do_sample=True, top_p=0.95,
-            generation_config=GenerationConfig(eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id)
+            max_length=512, do_sample=True, top_p=0.95,
+            generation_config=GenerationConfig(
+                eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id
+            ),
         )
-        output_ids.append(batch_output_ids)
-    output_ids = torch.cat(output_ids, dim=0)
-    return tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        batch_output_ids = batch_output_ids[:, batch['input_ids'].size(1):]
+        outputs.extend(tokenizer.batch_decode(batch_output_ids, skip_special_tokens=True))
+    return outputs
 
 
 def main(
@@ -34,7 +38,7 @@ def main(
     batch_size: int = 8,
 ):
     dataset = datasets.load_dataset("tatsu-lab/alpaca_eval", split="eval")
-    instructions = dataset['instructions']
+    instructions = dataset['instruction']
 
     # TODO: Need to do this annoying two-stage load because of issues with phi-2.
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
