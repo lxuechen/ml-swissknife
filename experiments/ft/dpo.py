@@ -134,18 +134,12 @@ def preprocess(
 
 
 class Dataset(torch.utils.data.Dataset):
-
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str, data_split: str):
+    def __init__(
+        self, tokenizer: transformers.PreTrainedTokenizer, chosen: list[list[dict]], rejected: list[list[dict]]
+    ):
         super(Dataset, self).__init__()
-        logging.warning("Loading data...")
-        # TODO: Pass in the list list dict!
-        dataset_df = datasets.load_dataset(data_path, split=data_split).to_pandas()
 
         text_formatter = TextFormatter(tokenizer=tokenizer)
-
-        chosen = dataset_df[['chosen']].to_dict(orient='records')
-        rejected = dataset_df[['rejected']].to_dict(orient='records')
-
         chosen = [text_formatter(example) for example in chosen]
         rejected = [text_formatter(example) for example in rejected]
 
@@ -203,23 +197,15 @@ class DataCollator(object):
 
 
 def make_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> dict:
-    train_dataset = Dataset(tokenizer=tokenizer, data_path=data_args.data_path, data_split=data_args.data_split)
+    dataset_dict = datasets.load_dataset(path=data_args.data_path, split=data_args.data_split).to_dict()
+    chosen, rejected = dataset_dict['chosen'], dataset_dict['rejected']
+
+    train_dataset = Dataset(tokenizer=tokenizer, chosen=chosen, rejected=rejected)
     data_collator = DataCollator(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
 
 
 def main():
-    dataset = datasets.load_dataset("HuggingFaceH4/ultrafeedback_binarized", split="train_prefs")
-    df = dataset.to_pandas()
-    print(df)
-    breakpoint()
-    list_data_dict = dataset.to_list()
-    cols = dataset[['chosen', 'rejected']]
-    print(cols[:1])
-    breakpoint()
-    dataset[['']]
-    print(list_data_dict[0])
-    breakpoint()
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
