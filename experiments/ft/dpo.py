@@ -19,15 +19,19 @@ from typing import Dict, Optional, Sequence
 
 import datasets
 import torch
+import torch.nn.functional as F
 import torch.utils.data
 import transformers
-from transformers import Trainer
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
 DEFAULT_BOS_TOKEN = "<s>"
 DEFAULT_UNK_TOKEN = "<unk>"
+
+
+def unpack_dict(payload: dict, keys: list[str]):
+    return {key: payload[key] for key in keys}
 
 
 @dataclass
@@ -69,6 +73,7 @@ class TrainingArguments(transformers.TrainingArguments):
         default_factory=lambda: ["input_ids_w", "labels_w", "attention_mask_w", "input_ids_l", "labels_l",
                                  "attention_mask_l"]
     )
+    beta: float = field(default=0.1)
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -203,6 +208,33 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: Dat
     train_dataset = Dataset(tokenizer=tokenizer, chosen=chosen, rejected=rejected)
     data_collator = DataCollator(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
+
+
+class Trainer(transformers.Trainer):
+    def __init__(self, model, args, *argv, **kwargs):
+        super().__init__(model, args, *argv, **kwargs)
+        self.ref_model = self._wrap_model(copy.deepcopy(model)).eval()
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        input_ids_w, labels_w, attention_mask_w, input_ids_l, labels_l, attention_mask_l = unpack_dict(inputs,
+                                                                                                       self.args.label_names)
+        labels_w, labels_l = labels_w[..., 1:], labels_l[..., 1:]
+
+        with torch.no_grad():
+            ref_logits_w = self.ref_model(input_ids=input_ids_w, attention_mask=attention_mask_w).logits[..., :-1, :]
+            ref_logits_l = self.ref_model(input_ids=input_ids_l, attention_mask=attention_mask_l).logits[..., :-1, :]
+            ref_logprobs_w = -F.cross_entropy(ref_logits_w.transpose(-1, -2), labels_w, reduction="none").sum(-1)
+            ref_logprobs_l = -F.cross_entropy(ref_logits_l.transpose(-1, -2), labels_l, reduction="none").sum(-1)
+
+        logits_w = model(input_ids=input_ids_w, attention_mask=attention_mask_w).logits[..., :-1, :]
+        logits_l = model(input_ids=input_ids_l, attention_mask=attention_mask_l).logits[..., :-1, :]
+        logprobs_w = -F.cross_entropy(logits_w.transpose(-1, -2), labels_w, reduction="none").sum(-1)
+        logprobs_l = -F.cross_entropy(logits_l.transpose(-1, -2), labels_l, reduction="none").sum(-1)
+
+        logits = self.args.beta * ((logprobs_w - ref_logprobs_w) - (logprobs_l - ref_logprobs_l))
+        loss = -F.logsigmoid(logits).mean(0)
+
+        return (loss, dict(logits=logits)) if return_outputs else loss
 
 
 def main():
