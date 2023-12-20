@@ -9,11 +9,12 @@ import transformers
 from transformers import GenerationConfig
 
 
+@torch.no_grad()
 def batch_decode(
     model: transformers.PreTrainedModel,
     tokenizer: transformers.PreTrainedTokenizer,
     texts: list[str],
-    batch_size: int = 8,
+    batch_size: int,
 ) -> list[str]:
     sources = [f"""### Human: {text}\n\n### Assistant:""" for text in texts]
     encoded = tokenizer.batch_encode_plus(sources, return_tensors="pt", padding=True)
@@ -25,20 +26,25 @@ def batch_decode(
         batch = {key: value[i:i + batch_size] for key, value in encoded.items()}
         batch_output_ids = model.generate(
             inputs=batch['input_ids'], attention_mask=batch['attention_mask'],
-            max_length=512, do_sample=True, top_p=0.95,
             generation_config=GenerationConfig(
-                eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id
+                eos_token_id=tokenizer.eos_token_id,
+                temperature=0.7,
+                max_new_tokens=1024,
+                do_sample=True,
             ),
         )
+        import json
         batch_output_ids = batch_output_ids[:, batch['input_ids'].size(1):]
-        outputs.extend(tokenizer.batch_decode(batch_output_ids, skip_special_tokens=True))
+        batch_outputs = tokenizer.batch_decode(batch_output_ids, skip_special_tokens=True)
+        print(json.dumps(batch_outputs, indent=4))
+        outputs.extend(batch_outputs)
     return outputs
 
 
 def main(
     model_name_or_path: str = "microsoft/phi-2",
     cache_dir=None,
-    batch_size: int = 8,
+    batch_size: int = 16,
     maxsize: int = sys.maxsize
 ):
     dataset = datasets.load_dataset("tatsu-lab/alpaca_eval", split="eval")
@@ -58,7 +64,7 @@ def main(
     tokenizer.padding_side = "left"
 
     instructions = instructions[:maxsize]
-    output = batch_decode(model, tokenizer, instructions, batch_size=batch_size)
+    output = batch_decode(model, tokenizer, instructions, batch_size)
 
     df = pd.DataFrame({"instruction": instructions, "output": output})
     df.to_json('./phi2-guanaco.json', orient='records', lines=False)
