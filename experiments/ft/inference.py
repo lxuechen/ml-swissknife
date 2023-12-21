@@ -68,7 +68,7 @@ def main(
 
     generator = os.path.basename(model_name_or_path)
     df = pd.DataFrame({"instruction": instruction, "output": output, "dataset": dataset, "generator": generator})
-    df.to_json('./phi2-guanaco.json', orient='records', lines=False)
+    df.to_json(f'./{generator}.json', orient='records', lines=False)
 
 
 if __name__ == "__main__":
