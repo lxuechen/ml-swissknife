@@ -52,7 +52,7 @@ def main(
 
         (response,) = tokenizer.batch_decode(completion, skip_special_tokens=True)
         logging.warning(f"Raw model response: {response}")
-        response_list = [(prompt, response)]
+        response_list = [(instruction, response)]
         return response_list
 
     with gr.Blocks() as demo:
