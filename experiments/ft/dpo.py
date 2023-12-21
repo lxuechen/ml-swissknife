@@ -61,7 +61,7 @@ class TrainingArguments(transformers.TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
     optim: str = field(default="adamw_torch")
     model_max_length: int = field(
-        default=2048,
+        default=1024,
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     save_raw_state_dict: bool = field(default=False)
@@ -253,13 +253,18 @@ def main():
         device_map="auto",
         trust_remote_code=True,
         flash_attn=True,
+        torch_dtype=torch.bfloat16,  # This will lead to LN issues but usually it's fine for fine-tuning.
     )
     model.resize_token_embeddings(len(tokenizer))
     model.load_state_dict(torch.load(f"{model_args.model_name_or_path}/model.pt"))
 
     data_module = make_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
-    trainer.train()
+    try:
+        trainer.train()
+    except RuntimeError as e:
+        logging.warning("Training failed...")
+        logging.warning(f"Exception: \n{e}")
     trainer.save_state()
     if training_args.save_raw_state_dict:
         tokenizer.save_pretrained(training_args.output_dir)
