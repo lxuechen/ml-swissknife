@@ -55,6 +55,7 @@ class DataArguments:
         default="HuggingFaceH4/ultrafeedback_binarized", metadata={"help": "Path to the training data."}
     )
     data_split: str = field(default="train_prefs")
+    max_size: int = field(default=sys.maxsize)
 
 
 @dataclass
@@ -137,7 +138,7 @@ def preprocess(
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(
-        self, tokenizer: transformers.PreTrainedTokenizer, chosen: list[list[dict]], rejected: list[list[dict]]
+        self, tokenizer: transformers.PreTrainedTokenizer, chosen: list[list[dict]], rejected: list[list[dict]],
     ):
         super(Dataset, self).__init__()
 
@@ -201,6 +202,7 @@ class DataCollator(object):
 def make_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> dict:
     dataset_dict = datasets.load_dataset(path=data_args.data_path, split=data_args.data_split).to_dict()
     chosen, rejected = dataset_dict['chosen'], dataset_dict['rejected']
+    chosen, rejected = chosen[:data_args.max_size], rejected[:data_args.max_size]
 
     train_dataset = Dataset(tokenizer=tokenizer, chosen=chosen, rejected=rejected)
     data_collator = DataCollator(tokenizer=tokenizer)
