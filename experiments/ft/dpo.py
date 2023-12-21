@@ -146,10 +146,6 @@ class Dataset(torch.utils.data.Dataset):
         chosen = [text_formatter(example) for example in chosen]
         rejected = [text_formatter(example) for example in rejected]
 
-        # TODO:
-        chosen = chosen[:128]
-        rejected = rejected[:128]
-
         chosen_sources, chosen_targets = tuple(zip(*chosen))
         rejected_sources, rejected_targets = tuple(zip(*rejected))
 
@@ -253,8 +249,7 @@ def main():
         padding_side="right",
         use_fast=True,
     )
-    
-    transformers.PreTrainedModel
+
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-2",
         cache_dir=training_args.cache_dir,
