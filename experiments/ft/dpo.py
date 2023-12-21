@@ -14,6 +14,7 @@
 
 import copy
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence
 
@@ -145,6 +146,7 @@ class Dataset(torch.utils.data.Dataset):
         chosen = [text_formatter(example) for example in chosen]
         rejected = [text_formatter(example) for example in rejected]
 
+        # TODO:
         chosen = chosen[:128]
         rejected = rejected[:128]
 
@@ -251,7 +253,8 @@ def main():
         padding_side="right",
         use_fast=True,
     )
-
+    
+    transformers.PreTrainedModel
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-2",
         cache_dir=training_args.cache_dir,
@@ -271,16 +274,15 @@ def main():
         logging.warning("Training failed...")
         logging.warning(f"Exception: \n{e}")
 
+    if training_args.fsdp:
+        cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        with FSDP.state_dict_type(trainer.model, StateDictType.FULL_STATE_DICT, cfg):
+            state_dict = trainer.model.state_dict()
+    else:
+        state_dict = model.state_dict()
+
     if training_args.should_save:
         if training_args.save_raw_state_dict:
-            if training_args.fsdp:
-                print(type(trainer.model), 'type!')
-                cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-                with FSDP.state_dict_type(trainer.model, StateDictType.FULL_STATE_DICT, cfg):
-                    state_dict = trainer.model.state_dict()
-            else:
-                state_dict = model.state_dict()
-
             torch.save(state_dict, f"{training_args.output_dir}/model.pt")
             tokenizer.save_pretrained(training_args.output_dir)
         else:
