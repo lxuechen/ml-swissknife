@@ -209,9 +209,11 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: Dat
 class Trainer(transformers.Trainer):
     def __init__(self, model, args, *argv, **kwargs):
         super().__init__(model, args, *argv, **kwargs)
-        self.ref_model = self._wrap_model(copy.deepcopy(model)).eval()
+        self.ref_model = copy.deepcopy(model).bfloat16().to(self.args.local_rank)
 
     def compute_loss(self, model, inputs, return_outputs=False):
+        self.ref_model.eval()
+
         input_ids_w, labels_w, attention_mask_w, input_ids_l, labels_l, attention_mask_l = tuple(
             inputs[key] for key in self.args.label_names
         )
@@ -250,13 +252,12 @@ def main():
         "microsoft/phi-2",
         cache_dir=training_args.cache_dir,
         low_cpu_mem_usage=True,
-        device_map="auto",
         trust_remote_code=True,
         flash_attn=True,
         torch_dtype=torch.bfloat16,  # This will lead to LN issues but usually it's fine for fine-tuning.
     )
     model.resize_token_embeddings(len(tokenizer))
-    model.load_state_dict(torch.load(f"{model_args.model_name_or_path}/model.pt"))
+    model.load_state_dict(torch.load(f"{model_args.model_name_or_path}/model.pt", map_location=torch.device("cpu")))
 
     data_module = make_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
