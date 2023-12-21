@@ -22,6 +22,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.data
 import transformers
+from torch.distributed.fsdp import FullStateDictConfig, FullyShardedDataParallel as FSDP, StateDictType
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -143,6 +144,9 @@ class Dataset(torch.utils.data.Dataset):
         text_formatter = TextFormatter(tokenizer=tokenizer)
         chosen = [text_formatter(example) for example in chosen]
         rejected = [text_formatter(example) for example in rejected]
+
+        chosen = chosen[:128]
+        rejected = rejected[:128]
 
         chosen_sources, chosen_targets = tuple(zip(*chosen))
         rejected_sources, rejected_targets = tuple(zip(*rejected))
@@ -266,12 +270,21 @@ def main():
     except RuntimeError as e:
         logging.warning("Training failed...")
         logging.warning(f"Exception: \n{e}")
-    trainer.save_state()
-    if training_args.save_raw_state_dict:
-        tokenizer.save_pretrained(training_args.output_dir)
-        torch.save(model.state_dict(), f"{training_args.output_dir}/model.pt")
-    else:
-        trainer.save_model(output_dir=training_args.output_dir)
+
+    if training_args.should_save:
+        if training_args.save_raw_state_dict:
+            if training_args.fsdp:
+                print(type(trainer.model), 'type!')
+                cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                with FSDP.state_dict_type(trainer.model, StateDictType.FULL_STATE_DICT, cfg):
+                    state_dict = trainer.model.state_dict()
+            else:
+                state_dict = model.state_dict()
+
+            torch.save(state_dict, f"{training_args.output_dir}/model.pt")
+            tokenizer.save_pretrained(training_args.output_dir)
+        else:
+            trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
