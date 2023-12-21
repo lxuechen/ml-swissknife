@@ -1,3 +1,4 @@
+import os.path
 import sys
 
 import datasets
@@ -47,8 +48,8 @@ def main(
     batch_size: int = 16,
     maxsize: int = sys.maxsize
 ):
-    dataset = datasets.load_dataset("tatsu-lab/alpaca_eval", split="eval")
-    instructions = dataset['instruction']
+    ds = datasets.load_dataset("tatsu-lab/alpaca_eval", split="eval")
+    instruction, dataset = ds['instruction'][:maxsize], ds['dataset'][:maxsize]
 
     # TODO: Need to do this annoying two-stage load because of issues with phi-2.
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
@@ -63,10 +64,10 @@ def main(
 
     tokenizer.padding_side = "left"
 
-    instructions = instructions[:maxsize]
-    output = batch_decode(model, tokenizer, instructions, batch_size)
+    output = batch_decode(model, tokenizer, instruction, batch_size)
 
-    df = pd.DataFrame({"instruction": instructions, "output": output})
+    generator = os.path.basename(model_name_or_path)
+    df = pd.DataFrame({"instruction": instruction, "output": output, "dataset": dataset, "generator": generator})
     df.to_json('./phi2-guanaco.json', orient='records', lines=False)
 
 
