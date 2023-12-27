@@ -265,11 +265,8 @@ def train():
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
     trainer.train()
-    trainer.save_state()
-    if training_args.save_raw_state_dict:
-        tokenizer.save_pretrained(training_args.output_dir)
-        torch.save(model.state_dict(), f"{training_args.output_dir}/model.pt")
-    else:
+    if training_args.should_save:
+        trainer.save_state()
         trainer.save_model(output_dir=training_args.output_dir)
 
 

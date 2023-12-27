@@ -23,7 +23,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.data
 import transformers
-from torch.distributed.fsdp import FullStateDictConfig, FullyShardedDataParallel as FSDP, StateDictType
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -244,14 +243,6 @@ def main():
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=training_args.cache_dir,
-        model_max_length=training_args.model_max_length,
-        padding_side="right",
-        use_fast=True,
-    )
-
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-2",
         cache_dir=training_args.cache_dir,
@@ -260,8 +251,13 @@ def main():
         flash_attn=True,
         torch_dtype=torch.bfloat16,  # This will lead to LN issues but usually it's fine for fine-tuning.
     )
-    model.resize_token_embeddings(len(tokenizer))
-    model.load_state_dict(torch.load(f"{model_args.model_name_or_path}/model.pt", map_location=torch.device("cpu")))
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=training_args.cache_dir,
+        model_max_length=training_args.model_max_length,
+        padding_side="right",
+        use_fast=True,
+    )
 
     data_module = make_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
@@ -271,19 +267,9 @@ def main():
         logging.warning("Training failed...")
         logging.warning(f"Exception: \n{e}")
 
-    if training_args.fsdp:
-        cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-        with FSDP.state_dict_type(trainer.model, StateDictType.FULL_STATE_DICT, cfg):
-            state_dict = trainer.model.state_dict()
-    else:
-        state_dict = model.state_dict()
-
     if training_args.should_save:
-        if training_args.save_raw_state_dict:
-            torch.save(state_dict, f"{training_args.output_dir}/model.pt")
-            tokenizer.save_pretrained(training_args.output_dir)
-        else:
-            trainer.save_model(output_dir=training_args.output_dir)
+        trainer.save_state()
+        trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
