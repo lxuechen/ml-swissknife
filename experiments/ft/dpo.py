@@ -210,9 +210,9 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: Dat
 
 
 class Trainer(transformers.Trainer):
-    def __init__(self, model, args, *argv, **kwargs):
+    def __init__(self, model, ref_model, args, *argv, **kwargs):
         super().__init__(model, args, *argv, **kwargs)
-        self.ref_model = copy.deepcopy(model).bfloat16().to(self.args.local_rank)
+        self.ref_model = ref_model.to(self.args.local_rank)
 
     def compute_loss(self, model, inputs, return_outputs=False):
         self.ref_model.eval()
@@ -260,7 +260,13 @@ def main():
     )
 
     data_module = make_data_module(tokenizer=tokenizer, data_args=data_args)
-    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    trainer = Trainer(
+        model=model,
+        ref_model=copy.deepcopy(model),  # Should be unsharded model on CPU.
+        tokenizer=tokenizer,
+        args=training_args,
+        **data_module
+    )
     try:
         trainer.train()
     except RuntimeError as e:
