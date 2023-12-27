@@ -236,7 +236,9 @@ def train():
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
+        low_cpu_mem_usage=True,
         trust_remote_code=model_args.trust_remote_code,
+        flash_attn=True,
     )
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(

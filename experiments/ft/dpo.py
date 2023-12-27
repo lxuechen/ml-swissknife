@@ -244,10 +244,10 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
-        "microsoft/phi-2",
+        model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
         low_cpu_mem_usage=True,
-        trust_remote_code=True,
+        trust_remote_code=model_args.trust_remote_code,
         flash_attn=True,
         torch_dtype=torch.bfloat16,  # This will lead to LN issues but usually it's fine for fine-tuning.
     )
