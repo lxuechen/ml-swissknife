@@ -51,16 +51,17 @@ def main(
     ds = datasets.load_dataset("tatsu-lab/alpaca_eval", split="eval")
     instruction, dataset = ds['instruction'][:maxsize], ds['dataset'][:maxsize]
 
-    # TODO: Need to do this annoying two-stage load because of issues with phi-2.
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
-        "microsoft/phi-2", cache_dir=cache_dir, low_cpu_mem_usage=True, device_map="auto",
-        trust_remote_code=True, torch_dtype=torch.bfloat16
+        model_name_or_path,
+        cache_dir=cache_dir,
+        low_cpu_mem_usage=True,
+        device_map="auto",
+        trust_remote_code=True,
+        torch_dtype=torch.bfloat16
     )
     tokenizer: transformers.PreTrainedTokenizer = transformers.AutoTokenizer.from_pretrained(
         model_name_or_path, cache_dir=cache_dir
     )
-    model.resize_token_embeddings(len(tokenizer))
-    model.load_state_dict(torch.load(f"{model_name_or_path}/model.pt"))
 
     tokenizer.padding_side = "left"
 
