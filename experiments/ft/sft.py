@@ -18,12 +18,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence
 
+import datasets
 import torch
 import transformers
 from torch.utils.data import Dataset
 from transformers import Trainer
-
-from lib import utils
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -76,14 +75,28 @@ class AlpacaTextFormatter(TextFormatter):
         return source, target
 
 
+class GuanacoOASST(TextFormatter):
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
+        super().__init__()
+        self.tokenizer = tokenizer
+
+    def __call__(self, example):
+        text = example['text']
+        first_round = text.split('### Human: ')[1]
+        source = f"""### Human: {first_round.split("### Assistant:")[0]}\n\n### Assistant:"""
+        target = f"""{first_round.split("### Assistant:")[1]}{self.tokenizer.eos_token}"""
+        return source, target
+
+
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
+    trust_remote_code: bool = field(default=True)
 
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default=None, metadata={"help": "Path to the training data."})
+    data_path: str = field(default="timdettmers/openassistant-guanaco", metadata={"help": "Path to the training data."})
 
 
 @dataclass
@@ -94,6 +107,7 @@ class TrainingArguments(transformers.TrainingArguments):
         default=512,
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
+    save_raw_state_dict: bool = field(default=False)
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -161,13 +175,18 @@ def preprocess(
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer):
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        list_data_dict = utils.jload(data_path)
+        dataset = datasets.load_dataset(data_path, split="train")
+        list_data_dict = dataset.to_list()
 
         logging.warning("Formatting inputs...")
-        text_formatter = AlpacaTextFormatter(tokenizer=tokenizer)
+        text_formatter_cls = {
+            "tatsu-lab/alpaca": AlpacaTextFormatter,
+            "timdettmers/openassistant-guanaco": GuanacoOASST
+        }[data_path]
+        text_formatter = text_formatter_cls(tokenizer=tokenizer)
         text_formatted = [text_formatter(example) for example in list_data_dict]
         sources, targets = tuple(zip(*text_formatted))
 
@@ -203,7 +222,7 @@ class DataCollatorForSupervisedDataset(object):
         )
 
 
-def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args) -> Dict:
+def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
@@ -217,6 +236,9 @@ def train():
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
+        low_cpu_mem_usage=True,
+        trust_remote_code=model_args.trust_remote_code,
+        flash_attn=True,
     )
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -245,8 +267,9 @@ def train():
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
     trainer.train()
-    trainer.save_state()
-    trainer.save_model(output_dir=training_args.output_dir)
+    if training_args.should_save:
+        trainer.save_state()
+        trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
