@@ -75,7 +75,7 @@ class AlpacaTextFormatter(TextFormatter):
         return source, target
 
 
-class GuanacoOASST(TextFormatter):
+class GuanacoOASSTTextFormatter(TextFormatter):
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
         super().__init__()
         self.tokenizer = tokenizer
@@ -163,6 +163,8 @@ def preprocess(
     tokenizer: transformers.PreTrainedTokenizer,
 ) -> Dict:
     """Preprocess the data by tokenizing."""
+    logging.warning("Tokenizing text... This may take some time...")
+
     examples = [s + t for s, t in zip(sources, targets)]
     examples_tokenized, sources_tokenized = [_tokenize_fn(strings, tokenizer) for strings in (examples, sources)]
     input_ids = examples_tokenized["input_ids"]
@@ -172,29 +174,49 @@ def preprocess(
     return dict(input_ids=input_ids, labels=labels)
 
 
+class DataProcessor(abc.ABC):
+    @abc.abstractmethod
+    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
+        raise NotImplementedError
+
+
+class AlpacaDataProcessor(DataProcessor):
+    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
+        text_formatter = AlpacaTextFormatter(tokenizer=tokenizer)
+        text_formatted = [text_formatter(example) for example in list_dict_data]
+        sources, targets = tuple(zip(*text_formatted))
+        data_dict = preprocess(sources, targets, tokenizer)
+        return data_dict
+
+
+class GuanacoOASSTDataProcessor(DataProcessor):
+    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
+        text_formatter = GuanacoOASSTTextFormatter(tokenizer=tokenizer)
+        text_formatted = [text_formatter(example) for example in list_dict_data]
+        sources, targets = tuple(zip(*text_formatted))
+        data_dict = preprocess(sources, targets, tokenizer)
+        return data_dict
+
+
+class FunctionCallingDataProcessor(DataProcessor):
+    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
+        pass
+
+
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str, cache_dir: Optional[str] = None):
-        # TODO: Make a text processor from data_path to input_ids, labels
-        # TODO: create a simple fine-tuning setup for tooluse where you don't mask over user turns.
-        #  takes in system prompt.
         super(SupervisedDataset, self).__init__()
-        logging.warning("Loading data...")
-        dataset = datasets.load_dataset(data_path, split="train", cache_dir=cache_dir)
-        list_data_dict = dataset.to_list()
+        list_data_dict = datasets.load_dataset(data_path, split="train", cache_dir=cache_dir).to_list()
 
-        logging.warning("Formatting inputs...")
-        text_formatter_cls = {
-            "tatsu-lab/alpaca": AlpacaTextFormatter,
-            "timdettmers/openassistant-guanaco": GuanacoOASST
+        data_processor_cls = {
+            "tatsu-lab/alpaca": AlpacaDataProcessor,
+            "timdettmers/openassistant-guanaco": GuanacoOASSTDataProcessor,
+            "glaiveai/glaive-function-calling-v2": FunctionCallingDataProcessor,
         }[data_path]
-        text_formatter = text_formatter_cls(tokenizer=tokenizer)
-        text_formatted = [text_formatter(example) for example in list_data_dict]
-        sources, targets = tuple(zip(*text_formatted))
-
-        logging.warning("Tokenizing inputs... This may take some time...")
-        data_dict = preprocess(sources, targets, tokenizer)
+        data_processor = data_processor_cls()
+        data_dict = data_processor(list_data_dict, tokenizer)
 
         self.input_ids = data_dict["input_ids"]
         self.labels = data_dict["labels"]
