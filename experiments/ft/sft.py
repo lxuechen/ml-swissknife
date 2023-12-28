@@ -43,42 +43,6 @@ PROMPT_DICT = {
 }
 
 
-class AlpacaTextFormatter(TextFormatter):
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
-        super().__init__()
-        self.tokenizer = tokenizer
-        self.prompt_input = (
-            "Below is an instruction that describes a task, paired with an input that provides further context. "
-            "Write a response that appropriately completes the request.\n\n"
-            "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
-        )
-        self.prompt_no_input = (
-            "Below is an instruction that describes a task. "
-            "Write a response that appropriately completes the request.\n\n"
-            "### Instruction:\n{instruction}\n\n### Response:"
-        )
-
-    def __call__(self, example):
-        prompt_input, prompt_no_input, tokenizer = self.prompt_input, self.prompt_no_input, self.tokenizer
-        source = prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(
-            example)
-        target = f"{example['output']}{tokenizer.eos_token}"
-        return source, target
-
-
-class GuanacoOASSTTextFormatter(TextFormatter):
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
-        super().__init__()
-        self.tokenizer = tokenizer
-
-    def __call__(self, example):
-        text = example['text']
-        first_round = text.split('### Human: ')[1]
-        source = f"""### Human: {first_round.split("### Assistant:")[0]}\n\n### Assistant:"""
-        target = f"""{first_round.split("### Assistant:")[1]}{self.tokenizer.eos_token}"""
-        return source, target
-
-
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
@@ -93,6 +57,7 @@ class DataArguments:
         default="timdettmers/openassistant-guanaco",
         metadata={"help": "Path to the training data."}
     )
+    data_split: str = field(default="train")
 
 
 @dataclass
@@ -210,9 +175,15 @@ class AlpacaDataProcessor(DataProcessor):
 class GuanacoOASSTDataProcessor(DataProcessor):
     tokenizer: transformers.PreTrainedTokenizer
 
+    def _format_text(self, dict_data: Dict):
+        text = dict_data['text']
+        first_round = text.split('### Human: ')[1]
+        source = f"""### Human: {first_round.split("### Assistant:")[0]}\n\n### Assistant:"""
+        target = f"""{first_round.split("### Assistant:")[1]}{self.tokenizer.eos_token}"""
+        return source, target
+
     def __call__(self, list_dict_data: Sequence[Dict]):
-        text_formatter = GuanacoOASSTTextFormatter(tokenizer=self.tokenizer)
-        text_formatted = [text_formatter(example) for example in list_dict_data]
+        text_formatted = [self._format_text(example) for example in list_dict_data]
         sources, targets = tuple(zip(*text_formatted))
         data_dict = preprocess(sources, targets, self.tokenizer)
         return data_dict
@@ -236,9 +207,15 @@ class FunctionCallingDataProcessor(DataProcessor):
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str, cache_dir: Optional[str] = None):
+    def __init__(
+        self,
+        tokenizer: transformers.PreTrainedTokenizer,
+        data_path: str,
+        data_split: str,
+        cache_dir: Optional[str] = None
+    ):
         super(SupervisedDataset, self).__init__()
-        list_data_dict = datasets.load_dataset(data_path, split="train", cache_dir=cache_dir).to_list()
+        list_data_dict = datasets.load_dataset(path=data_path, split=data_split, cache_dir=cache_dir).to_list()
 
         data_processor_cls = {
             "tatsu-lab/alpaca": AlpacaDataProcessor,
@@ -284,7 +261,10 @@ def make_supervised_data_module(
 ) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     train_dataset = SupervisedDataset(
-        tokenizer=tokenizer, data_path=data_args.data_path, cache_dir=training_args.cache_dir
+        tokenizer=tokenizer,
+        data_split=data_args.data_split,
+        data_path=data_args.data_path,
+        cache_dir=training_args.cache_dir,
     )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
