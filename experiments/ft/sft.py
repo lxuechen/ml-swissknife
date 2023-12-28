@@ -69,6 +69,7 @@ class TrainingArguments(transformers.TrainingArguments):
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     save_raw_state_dict: bool = field(default=False)
+    use_fast_tokenizer: bool = field(default=True)
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -287,7 +288,7 @@ def train():
         cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side="right",
-        use_fast=False,
+        use_fast=training_args.use_fast_tokenizer,
     )
     special_tokens_dict = dict()
     if tokenizer.pad_token is None:
