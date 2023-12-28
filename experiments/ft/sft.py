@@ -175,10 +175,13 @@ def preprocess(
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str):
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str, cache_dir: Optional[str] = None):
+        # TODO: Make a text processor from data_path to input_ids, labels
+        # TODO: create a simple fine-tuning setup for tooluse where you don't mask over user turns.
+        #  takes in system prompt.
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        dataset = datasets.load_dataset(data_path, split="train")
+        dataset = datasets.load_dataset(data_path, split="train", cache_dir=cache_dir)
         list_data_dict = dataset.to_list()
 
         logging.warning("Formatting inputs...")
@@ -222,9 +225,15 @@ class DataCollatorForSupervisedDataset(object):
         )
 
 
-def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> Dict:
+def make_supervised_data_module(
+    tokenizer: transformers.PreTrainedTokenizer,
+    data_args: DataArguments,
+    training_args: TrainingArguments
+) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path)
+    train_dataset = SupervisedDataset(
+        tokenizer=tokenizer, data_path=data_args.data_path, cache_dir=training_args.cache_dir
+    )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
 
@@ -264,7 +273,7 @@ def train():
         model=model,
     )
 
-    data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
+    data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args, training_args=training_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
     trainer.train()
     if training_args.should_save:
