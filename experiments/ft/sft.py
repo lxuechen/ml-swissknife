@@ -177,27 +177,36 @@ def preprocess(
     return dict(input_ids=input_ids, labels=labels)
 
 
+@dataclass
 class DataProcessor(abc.ABC):
+    tokenizer: transformers.PreTrainedTokenizer
+
     @abc.abstractmethod
-    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
+    def __call__(self, list_dict_data: Sequence[Dict]):
         raise NotImplementedError
 
 
+@dataclass
 class AlpacaDataProcessor(DataProcessor):
-    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
-        text_formatter = AlpacaTextFormatter(tokenizer=tokenizer)
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def __call__(self, list_dict_data: Sequence[Dict]):
+        text_formatter = AlpacaTextFormatter(tokenizer=self.tokenizer)
         text_formatted = [text_formatter(example) for example in list_dict_data]
         sources, targets = tuple(zip(*text_formatted))
-        data_dict = preprocess(sources, targets, tokenizer)
+        data_dict = preprocess(sources, targets, self.tokenizer)
         return data_dict
 
 
+@dataclass
 class GuanacoOASSTDataProcessor(DataProcessor):
-    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
-        text_formatter = GuanacoOASSTTextFormatter(tokenizer=tokenizer)
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def __call__(self, list_dict_data: Sequence[Dict]):
+        text_formatter = GuanacoOASSTTextFormatter(tokenizer=self.tokenizer)
         text_formatted = [text_formatter(example) for example in list_dict_data]
         sources, targets = tuple(zip(*text_formatted))
-        data_dict = preprocess(sources, targets, tokenizer)
+        data_dict = preprocess(sources, targets, self.tokenizer)
         return data_dict
 
 
@@ -228,8 +237,8 @@ class SupervisedDataset(Dataset):
             "timdettmers/openassistant-guanaco": GuanacoOASSTDataProcessor,
             "glaiveai/glaive-function-calling-v2": FunctionCallingDataProcessor,
         }[data_path]
-        data_processor = data_processor_cls()
-        data_dict = data_processor(list_data_dict, tokenizer)
+        data_processor = data_processor_cls(tokenizer=tokenizer)
+        data_dict = data_processor(list_data_dict)
 
         self.input_ids = data_dict["input_ids"]
         self.labels = data_dict["labels"]
