@@ -15,12 +15,17 @@
 import abc
 import copy
 import logging
+import sys
+import types
+import warnings
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Literal
 
 import datasets
 import torch
+import tqdm
 import transformers
+from torch import nn
 from torch.utils.data import Dataset
 from transformers import Trainer
 
@@ -43,51 +48,6 @@ PROMPT_DICT = {
 }
 
 
-class TextFormatter(abc.ABC):
-    def __init__(self):
-        super().__init__()
-
-    @abc.abstractmethod
-    def __call__(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-class AlpacaTextFormatter(TextFormatter):
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
-        super().__init__()
-        self.tokenizer = tokenizer
-        self.prompt_input = (
-            "Below is an instruction that describes a task, paired with an input that provides further context. "
-            "Write a response that appropriately completes the request.\n\n"
-            "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
-        )
-        self.prompt_no_input = (
-            "Below is an instruction that describes a task. "
-            "Write a response that appropriately completes the request.\n\n"
-            "### Instruction:\n{instruction}\n\n### Response:"
-        )
-
-    def __call__(self, example):
-        prompt_input, prompt_no_input, tokenizer = self.prompt_input, self.prompt_no_input, self.tokenizer
-        source = prompt_input.format_map(example) if example.get("input", "") != "" else prompt_no_input.format_map(
-            example)
-        target = f"{example['output']}{tokenizer.eos_token}"
-        return source, target
-
-
-class GuanacoOASST(TextFormatter):
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
-        super().__init__()
-        self.tokenizer = tokenizer
-
-    def __call__(self, example):
-        text = example['text']
-        first_round = text.split('### Human: ')[1]
-        source = f"""### Human: {first_round.split("### Assistant:")[0]}\n\n### Assistant:"""
-        target = f"""{first_round.split("### Assistant:")[1]}{self.tokenizer.eos_token}"""
-        return source, target
-
-
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
@@ -96,7 +56,13 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default="timdettmers/openassistant-guanaco", metadata={"help": "Path to the training data."})
+    data_path: Literal[
+        "timdettmers/openassistant-guanaco", "tatsu-lab/alpaca", "glaiveai/glaive-function-calling-v2"
+    ] = field(
+        default="timdettmers/openassistant-guanaco",
+        metadata={"help": "Path to the training data."}
+    )
+    data_split: str = field(default="train")
 
 
 @dataclass
@@ -108,19 +74,19 @@ class TrainingArguments(transformers.TrainingArguments):
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     save_raw_state_dict: bool = field(default=False)
+    use_fast_tokenizer: bool = field(default=True)
+    max_size: int = field(default=sys.maxsize)
 
 
 def smart_tokenizer_and_embedding_resize(
     special_tokens_dict: Dict,
     tokenizer: transformers.PreTrainedTokenizer,
     model: transformers.PreTrainedModel,
+    pad_to_multiple_of: Optional[int] = 64,
 ):
-    """Resize tokenizer and embedding.
-
-    Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
-    """
+    """Resize tokenizer and embedding."""
     num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_to_multiple_of)
 
     if num_new_tokens > 0:
         input_embeddings = model.get_input_embeddings().weight.data
@@ -143,7 +109,7 @@ def _tokenize_fn(strings: Sequence[str], tokenizer: transformers.PreTrainedToken
             max_length=tokenizer.model_max_length,
             truncation=True,
         )
-        for text in strings
+        for text in tqdm.tqdm(strings, desc="_tokenize_fn")
     ]
     input_ids = labels = [tokenized.input_ids[0] for tokenized in tokenized_list]
     input_ids_lens = labels_lens = [
@@ -163,6 +129,8 @@ def preprocess(
     tokenizer: transformers.PreTrainedTokenizer,
 ) -> Dict:
     """Preprocess the data by tokenizing."""
+    logging.warning("Tokenizing text... This may take some time...")
+
     examples = [s + t for s, t in zip(sources, targets)]
     examples_tokenized, sources_tokenized = [_tokenize_fn(strings, tokenizer) for strings in (examples, sources)]
     input_ids = examples_tokenized["input_ids"]
@@ -172,26 +140,99 @@ def preprocess(
     return dict(input_ids=input_ids, labels=labels)
 
 
+@dataclass
+class DataProcessor(abc.ABC):
+    tokenizer: transformers.PreTrainedTokenizer
+
+    @abc.abstractmethod
+    def __call__(self, list_dict_data: Sequence[Dict]):
+        raise NotImplementedError
+
+
+@dataclass
+class AlpacaDataProcessor(DataProcessor):
+    tokenizer: transformers.PreTrainedTokenizer
+    prompt_input: str = (
+        "Below is an instruction that describes a task, paired with an input that provides further context. "
+        "Write a response that appropriately completes the request.\n\n"
+        "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+    )
+    prompt_no_input: str = (
+        "Below is an instruction that describes a task. "
+        "Write a response that appropriately completes the request.\n\n"
+        "### Instruction:\n{instruction}\n\n### Response:"
+    )
+
+    def _format_text(self, dict_data: Dict):
+        if dict_data.get("input", "") != "":
+            source = self.prompt_input.format_map(dict_data)
+        else:
+            source = self.prompt_no_input.format_map(dict_data)
+        target = f"{dict_data['output']}{self.tokenizer.eos_token}"
+        return source, target
+
+    def __call__(self, list_dict_data: Sequence[Dict]):
+        text_formatted = [self._format_text(example) for example in list_dict_data]
+        sources, targets = tuple(zip(*text_formatted))
+        data_dict = preprocess(sources, targets, self.tokenizer)
+        return data_dict
+
+
+@dataclass
+class GuanacoOASSTDataProcessor(DataProcessor):
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def _format_text(self, dict_data: Dict):
+        text = dict_data['text']
+        first_round = text.split('### Human: ')[1]
+        source = f"""### Human: {first_round.split("### Assistant:")[0]}\n\n### Assistant:"""
+        target = f"""{first_round.split("### Assistant:")[1]}{self.tokenizer.eos_token}"""
+        return source, target
+
+    def __call__(self, list_dict_data: Sequence[Dict]):
+        text_formatted = [self._format_text(example) for example in list_dict_data]
+        sources, targets = tuple(zip(*text_formatted))
+        data_dict = preprocess(sources, targets, self.tokenizer)
+        return data_dict
+
+
+@dataclass
+class FunctionCallingDataProcessor(DataProcessor):
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def _format_text(self, dict_data: Dict):
+        system, chat = dict_data['system'], dict_data['chat']
+        text = f"{system}\n\n{chat}"
+        text = text.replace('<|endoftext|>', self.tokenizer.eos_token)
+        return text
+
+    def __call__(self, list_dict_data: Sequence[Dict]):
+        texts = [self._format_text(dict_data) for dict_data in tqdm.tqdm(list_dict_data, desc="_format_text")]
+        return _tokenize_fn(texts, self.tokenizer)
+
+
 class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, data_path: str):
+    def __init__(
+        self,
+        tokenizer: transformers.PreTrainedTokenizer,
+        data_path: str,
+        data_split: str,
+        max_size: int = sys.maxsize,
+        cache_dir: Optional[str] = None
+    ):
         super(SupervisedDataset, self).__init__()
-        logging.warning("Loading data...")
-        dataset = datasets.load_dataset(data_path, split="train")
-        list_data_dict = dataset.to_list()
+        list_data_dict = datasets.load_dataset(path=data_path, split=data_split, cache_dir=cache_dir).to_list()
+        list_data_dict = list_data_dict[:max_size]
 
-        logging.warning("Formatting inputs...")
-        text_formatter_cls = {
-            "tatsu-lab/alpaca": AlpacaTextFormatter,
-            "timdettmers/openassistant-guanaco": GuanacoOASST
+        data_processor_cls = {
+            "tatsu-lab/alpaca": AlpacaDataProcessor,
+            "timdettmers/openassistant-guanaco": GuanacoOASSTDataProcessor,
+            "glaiveai/glaive-function-calling-v2": FunctionCallingDataProcessor,
         }[data_path]
-        text_formatter = text_formatter_cls(tokenizer=tokenizer)
-        text_formatted = [text_formatter(example) for example in list_data_dict]
-        sources, targets = tuple(zip(*text_formatted))
-
-        logging.warning("Tokenizing inputs... This may take some time...")
-        data_dict = preprocess(sources, targets, tokenizer)
+        data_processor = data_processor_cls(tokenizer=tokenizer)
+        data_dict = data_processor(list_data_dict)
 
         self.input_ids = data_dict["input_ids"]
         self.labels = data_dict["labels"]
@@ -222,11 +263,55 @@ class DataCollatorForSupervisedDataset(object):
         )
 
 
-def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments) -> Dict:
+def make_supervised_data_module(
+    tokenizer: transformers.PreTrainedTokenizer,
+    data_args: DataArguments,
+    training_args: TrainingArguments
+) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path)
+    train_dataset = SupervisedDataset(
+        tokenizer=tokenizer,
+        data_split=data_args.data_split,
+        data_path=data_args.data_path,
+        max_size=training_args.max_size,
+        cache_dir=training_args.cache_dir,
+    )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
+
+
+def let_model_save_mem_when_zero_grad(model: nn.Module):
+    def new_zero_grad(self, set_to_none: bool = True) -> None:
+        r"""Sets gradients of all model parameters to zero. See similar function
+        under :class:`torch.optim.Optimizer` for more context.
+
+        Args:
+            set_to_none (bool): instead of setting to zero, set the grads to None.
+                See :meth:`torch.optim.Optimizer.zero_grad` for details.
+        """
+        if getattr(self, "_is_replica", False):
+            warnings.warn(
+                "Calling .zero_grad() from a module created with nn.DataParallel() has no effect. "
+                "The parameters are copied (in a differentiable manner) from the original module. "
+                "This means they are not leaf nodes in autograd and so don't accumulate gradients. "
+                "If you need gradients in your forward method, consider using autograd.grad instead."
+            )
+
+        for p in self.parameters():
+            if p.grad is not None:
+                if set_to_none:
+                    p.grad = None
+                else:
+                    if p.grad.grad_fn is not None:
+                        p.grad.detach_()
+                    else:
+                        p.grad.requires_grad_(False)
+                    p.grad.zero_()
+
+    # Make zero_grad `set_to_none=True` by default.
+    # Need this runtime method patching, since self is used within zero_grad.
+    model.zero_grad = types.MethodType(new_zero_grad, model)
+    return model
 
 
 def train():
@@ -240,13 +325,14 @@ def train():
         trust_remote_code=model_args.trust_remote_code,
         flash_attn=True,
     )
+    let_model_save_mem_when_zero_grad(model)
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side="right",
-        use_fast=False,
+        use_fast=training_args.use_fast_tokenizer,
     )
     special_tokens_dict = dict()
     if tokenizer.pad_token is None:
@@ -264,12 +350,15 @@ def train():
         model=model,
     )
 
-    data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
+    data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args, training_args=training_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
-    trainer.train()
-    if training_args.should_save:
-        trainer.save_state()
-        trainer.save_model(output_dir=training_args.output_dir)
+    try:
+        trainer.train()
+    except RuntimeError as e:
+        logging.warning("Training failed...")
+        logging.warning(f"Exception: \n{e}")
+    trainer.save_state()
+    trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
