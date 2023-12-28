@@ -119,13 +119,11 @@ def smart_tokenizer_and_embedding_resize(
     special_tokens_dict: Dict,
     tokenizer: transformers.PreTrainedTokenizer,
     model: transformers.PreTrainedModel,
+    pad_to_multiple_of: Optional[int] = 64,
 ):
-    """Resize tokenizer and embedding.
-
-    Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
-    """
+    """Resize tokenizer and embedding."""
     num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_to_multiple_of)
 
     if num_new_tokens > 0:
         input_embeddings = model.get_input_embeddings().weight.data
