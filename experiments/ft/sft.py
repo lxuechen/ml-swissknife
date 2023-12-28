@@ -43,9 +43,9 @@ PROMPT_DICT = {
 }
 
 
+@dataclass
 class TextFormatter(abc.ABC):
-    def __init__(self):
-        super().__init__()
+    tokenizer: transformers.PreTrainedTokenizer
 
     @abc.abstractmethod
     def __call__(self, *args, **kwargs):
@@ -201,9 +201,19 @@ class GuanacoOASSTDataProcessor(DataProcessor):
         return data_dict
 
 
+@dataclass
 class FunctionCallingDataProcessor(DataProcessor):
-    def __call__(self, list_dict_data: Sequence[Dict], tokenizer: transformers.PreTrainedTokenizer):
-        pass
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def _format_text(self, dict_data: Dict):
+        system, chat = dict_data['system'], dict_data['chat']
+        text = f"{system}\n\n{chat}"
+        text = text.replace('<|endoftext|>', self.tokenizer.eos_token)
+        return text
+
+    def __call__(self, list_dict_data: Sequence[Dict]):
+        texts = [self._format_text(dict_data) for dict_data in list_dict_data]
+        return _tokenize_fn(texts, self.tokenizer)
 
 
 class SupervisedDataset(Dataset):
