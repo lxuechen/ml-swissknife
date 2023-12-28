@@ -16,7 +16,7 @@ import abc
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Literal
 
 import datasets
 import torch
@@ -96,7 +96,12 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default="timdettmers/openassistant-guanaco", metadata={"help": "Path to the training data."})
+    data_path: Literal[
+        "timdettmers/openassistant-guanaco", "tatsu-lab/alpaca", "glaiveai/glaive-function-calling-v2"
+    ] = field(
+        default="timdettmers/openassistant-guanaco",
+        metadata={"help": "Path to the training data."}
+    )
 
 
 @dataclass
