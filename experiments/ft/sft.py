@@ -15,6 +15,9 @@
 import abc
 import copy
 import logging
+import sys
+import types
+import warnings
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence, Literal
 
@@ -22,6 +25,7 @@ import datasets
 import torch
 import tqdm
 import transformers
+from torch import nn
 from torch.utils.data import Dataset
 from transformers import Trainer
 
@@ -71,6 +75,7 @@ class TrainingArguments(transformers.TrainingArguments):
     )
     save_raw_state_dict: bool = field(default=False)
     use_fast_tokenizer: bool = field(default=True)
+    max_size: int = field(default=sys.maxsize)
 
 
 def smart_tokenizer_and_embedding_resize(
@@ -110,6 +115,9 @@ def _tokenize_fn(strings: Sequence[str], tokenizer: transformers.PreTrainedToken
     input_ids_lens = labels_lens = [
         tokenized.input_ids.ne(tokenizer.pad_token_id).sum().item() for tokenized in tokenized_list
     ]
+    # breakpoint()
+    # input_ids = labels = [torch.ones((2048,), dtype=torch.long) for _ in range(1024)]
+    # print(max(input_ids_lens), max(labels_lens), 'maxlens')
     return dict(
         input_ids=input_ids,
         labels=labels,
@@ -214,10 +222,12 @@ class SupervisedDataset(Dataset):
         tokenizer: transformers.PreTrainedTokenizer,
         data_path: str,
         data_split: str,
+        max_size: int = sys.maxsize,
         cache_dir: Optional[str] = None
     ):
         super(SupervisedDataset, self).__init__()
         list_data_dict = datasets.load_dataset(path=data_path, split=data_split, cache_dir=cache_dir).to_list()
+        list_data_dict = list_data_dict[:max_size]
 
         data_processor_cls = {
             "tatsu-lab/alpaca": AlpacaDataProcessor,
@@ -266,10 +276,45 @@ def make_supervised_data_module(
         tokenizer=tokenizer,
         data_split=data_args.data_split,
         data_path=data_args.data_path,
+        max_size=training_args.max_size,
         cache_dir=training_args.cache_dir,
     )
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
+
+
+def let_model_save_mem_when_zero_grad(model: nn.Module):
+    def new_zero_grad(self, set_to_none: bool = True) -> None:
+        r"""Sets gradients of all model parameters to zero. See similar function
+        under :class:`torch.optim.Optimizer` for more context.
+
+        Args:
+            set_to_none (bool): instead of setting to zero, set the grads to None.
+                See :meth:`torch.optim.Optimizer.zero_grad` for details.
+        """
+        if getattr(self, "_is_replica", False):
+            warnings.warn(
+                "Calling .zero_grad() from a module created with nn.DataParallel() has no effect. "
+                "The parameters are copied (in a differentiable manner) from the original module. "
+                "This means they are not leaf nodes in autograd and so don't accumulate gradients. "
+                "If you need gradients in your forward method, consider using autograd.grad instead."
+            )
+
+        for p in self.parameters():
+            if p.grad is not None:
+                if set_to_none:
+                    p.grad = None
+                else:
+                    if p.grad.grad_fn is not None:
+                        p.grad.detach_()
+                    else:
+                        p.grad.requires_grad_(False)
+                    p.grad.zero_()
+
+    # Make zero_grad `set_to_none=True` by default.
+    # Need this runtime method patching, since self is used within zero_grad.
+    model.zero_grad = types.MethodType(new_zero_grad, model)
+    return model
 
 
 def train():
@@ -283,6 +328,7 @@ def train():
         trust_remote_code=model_args.trust_remote_code,
         flash_attn=True,
     )
+    let_model_save_mem_when_zero_grad(model)
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
