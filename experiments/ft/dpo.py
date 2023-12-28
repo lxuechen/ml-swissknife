@@ -272,10 +272,8 @@ def main():
     except RuntimeError as e:
         logging.warning("Training failed...")
         logging.warning(f"Exception: \n{e}")
-
-    if training_args.should_save:
-        trainer.save_state()
-        trainer.save_model(output_dir=training_args.output_dir)
+    trainer.save_state()
+    trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":

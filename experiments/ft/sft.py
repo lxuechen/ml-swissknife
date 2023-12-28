@@ -352,10 +352,13 @@ def train():
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args, training_args=training_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
-    trainer.train()
-    if training_args.should_save:
-        trainer.save_state()
-        trainer.save_model(output_dir=training_args.output_dir)
+    try:
+        trainer.train()
+    except RuntimeError as e:
+        logging.warning("Training failed...")
+        logging.warning(f"Exception: \n{e}")
+    trainer.save_state()
+    trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
