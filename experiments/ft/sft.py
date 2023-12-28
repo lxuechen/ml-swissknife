@@ -115,9 +115,6 @@ def _tokenize_fn(strings: Sequence[str], tokenizer: transformers.PreTrainedToken
     input_ids_lens = labels_lens = [
         tokenized.input_ids.ne(tokenizer.pad_token_id).sum().item() for tokenized in tokenized_list
     ]
-    # breakpoint()
-    # input_ids = labels = [torch.ones((2048,), dtype=torch.long) for _ in range(1024)]
-    # print(max(input_ids_lens), max(labels_lens), 'maxlens')
     return dict(
         input_ids=input_ids,
         labels=labels,
