@@ -20,6 +20,7 @@ from typing import Dict, Optional, Sequence, Literal
 
 import datasets
 import torch
+import tqdm
 import transformers
 from torch.utils.data import Dataset
 from transformers import Trainer
@@ -103,7 +104,7 @@ def _tokenize_fn(strings: Sequence[str], tokenizer: transformers.PreTrainedToken
             max_length=tokenizer.model_max_length,
             truncation=True,
         )
-        for text in strings
+        for text in tqdm.tqdm(strings, desc="_tokenize_fn")
     ]
     input_ids = labels = [tokenized.input_ids[0] for tokenized in tokenized_list]
     input_ids_lens = labels_lens = [
@@ -201,7 +202,7 @@ class FunctionCallingDataProcessor(DataProcessor):
         return text
 
     def __call__(self, list_dict_data: Sequence[Dict]):
-        texts = [self._format_text(dict_data) for dict_data in list_dict_data]
+        texts = [self._format_text(dict_data) for dict_data in tqdm.tqdm(list_dict_data, desc="_format_text")]
         return _tokenize_fn(texts, self.tokenizer)
 
 
