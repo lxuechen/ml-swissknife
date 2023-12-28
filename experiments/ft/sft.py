@@ -43,15 +43,6 @@ PROMPT_DICT = {
 }
 
 
-@dataclass
-class TextFormatter(abc.ABC):
-    tokenizer: transformers.PreTrainedTokenizer
-
-    @abc.abstractmethod
-    def __call__(self, *args, **kwargs):
-        raise NotImplementedError
-
-
 class AlpacaTextFormatter(TextFormatter):
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer):
         super().__init__()
@@ -189,10 +180,27 @@ class DataProcessor(abc.ABC):
 @dataclass
 class AlpacaDataProcessor(DataProcessor):
     tokenizer: transformers.PreTrainedTokenizer
+    prompt_input: str = (
+        "Below is an instruction that describes a task, paired with an input that provides further context. "
+        "Write a response that appropriately completes the request.\n\n"
+        "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
+    )
+    prompt_no_input: str = (
+        "Below is an instruction that describes a task. "
+        "Write a response that appropriately completes the request.\n\n"
+        "### Instruction:\n{instruction}\n\n### Response:"
+    )
+
+    def _format_text(self, dict_data: Dict):
+        if dict_data.get("input", "") != "":
+            source = self.prompt_input.format_map(dict_data)
+        else:
+            source = self.prompt_no_input.format_map(dict_data)
+        target = f"{dict_data['output']}{self.tokenizer.eos_token}"
+        return source, target
 
     def __call__(self, list_dict_data: Sequence[Dict]):
-        text_formatter = AlpacaTextFormatter(tokenizer=self.tokenizer)
-        text_formatted = [text_formatter(example) for example in list_dict_data]
+        text_formatted = [self._format_text(example) for example in list_dict_data]
         sources, targets = tuple(zip(*text_formatted))
         data_dict = preprocess(sources, targets, self.tokenizer)
         return data_dict
