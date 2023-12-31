@@ -1,6 +1,7 @@
 """
 Single-turn chatbot playground to test our models.
 """
+import abc
 import dataclasses
 import logging
 
@@ -8,8 +9,6 @@ import fire
 import gradio as gr
 import torch
 import transformers
-
-import abc
 
 
 class TextFormatter(abc.ABC):
@@ -40,26 +39,30 @@ def main(
     debug=False,
 ):
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = tf32
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
-        "microsoft/phi-2", cache_dir=cache_dir, low_cpu_mem_usage=True, device_map="auto",
-        trust_remote_code=True, torch_dtype=torch.bfloat16
+        "microsoft/phi-2",
+        cache_dir=cache_dir,
+        low_cpu_mem_usage=True,
+        device_map="auto",
+        trust_remote_code=True,
+        torch_dtype=torch.bfloat16
     )
     tokenizer: transformers.PreTrainedTokenizer = transformers.AutoTokenizer.from_pretrained(
-        model_name_or_path, cache_dir=cache_dir
+        model_name_or_path,
+        cache_dir=cache_dir,
+        use_fast=True,
+        trust_remote_code=True
     )
-    model.resize_token_embeddings(len(tokenizer))
-    model.load_state_dict(torch.load(f"{model_name_or_path}/model.pt"))
 
     @torch.inference_mode()
-    def predict(instruction, input, temperature, top_p):
+    def predict(system, instruction, temperature, top_p):
         logging.warning(f"User input\ninstruction: {instruction}\ninput: {input}")
         prompt = f"""### Human: {instruction}\n\n### Assistant:"""
         input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
         full_completion = model.generate(
-            input_ids.to(device),
+            input_ids.to(model.device),
             temperature=temperature,
             top_p=top_p,
             do_sample=temperature > 0.0,
@@ -82,9 +85,10 @@ def main(
             top_p = gr.Slider(0.0, 1.0, 0.9, label="top p")
 
         with gr.Row():
+            system_box = gr.Textbox(show_label=False, placeholder="Enter your system message.")
             instruction_box = gr.Textbox(show_label=False, placeholder="Enter your instruction and press enter")
 
-        instruction_box.submit(predict, [instruction_box, temperature, top_p], [chatbot])
+        instruction_box.submit(predict, [system_box, instruction_box, temperature, top_p], [chatbot])
 
     demo.launch(share=share, debug=debug, show_api=show_api, server_name="0.0.0.0")
 
