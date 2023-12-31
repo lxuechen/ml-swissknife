@@ -1,12 +1,32 @@
 """
 Single-turn chatbot playground to test our models.
 """
+import dataclasses
 import logging
 
 import fire
 import gradio as gr
 import torch
 import transformers
+
+import abc
+
+
+class TextFormatter(abc.ABC):
+    @abc.abstractmethod
+    def __call__(self, dict_data: dict):
+        raise NotImplementedError
+
+
+@dataclasses.dataclass
+class FunctionCallingTextFormatter(TextFormatter):
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def __call__(self, dict_data: dict):
+        system, chat = dict_data['system'], dict_data['chat']
+        text = f"{system}\n\n{chat}"
+        text = text.replace('<|endoftext|>', self.tokenizer.eos_token)
+        return text
 
 
 def main(
