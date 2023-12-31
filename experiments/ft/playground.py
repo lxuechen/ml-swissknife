@@ -10,6 +10,8 @@ import gradio as gr
 import torch
 import transformers
 
+TEXT_FORMATTER = {'function_calling', 'guanaco_oasst', 'alpaca'}
+
 
 class TextFormatter(abc.ABC):
     @abc.abstractmethod
@@ -57,8 +59,9 @@ def main(
 
     @torch.inference_mode()
     def predict(system, instruction, temperature, top_p):
-        logging.warning(f"User input\ninstruction: {instruction}\ninput: {input}")
-        prompt = f"""### Human: {instruction}\n\n### Assistant:"""
+        logging.warning(f"User input\nsystem: {system}\n\ninstruction: {instruction}")
+        text_formatter = FunctionCallingTextFormatter(tokenizer=tokenizer)
+        prompt = text_formatter(dict_data={'system': system, 'chat': instruction})
         input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
         full_completion = model.generate(
@@ -83,14 +86,18 @@ def main(
     with gr.Blocks() as demo:
         chatbot = gr.Chatbot()
         with gr.Row():
-            temperature = gr.Slider(0.0, 1.0, 0.7, label="temperature")
-            top_p = gr.Slider(0.0, 1.0, 0.9, label="top p")
+            temperature_box = gr.Slider(0.0, 1.0, 0.7, label="temperature")
+            top_p_box = gr.Slider(0.0, 1.0, 0.9, label="top p")
 
         with gr.Row():
             system_box = gr.Textbox(show_label=False, placeholder="Enter your system message.")
             instruction_box = gr.Textbox(show_label=False, placeholder="Enter your instruction and press enter")
 
-        instruction_box.submit(predict, [system_box, instruction_box, temperature, top_p], [chatbot])
+        instruction_box.submit(
+            predict,
+            [system_box, instruction_box, temperature_box, top_p_box],
+            [chatbot]
+        )
 
     demo.launch(share=share, debug=debug, show_api=show_api, server_name="0.0.0.0")
 
