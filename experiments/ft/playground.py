@@ -63,13 +63,15 @@ def main(
 
         full_completion = model.generate(
             input_ids.to(model.device),
-            temperature=temperature,
-            top_p=top_p,
-            do_sample=temperature > 0.0,
-            num_beams=num_beams,
-            max_new_tokens=max_new_tokens,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
+            generation_config=transformers.GenerationConfig(
+                temperature=temperature,
+                top_p=top_p,
+                do_sample=temperature > 0.0,
+                num_beams=num_beams,
+                max_new_tokens=max_new_tokens,
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.pad_token_id,
+            ),
         )
         completion = full_completion[:, input_ids.size(1):]
 
