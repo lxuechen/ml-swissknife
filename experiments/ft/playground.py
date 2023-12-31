@@ -83,7 +83,7 @@ def main(
     with gr.Blocks() as demo:
         chatbot = gr.Chatbot()
         with gr.Row():
-            temperature = gr.Slider(0.0, 1.0, 1.0, label="temperature")
+            temperature = gr.Slider(0.0, 1.0, 0.7, label="temperature")
             top_p = gr.Slider(0.0, 1.0, 0.9, label="top p")
 
         with gr.Row():
