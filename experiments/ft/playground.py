@@ -40,10 +40,11 @@ def main(
     share=True,
     debug=False,
 ):
+    # python playground.py --model_name_or_path "/self/scr-ssd/lxuechen/working_dir/phi-2-tool-use"
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = tf32
 
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
-        "microsoft/phi-2",
+        model_name_or_path,
         cache_dir=cache_dir,
         low_cpu_mem_usage=True,
         device_map="auto",
