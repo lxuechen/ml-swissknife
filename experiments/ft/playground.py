@@ -5,6 +5,7 @@ import abc
 import dataclasses
 import logging
 from threading import Thread
+from typing import Sequence
 
 import fire
 import gradio as gr
@@ -24,17 +25,25 @@ class TextFormatter(abc.ABC):
 class FunctionCallingTextFormatter(TextFormatter):
     tokenizer: transformers.PreTrainedTokenizer
 
-    def __call__(self, dict_data: dict):
-        system, chat = dict_data['system'], dict_data['chat']
-        text = f"{system}\n\n{chat}"
-        text = text.replace('<|endoftext|>', self.tokenizer.eos_token)
-        return text
+    def __call__(self, list_dict_data: Sequence[dict]):
+        text = ""
+        for dict_data in list_dict_data:
+            content, role = dict_data['content'], dict_data['role']
+            if role == "system":
+                text += f"SYSTEM: {content}\n\n"
+            elif role == "user":
+                text += f"USER: {content} {self.tokenizer.eos_token} "
+            elif role == "assistant":
+                text += f"ASSISTANT: {content} {self.tokenizer.eos_token} "
+            else:
+                raise ValueError
+        return text.strip()
 
 
 def main(
     model_name_or_path: str = "microsoft/phi-2",
     cache_dir=None,
-    max_new_tokens=1024,
+    max_new_tokens=24,
     num_beams=1,
     tf32=True,
     show_api=True,
@@ -58,15 +67,22 @@ def main(
         model_name_or_path,
         cache_dir=cache_dir,
         use_fast=True,
-        trust_remote_code=True
+        trust_remote_code=True,
+        padding_side="left",
     )
-    streamer = transformers.TextIteratorStreamer(tokenizer)
+    streamer = transformers.TextIteratorStreamer(tokenizer, skip_prompt=True)
 
     @torch.inference_mode()
     def predict(message, history, system, temperature, top_p):
-        # TODO: Fix message formatting so history is not omitted.
+        messages = [dict(content=system, role="system")]
+        for round_ in history:
+            user_turn, assistant_turn = round_
+            messages.append(dict(content=user_turn, role="user"))
+            messages.append(dict(content=assistant_turn, role="assistant"))
+        messages.append(dict(content=message, role="user"))
+
         text_formatter = FunctionCallingTextFormatter(tokenizer=tokenizer)
-        prompt = text_formatter(dict_data={'system': system, 'chat': message})
+        prompt = text_formatter(messages)
         logging.warning(f"Formatted prompt:\n{prompt}")
 
         generation_kwargs = dict(
