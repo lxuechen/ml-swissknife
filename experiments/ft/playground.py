@@ -4,6 +4,7 @@ Single-turn chatbot playground to test our models.
 import abc
 import dataclasses
 import logging
+from threading import Thread
 
 import fire
 import gradio as gr
@@ -37,13 +38,14 @@ def main(
     num_beams=1,
     tf32=True,
     show_api=True,
-    share=True,
+    share=False,
     debug=False,
     server_name="0.0.0.0"
 ):
     # python playground.py --model_name_or_path "/self/scr-ssd/lxuechen/working_dir/phi-2-tool-use"
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = tf32
 
+    # On MacOS, loads on mps; on GPU-enabled Linux, loads on GPU 0.
     model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
         cache_dir=cache_dir,
@@ -61,16 +63,13 @@ def main(
     streamer = transformers.TextIteratorStreamer(tokenizer)
 
     @torch.inference_mode()
-    def predict(system, instruction, temperature, top_p):
-        logging.warning(f"User input\nsystem: {system}\n\ninstruction: {instruction}")
-
+    def predict(message, history, system, temperature, top_p):
         text_formatter = FunctionCallingTextFormatter(tokenizer=tokenizer)
-        prompt = text_formatter(dict_data={'system': system, 'chat': instruction})
+        prompt = text_formatter(dict_data={'system': system, 'chat': 'hi'})
         logging.warning(f"Formatted prompt:\n{prompt}")
 
-        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-        full_completion = model.generate(
-            input_ids.to(model.device),
+        generation_kwargs = dict(
+            inputs=tokenizer(prompt, return_tensors="pt").input_ids.to(model.device),
             generation_config=transformers.GenerationConfig(
                 temperature=temperature,
                 top_p=top_p,
@@ -82,12 +81,13 @@ def main(
             ),
             streamer=streamer
         )
-        completion = full_completion[:, input_ids.size(1):]
+        thread = Thread(target=model.generate, kwargs=generation_kwargs)
+        thread.start()
 
-        (response,) = tokenizer.batch_decode(completion, skip_special_tokens=True)
-        logging.warning(f"Raw model response: {response}")
-        response_list = [(instruction, response)]
-        return response_list
+        response = ""
+        for token in streamer:
+            response += token
+            yield response
 
     with gr.Blocks() as demo:
         with gr.Row():
