@@ -64,8 +64,9 @@ def main(
 
     @torch.inference_mode()
     def predict(message, history, system, temperature, top_p):
+        # TODO: Fix message formatting so history is not omitted.
         text_formatter = FunctionCallingTextFormatter(tokenizer=tokenizer)
-        prompt = text_formatter(dict_data={'system': system, 'chat': 'hi'})
+        prompt = text_formatter(dict_data={'system': system, 'chat': message})
         logging.warning(f"Formatted prompt:\n{prompt}")
 
         generation_kwargs = dict(
