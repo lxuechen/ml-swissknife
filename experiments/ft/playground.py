@@ -70,7 +70,7 @@ def main(
         trust_remote_code=True,
         padding_side="left",
     )
-    streamer = transformers.TextIteratorStreamer(tokenizer, skip_prompt=True)
+    streamer = transformers.TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
     @torch.inference_mode()
     def predict(message, history, system, temperature, top_p):
@@ -83,6 +83,7 @@ def main(
 
         text_formatter = FunctionCallingTextFormatter(tokenizer=tokenizer)
         prompt = text_formatter(messages)
+        prompt += "ASSISTANT:"
         logging.warning(f"Formatted prompt:\n{prompt}")
 
         generation_kwargs = dict(
