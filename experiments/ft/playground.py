@@ -39,6 +39,7 @@ def main(
     show_api=True,
     share=True,
     debug=False,
+    server_name="0.0.0.0"
 ):
     # python playground.py --model_name_or_path "/self/scr-ssd/lxuechen/working_dir/phi-2-tool-use"
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = tf32
@@ -49,7 +50,7 @@ def main(
         low_cpu_mem_usage=True,
         device_map="auto",
         trust_remote_code=True,
-        torch_dtype=torch.bfloat16
+        torch_dtype=torch.float16
     )
     tokenizer: transformers.PreTrainedTokenizer = transformers.AutoTokenizer.from_pretrained(
         model_name_or_path,
@@ -57,14 +58,17 @@ def main(
         use_fast=True,
         trust_remote_code=True
     )
+    streamer = transformers.TextIteratorStreamer(tokenizer)
 
     @torch.inference_mode()
     def predict(system, instruction, temperature, top_p):
         logging.warning(f"User input\nsystem: {system}\n\ninstruction: {instruction}")
+
         text_formatter = FunctionCallingTextFormatter(tokenizer=tokenizer)
         prompt = text_formatter(dict_data={'system': system, 'chat': instruction})
-        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+        logging.warning(f"Formatted prompt:\n{prompt}")
 
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids
         full_completion = model.generate(
             input_ids.to(model.device),
             generation_config=transformers.GenerationConfig(
@@ -76,6 +80,7 @@ def main(
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id,
             ),
+            streamer=streamer
         )
         completion = full_completion[:, input_ids.size(1):]
 
@@ -85,22 +90,16 @@ def main(
         return response_list
 
     with gr.Blocks() as demo:
-        chatbot = gr.Chatbot()
         with gr.Row():
             temperature_box = gr.Slider(0.0, 1.0, 0.7, label="temperature")
             top_p_box = gr.Slider(0.0, 1.0, 0.9, label="top p")
 
         with gr.Row():
             system_box = gr.Textbox(show_label=False, placeholder="Enter your system message.")
-            instruction_box = gr.Textbox(show_label=False, placeholder="Enter your instruction and press enter")
 
-        instruction_box.submit(
-            predict,
-            [system_box, instruction_box, temperature_box, top_p_box],
-            [chatbot]
-        )
+        gr.ChatInterface(predict, additional_inputs=[system_box, temperature_box, top_p_box])
 
-    demo.launch(share=share, debug=debug, show_api=show_api, server_name="0.0.0.0")
+    demo.launch(share=share, debug=debug, show_api=show_api, server_name=server_name)
 
 
 if __name__ == "__main__":
