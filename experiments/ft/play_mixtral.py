@@ -34,23 +34,17 @@ def sample(**kwargs):
 
 def check_params(**kwargs):
     # python play_mixtral.py check_params
-    cache_dir = "/self/scr-ssd/lxuechen/cache"
-    device = "cuda"  # the device to load the model onto
-
     model = AutoModelForCausalLM.from_pretrained(
         "mistralai/Mixtral-8x7B-v0.1",
-        cache_dir=cache_dir,
+        cache_dir="/self/scr-ssd/lxuechen/cache",
         torch_dtype=torch.float16,
-        # device_map="auto",
         low_cpu_mem_usage=True,
         attn_implementation="flash_attention_2",
     )
-    print(model)
     breakpoint()
 
-    # for n, p in model.model.layers[0].named_parameters():
-    #     print(n)
-    # breakpoint()
+    num_total_experts = 8
+    num_active_experts = 2
 
     # Count active number of parameters
     count_other = 0
@@ -60,8 +54,11 @@ def check_params(**kwargs):
             count_expert += p.numel()
         else:
             count_other += p.numel()
-    print('count_expert', count_expert)
-    print('count_other', count_other)
+    count_active = count_expert / num_total_experts * num_active_experts + count_other
+
+    print(f'count_expert: {count_expert / 10 ** 9:.2f}B')
+    print(f'count_other: {count_other / 10 ** 9:.2f}B')
+    print(f'count_active: {count_active / 10 ** 9:.2f}B')
 
 
 def main(task, **kwargs):
