@@ -33,6 +33,7 @@ def sample(**kwargs):
 
 
 def check_params(**kwargs):
+    # python play_mixtral.py check_params
     cache_dir = "/self/scr-ssd/lxuechen/cache"
     device = "cuda"  # the device to load the model onto
 
@@ -40,10 +41,27 @@ def check_params(**kwargs):
         "mistralai/Mixtral-8x7B-v0.1",
         cache_dir=cache_dir,
         torch_dtype=torch.float16,
-        device_map="auto",
+        # device_map="auto",
         low_cpu_mem_usage=True,
         attn_implementation="flash_attention_2",
     )
+    print(model)
+    breakpoint()
+
+    # for n, p in model.model.layers[0].named_parameters():
+    #     print(n)
+    # breakpoint()
+
+    # Count active number of parameters
+    count_other = 0
+    count_expert = 0
+    for n, p in model.named_parameters():
+        if 'block_sparse_moe.experts' in n:
+            count_expert += p.numel()
+        else:
+            count_other += p.numel()
+    print('count_expert', count_expert)
+    print('count_other', count_other)
 
 
 def main(task, **kwargs):
