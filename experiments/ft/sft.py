@@ -125,6 +125,7 @@ def preprocess(
     return dict(input_ids=input_ids, labels=labels)
 
 
+# TODO: Abstract this data processor.
 @dataclass
 class DataProcessor(abc.ABC):
     tokenizer: transformers.PreTrainedTokenizer
