@@ -1,17 +1,3 @@
-#    Copyright 2023 Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-
 import abc
 import copy
 import logging
@@ -73,8 +59,7 @@ class TrainingArguments(transformers.TrainingArguments):
         default=512,
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     )
-    save_raw_state_dict: bool = field(default=False)
-    use_fast_tokenizer: bool = field(default=True)
+    use_fast: bool = field(default=True)
     max_size: int = field(default=sys.maxsize)
 
 
@@ -140,6 +125,7 @@ def preprocess(
     return dict(input_ids=input_ids, labels=labels)
 
 
+# TODO: Abstract this data processor.
 @dataclass
 class DataProcessor(abc.ABC):
     tokenizer: transformers.PreTrainedTokenizer
@@ -332,7 +318,7 @@ def train():
         cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side="right",
-        use_fast=training_args.use_fast_tokenizer,
+        use_fast=training_args.use_fast,
     )
     special_tokens_dict = dict()
     if tokenizer.pad_token is None:
