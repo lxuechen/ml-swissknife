@@ -2,8 +2,6 @@ import abc
 import copy
 import logging
 import sys
-import types
-import warnings
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence, Literal
 
@@ -11,7 +9,6 @@ import datasets
 import torch
 import tqdm
 import transformers
-from torch import nn
 from torch.utils.data import Dataset
 from transformers import Trainer
 
@@ -266,40 +263,6 @@ def make_supervised_data_module(
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
 
 
-def let_model_save_mem_when_zero_grad(model: nn.Module):
-    def new_zero_grad(self, set_to_none: bool = True) -> None:
-        r"""Sets gradients of all model parameters to zero. See similar function
-        under :class:`torch.optim.Optimizer` for more context.
-
-        Args:
-            set_to_none (bool): instead of setting to zero, set the grads to None.
-                See :meth:`torch.optim.Optimizer.zero_grad` for details.
-        """
-        if getattr(self, "_is_replica", False):
-            warnings.warn(
-                "Calling .zero_grad() from a module created with nn.DataParallel() has no effect. "
-                "The parameters are copied (in a differentiable manner) from the original module. "
-                "This means they are not leaf nodes in autograd and so don't accumulate gradients. "
-                "If you need gradients in your forward method, consider using autograd.grad instead."
-            )
-
-        for p in self.parameters():
-            if p.grad is not None:
-                if set_to_none:
-                    p.grad = None
-                else:
-                    if p.grad.grad_fn is not None:
-                        p.grad.detach_()
-                    else:
-                        p.grad.requires_grad_(False)
-                    p.grad.zero_()
-
-    # Make zero_grad `set_to_none=True` by default.
-    # Need this runtime method patching, since self is used within zero_grad.
-    model.zero_grad = types.MethodType(new_zero_grad, model)
-    return model
-
-
 def train():
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
@@ -311,8 +274,6 @@ def train():
         trust_remote_code=model_args.trust_remote_code,
         flash_attn=True,
     )
-    let_model_save_mem_when_zero_grad(model)
-
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
