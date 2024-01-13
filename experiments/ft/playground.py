@@ -1,6 +1,3 @@
-"""
-Single-turn chatbot playground to test our models.
-"""
 import logging
 from threading import Thread
 
