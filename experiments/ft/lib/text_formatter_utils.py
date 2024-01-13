@@ -38,3 +38,14 @@ class FunctionCallingTextFormatter(TextFormatter):
         else:
             raise ValueError("role must be one of 'system', 'user', 'assistant'")
         return text
+
+
+def get_text_formatter(text_formatter_name: str, tokenizer: transformers.PreTrainedTokenizer):
+    if text_formatter_name == "function_calling":
+        return FunctionCallingTextFormatter(tokenizer)
+    elif text_formatter_name == "guanaco_oasst":
+        raise NotImplementedError
+    elif text_formatter_name == "alpaca":
+        raise NotImplementedError
+    else:
+        raise ValueError(f"`text_formatter_name` must be one of {TEXT_FORMATTER}")

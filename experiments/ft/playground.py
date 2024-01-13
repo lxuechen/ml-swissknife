@@ -12,6 +12,8 @@ import gradio as gr
 import torch
 import transformers
 
+from lib import text_formatter_utils
+
 TEXT_FORMATTER = {'function_calling', 'guanaco_oasst', 'alpaca'}
 
 
@@ -46,6 +48,7 @@ def main(
     max_new_tokens=24,
     num_beams=1,
     tf32=True,
+    text_formatter_name: str = "function_calling",
     show_api=True,
     share=False,
     debug=False,
@@ -71,6 +74,7 @@ def main(
         padding_side="left",
     )
     streamer = transformers.TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+    text_formatter = text_formatter_utils.get_text_formatter(text_formatter_name, tokenizer)
 
     @torch.inference_mode()
     def predict(message, history, system, temperature, top_p):
@@ -81,7 +85,6 @@ def main(
             messages.append(dict(content=assistant_turn, role="assistant"))
         messages.append(dict(content=message, role="user"))
 
-        text_formatter = FunctionCallingTextFormatter(tokenizer=tokenizer)
         prompt = text_formatter(messages)
         prompt += "ASSISTANT:"
         logging.warning(f"Formatted prompt:\n{prompt}")
