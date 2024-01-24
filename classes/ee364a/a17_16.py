@@ -23,15 +23,12 @@ def main():
     V[:, 6] = np.minimum(np.maximum(V[:, 1] - S0, F - S0), C - S0)
 
     for obj_fn in (
-        lambda _p: cp.Maximize(_p[6]), lambda _p: cp.Minimize(_p[6]),
+        lambda _p: cp.Maximize(_p[6]),
+        lambda _p: cp.Minimize(_p[6]),
     ):
         p, y = cp.Variable(7), cp.Variable(200)
         objective = obj_fn(p)
-        constraints = [
-            p[:6] == np.array([1., 1., 0.06, 0.03, 0.02, 0.01]),
-            y >= 0,
-            cp.matmul(V.T, y) == p
-        ]
+        constraints = [p[:6] == np.array([1.0, 1.0, 0.06, 0.03, 0.02, 0.01]), y >= 0, cp.matmul(V.T, y) == p]
         cp.Problem(objective, constraints).solve()
         print(p.value[-1])
 

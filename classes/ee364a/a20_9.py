@@ -39,48 +39,50 @@ def run(Q, C, D, seed=1):
     prob = cp.Problem(objective, constraints)
     result = prob.solve()
 
-    return dict(result=result, c=c.value, q=q.value, p=p, u=u, t=t,
-                probval=prob.value)
+    return dict(result=result, c=c.value, q=q.value, p=p, u=u, t=t, probval=prob.value)
 
 
 def main():
     # (b)
     results = run(Q=35, C=3, D=3)
-    print(results['result'])
+    print(results["result"])
 
-    t = results.get('t')
-    p = results.get('p')
-    u = results.get('u')
-    c = results.get('c')
-    q = results.get('q')
+    t = results.get("t")
+    p = results.get("p")
+    u = results.get("u")
+    c = results.get("c")
+    q = results.get("q")
 
     plots = [
-        dict(x=t, y=p, label='p'),
-        dict(x=t, y=u, label='u'),
-        dict(x=t, y=c, label='c'),
-        dict(x=t, y=q, label='q'),
+        dict(x=t, y=p, label="p"),
+        dict(x=t, y=u, label="u"),
+        dict(x=t, y=c, label="c"),
+        dict(x=t, y=q, label="q"),
     ]
     utils.plot_wrapper(
-        img_path=utils.join('.', 'plots', 'a20_9_b'),
-        suffixes=('.png', '.pdf'),
+        img_path=utils.join(".", "plots", "a20_9_b"),
+        suffixes=(".png", ".pdf"),
         plots=plots,
-        options=dict(xlabel='t'),
+        options=dict(xlabel="t"),
     )
 
     # (c)
     plots = []
-    for bound in (3, 1,):
-        plot = dict(x=[], y=[], label=f'C=D={bound}')
+    for bound in (
+        3,
+        1,
+    ):
+        plot = dict(x=[], y=[], label=f"C=D={bound}")
         for Q in tqdm.tqdm(np.linspace(1, 300, 300)):
             results = run(Q=Q, C=bound, D=bound)
-            plot['x'].append(Q)
-            plot['y'].append(results['result'])
+            plot["x"].append(Q)
+            plot["y"].append(results["result"])
         plots.append(plot)
     utils.plot_wrapper(
-        img_path=utils.join('.', 'plots', f'a20_9_c'),
-        suffixes=('.png', '.pdf'),
+        img_path=utils.join(".", "plots", f"a20_9_c"),
+        suffixes=(".png", ".pdf"),
         plots=plots,
-        options=dict(xlabel='Q', ylabel='Minimum total cost'),
+        options=dict(xlabel="Q", ylabel="Minimum total cost"),
     )
 
 

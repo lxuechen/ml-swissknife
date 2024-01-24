@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import tqdm
 
-from .a10_4 import Soln, LPCenteringProb, infeasible_start_newton_solve
+from .a10_4 import LPCenteringProb, Soln, infeasible_start_newton_solve
 
 
 def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilon=1e-3, verbose=False):
@@ -25,7 +25,10 @@ def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilo
         prob.t = t  # Solve the right problem.
         soln.nu = torch.zeros_like(soln.nu)
         soln, this_newton_steps, _, _, _ = infeasible_start_newton_solve(
-            soln=soln, prob=prob, max_steps=2000, epsilon=1e-5,
+            soln=soln,
+            prob=prob,
+            max_steps=2000,
+            epsilon=1e-5,
         )
 
         this_step += 1
@@ -37,7 +40,7 @@ def barrier_solve(soln: Soln, prob: LPCenteringProb, t: float, mu: float, epsilo
         newton_steps.append(this_newton_steps)
 
         if verbose:
-            print(f'this_step: {this_step}, this_gap: {this_gap}, newton_steps: {this_newton_steps}')
+            print(f"this_step: {this_step}, this_gap: {this_gap}, newton_steps: {this_newton_steps}")
 
         if this_gap < epsilon:
             break
@@ -73,16 +76,15 @@ def main(seed=0, t=0.5, mu=8):
 
     soln_init, prob = _generate_prob()
 
-    soln, steps, gaps, newton_steps = barrier_solve(
-        soln=soln_init, prob=prob, t=t, mu=mu, verbose=True
-    )
+    soln, steps, gaps, newton_steps = barrier_solve(soln=soln_init, prob=prob, t=t, mu=mu, verbose=True)
     # duality gap vs cumulative Newton steps
     from ml_swissknife import utils
+
     utils.plot_wrapper(
-        img_path=utils.join('.', 'ee364a', 'plots', 'a11_8'),
-        suffixes=(".png", '.pdf'),
+        img_path=utils.join(".", "ee364a", "plots", "a11_8"),
+        suffixes=(".png", ".pdf"),
         steps=[dict(x=np.cumsum(newton_steps), y=gaps)],
-        options=dict(yscale='log', xlabel='cumulative Newton steps', ylabel='duality gap')
+        options=dict(yscale="log", xlabel="cumulative Newton steps", ylabel="duality gap"),
     )
 
     # compare against CVXPY
@@ -90,10 +92,7 @@ def main(seed=0, t=0.5, mu=8):
 
     x = cp.Variable(prob.n)
     obj = cp.Minimize(prob.c.numpy() @ x)
-    con = [
-        x >= 0.,
-        prob.A.numpy() @ x == prob.b.numpy()
-    ]
+    con = [x >= 0.0, prob.A.numpy() @ x == prob.b.numpy()]
     cp.Problem(obj, con).solve()
 
     # diff should be small
@@ -105,19 +104,17 @@ def main(seed=0, t=0.5, mu=8):
     tot_steps = []
     mus = (2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048)
     for mu in tqdm.tqdm(mus, desc="mu"):
-        _, steps, gaps, newton_steps = barrier_solve(
-            soln=soln_init, prob=prob, t=t, mu=mu, verbose=False
-        )
+        _, steps, gaps, newton_steps = barrier_solve(soln=soln_init, prob=prob, t=t, mu=mu, verbose=False)
         avg_steps.append(np.mean(newton_steps))
         tot_steps.append(np.sum(newton_steps))
     utils.plot_wrapper(
-        img_path=utils.join('.', 'ee364a', 'plots', 'a11_8_2'),
-        suffixes=(".png", '.pdf'),
+        img_path=utils.join(".", "ee364a", "plots", "a11_8_2"),
+        suffixes=(".png", ".pdf"),
         plots=[
-            dict(x=mus, y=avg_steps, label='average steps per centering'),
-            dict(x=mus, y=tot_steps, label='total steps'),
+            dict(x=mus, y=avg_steps, label="average steps per centering"),
+            dict(x=mus, y=tot_steps, label="total steps"),
         ],
-        options=dict(ylabel='Newton steps', xlabel='mu'),
+        options=dict(ylabel="Newton steps", xlabel="mu"),
     )
 
 

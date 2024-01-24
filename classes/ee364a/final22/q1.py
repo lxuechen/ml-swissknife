@@ -5,22 +5,22 @@ import numpy as np
 
 N = 4
 T = 90
-Cmax = 3.
-qinit = np.array([20., 0., 30., 25.])
+Cmax = 3.0
+qinit = np.array([20.0, 0.0, 30.0, 25.0])
 gamma = np.array([0.5, 0.3, 2.0, 0.6])
-qdes = np.array([60., 100., 75., 125.])
+qdes = np.array([60.0, 100.0, 75.0, 125.0])
 qtar = np.stack([(t / (T + 1)) ** gamma * qdes for t in range(1, T + 2)])
 
 
 def main():
     def compute_RMS(inp):
-        return np.sqrt(np.mean(inp ** 2.))
+        return np.sqrt(np.mean(inp**2.0))
 
     def plot1(_q, label: str):
         plt.figure()
-        for i, color in zip(range(N), ('red', 'green', 'blue', 'cyan')):
-            plt.plot(range(T + 1), qtar[:, i], linestyle='dashed', color=color, label=f'target ($i={i + 1}$)')
-            plt.plot(range(T + 1), _q[:, i], linestyle='solid', color=color, label=f'{label} ($i={i + 1}$)')
+        for i, color in zip(range(N), ("red", "green", "blue", "cyan")):
+            plt.plot(range(T + 1), qtar[:, i], linestyle="dashed", color=color, label=f"target ($i={i + 1}$)")
+            plt.plot(range(T + 1), _q[:, i], linestyle="solid", color=color, label=f"{label} ($i={i + 1}$)")
         plt.legend()
         plt.show()
 
@@ -32,7 +32,7 @@ def main():
     c = cp.Variable(shape=(T, N))
     q = cp.Variable(shape=(T + 1, N))
     s = cp.Variable(shape=(T + 1, N))
-    con = [c >= 0., sum(c[:, i] for i in range(N)) <= Cmax, q >= 0., q[0] == qinit]
+    con = [c >= 0.0, sum(c[:, i] for i in range(N)) <= Cmax, q >= 0.0, q[0] == qinit]
     con += [q[t + 1] == q[t] + c[t] for t in range(T)]
     con += [s[t] >= cp.maximum(qtar[t], q[t]) - q[t] for t in range(T + 1)]
     cp.Problem(objective=cp.Minimize(cp.sum(cp.square(s))), constraints=con).solve()

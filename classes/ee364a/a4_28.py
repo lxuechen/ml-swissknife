@@ -17,7 +17,7 @@ def sum4(
     When `xi` is not None, only take entries with prescribed values.
     A value of `None` means marginalization over the given variable.
     """
-    res = cp.Constant(0.)
+    res = cp.Constant(0.0)
     for _x1 in (0, 1):
         for _x2 in (0, 1):
             for _x3 in (0, 1):
@@ -51,10 +51,9 @@ def main():
             sum4(p, x3=1) == 0.1,
             sum4(p, x1=1, x3=1, x4=0) == cvxpy.Constant(0.7) * sum4(p, x3=1),
             sum4(p, x2=1, x3=0, x4=1) == cvxpy.Constant(0.6) * sum4(p, x2=1, x3=0),
-
-            cp.sum(p) == 1.,
-            p >= 0.,
-            p <= 1.,
+            cp.sum(p) == 1.0,
+            p >= 0.0,
+            p <= 1.0,
         ]
         prob = cp.Problem(objective, constraints)
         result = prob.solve()

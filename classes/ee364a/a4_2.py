@@ -5,11 +5,11 @@ import numpy as np
 
 def main():
     for obj_func in (
-        lambda t: cp.Minimize(cp.sum(t * np.array([1., 1.]))),
-        lambda t: cp.Minimize(cp.sum(t * np.array([-1., -1.]))),
-        lambda t: cp.Minimize(cp.sum(t * np.array([1., 0.]))),
+        lambda t: cp.Minimize(cp.sum(t * np.array([1.0, 1.0]))),
+        lambda t: cp.Minimize(cp.sum(t * np.array([-1.0, -1.0]))),
+        lambda t: cp.Minimize(cp.sum(t * np.array([1.0, 0.0]))),
         lambda t: cp.Minimize(cp.max(t)),
-        lambda t: cp.Minimize(t[0] ** 2 + 9. * t[1] ** 2.),
+        lambda t: cp.Minimize(t[0] ** 2 + 9.0 * t[1] ** 2.0),
     ):
         x = cp.Variable(2)
         objective = obj_func(x)

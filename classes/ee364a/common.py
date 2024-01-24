@@ -1,12 +1,14 @@
 """
 """
 
-import fire
-import torch
 import os
 import sys
+
+import fire
 import numpy as np
+import torch
 import transformers
+
 from ml_swissknife import utils
 
 

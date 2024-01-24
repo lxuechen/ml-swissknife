@@ -19,9 +19,9 @@ Common mistakes:
 python -m ee364a.a10_4
 """
 
-from dataclasses import dataclass
 import logging
-from typing import Optional, Callable
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 import fire
 import numpy as np
@@ -66,11 +66,11 @@ class LPCenteringProb:
         return self.c @ soln.x - torch.log(soln.x).sum()
 
     def _grad(self, soln: Soln):  # grad objective
-        t = 1. if self.t is None else self.t
-        return t * self.c - 1. / soln.x
+        t = 1.0 if self.t is None else self.t
+        return t * self.c - 1.0 / soln.x
 
     def _hinv(self, soln: Soln):  # Hessian inverse.
-        return torch.diag(soln.x ** 2.)
+        return torch.diag(soln.x**2.0)
 
     def solve_residual(self, soln: Soln):
         # gradf + A^t nu, A x - b
@@ -90,16 +90,21 @@ class LPCenteringProb:
         Hinvg = Hinv @ g
         S = -self.A @ HinvAt
         w = torch.inverse(S) @ (self.A @ Hinvg - h)
-        v = Hinv @ (- self.A.t() @ w - g)
+        v = Hinv @ (-self.A.t() @ w - g)
         return Soln(x=v, nu=w)
 
 
 def infeasible_start_newton_solve(
-    soln: Soln, prob: LPCenteringProb, alpha=0.4, beta=0.9, max_steps=100, epsilon=1e-8,
+    soln: Soln,
+    prob: LPCenteringProb,
+    alpha=0.4,
+    beta=0.9,
+    max_steps=100,
+    epsilon=1e-8,
 ):
     if not torch.all(soln.x > 0):
         raise ValueError("Initial iterate not in domain")
-    if not (0 < alpha < .5) or not (0 < beta < 1.):
+    if not (0 < alpha < 0.5) or not (0 < beta < 1.0):
         raise ValueError("Invalid solver params")
 
     this_step = 0
@@ -115,13 +120,13 @@ def infeasible_start_newton_solve(
         residual_norms.append(res.norm().item())
 
         # === backtracking line search
-        t = 1.
+        t = 1.0
         cnt = 0
         while True:
             proposal = soln + direction * t
             new_res = prob.solve_residual(soln=proposal)
 
-            factor = (1. - alpha * t)
+            factor = 1.0 - alpha * t
             if new_res.norm() <= factor * res.norm():
                 if prob.in_domain is None:
                     break
@@ -158,13 +163,7 @@ def _generate_prob(infeasible=False, unbounded=False):
         nu = torch.randn(m)
 
     elif unbounded:
-        A = torch.tensor(
-            [
-                [1, 0, 0, 0],
-                [0, 1, 0, 0]
-            ],
-            dtype=torch.get_default_dtype()
-        )
+        A = torch.tensor([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=torch.get_default_dtype())
         b = torch.tensor([0, 0], dtype=torch.get_default_dtype())
         c = torch.zeros(4)
 
@@ -230,14 +229,18 @@ def main(seed=0):
     # Quad conv.
     soln_init, prob = _generate_prob()
     soln, steps, residual_norms, losses, _ = infeasible_start_newton_solve(
-        soln=soln_init, prob=prob,
-        alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=100,
+        soln=soln_init,
+        prob=prob,
+        alpha=0.4,
+        beta=0.9,
+        epsilon=1e-7,
+        max_steps=100,
     )
     utils.plot_wrapper(
-        img_path=utils.join('.', 'plots', 'a10_4'),
-        suffixes=(".png", '.pdf'),
-        plots=[dict(x=steps, y=residual_norms, label='infeasible start Newton')],
-        options=dict(xlabel='step count', ylabel='norm of residual', yscale='log')
+        img_path=utils.join(".", "plots", "a10_4"),
+        suffixes=(".png", ".pdf"),
+        plots=[dict(x=steps, y=residual_norms, label="infeasible start Newton")],
+        options=dict(xlabel="step count", ylabel="norm of residual", yscale="log"),
     )
 
     soln_init, prob = _generate_prob()
@@ -251,14 +254,12 @@ def main(seed=0):
                 soln=soln_init, prob=prob, alpha=alpha, beta=beta
             )
             this_y.append(steps[-1])
-        plots.append(
-            dict(x=this_x, y=this_y, label=f'$\\beta={beta:.2f}$', marker='x', alpha=0.8)
-        )
+        plots.append(dict(x=this_x, y=this_y, label=f"$\\beta={beta:.2f}$", marker="x", alpha=0.8))
     utils.plot_wrapper(
-        img_path=utils.join('.', 'plots', 'a10_4_2'),
-        suffixes=(".png", '.pdf'),
+        img_path=utils.join(".", "plots", "a10_4_2"),
+        suffixes=(".png", ".pdf"),
         plots=plots,
-        options=dict(xlabel='alpha', ylabel='total Newton steps')
+        options=dict(xlabel="alpha", ylabel="total Newton steps"),
     )
 
     # infeasible.
@@ -277,14 +278,18 @@ def main(seed=0):
     # unbounded.
     soln_init, prob = _generate_prob(unbounded=True)
     soln, steps, residual_norms, losses, _ = infeasible_start_newton_solve(
-        soln=soln_init, prob=prob,
-        alpha=0.4, beta=0.9, epsilon=1e-7, max_steps=500,
+        soln=soln_init,
+        prob=prob,
+        alpha=0.4,
+        beta=0.9,
+        epsilon=1e-7,
+        max_steps=500,
     )
     utils.plot_wrapper(
-        img_path=utils.join('.', 'plots', 'a10_4_4'),
-        suffixes=(".png", '.pdf'),
-        plots=[dict(x=steps, y=residual_norms, label='infeasible start Newton')],
-        options=dict(xlabel='step count', ylabel='norm of residual', yscale='log', title='infeasible problem')
+        img_path=utils.join(".", "plots", "a10_4_4"),
+        suffixes=(".png", ".pdf"),
+        plots=[dict(x=steps, y=residual_norms, label="infeasible start Newton")],
+        options=dict(xlabel="step count", ylabel="norm of residual", yscale="log", title="infeasible problem"),
     )
 
 
